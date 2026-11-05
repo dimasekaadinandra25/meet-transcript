@@ -117,3 +117,32 @@ test('pruneTargets: slot legacy terpangkas sebagai satu unit', () => {
 test('pruneTargets: daftar kosong → kosong', () => {
   assert.deepEqual(pruneTargets([]), []);
 });
+
+test('prefix baru dikelompokkan ke daftarnya, bukan ke video', () => {
+  const [r] = groupRecordings(['meta:5', 'schunk:5:0', 'mchunk:5:0', 'xpart:5:0', 'vchunk:5:0'],
+    new Map([['meta:5', { baseTime: 5 }]]));
+  assert.deepEqual(r.systemKeys.map((k) => k.key), ['schunk:5:0']);
+  assert.deepEqual(r.micKeys.map((k) => k.key), ['mchunk:5:0']);
+  assert.deepEqual(r.mixKeys.map((k) => k.key), ['xpart:5:0']);
+  assert.deepEqual(r.videoKeys.map((k) => k.key), ['vchunk:5:0']);
+  assert.deepEqual(r.chunkKeys, []);
+});
+
+test('prefix baru diurut numerik per indeks', () => {
+  const [r] = groupRecordings(['meta:5', 'xpart:5:10', 'xpart:5:2', 'schunk:5:10', 'schunk:5:2'],
+    new Map([['meta:5', { baseTime: 5 }]]));
+  assert.deepEqual(r.mixKeys.map((k) => k.index), [2, 10]);
+  assert.deepEqual(r.systemKeys.map((k) => k.index), [2, 10]);
+});
+
+test('pemangkasan ikut menghapus prefix baru', () => {
+  const metas = new Map([1, 2, 3, 4, 5, 6].map((n) => [`meta:${n}`, { baseTime: n }]));
+  const recs = groupRecordings([...metas.keys(), 'schunk:1:0', 'mchunk:1:0', 'xpart:1:0'], metas);
+  assert.deepEqual(pruneTargets(recs).sort(), ['mchunk:1:0', 'meta:1', 'schunk:1:0', 'xpart:1:0']);
+});
+
+test('API rekaman desktop tersedia', () => {
+  for (const name of ['appendSystemChunk', 'appendMicChunk', 'appendMixPart', 'loadSystem', 'loadMic', 'loadMix']) {
+    assert.equal(typeof globalThis.MeetAudioStore[name], 'function', name);
+  }
+});
