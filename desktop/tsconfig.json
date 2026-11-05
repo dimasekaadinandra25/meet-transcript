@@ -3,6 +3,7 @@
     "allowJs": true,
     "strict": true,
     "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
     "checkJs": true,
     "noEmit": true,
     "target": "ES2022",

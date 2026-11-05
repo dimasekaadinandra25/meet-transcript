@@ -3,8 +3,16 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
-const { resolveAsset } = createRequire(import.meta.url)('../main/assets.js');
+const { resolveAsset, isAppUrl } = createRequire(import.meta.url)('../main/assets.js');
 const roots = { app: '/a/desktop', shared: '/a' };
+
+test('isAppUrl hanya menerima halaman aplikasi', () => {
+  assert.equal(isAppUrl('transcripables://app/renderer/index.html'), true);
+  assert.equal(isAppUrl('transcripables://app/'), true);
+  for (const url of ['https://app/x', 'transcripables://lain/x', 'file:///x', 'bukan url', '', undefined]) {
+    assert.equal(isAppUrl(url), false, String(url));
+  }
+});
 
 test('hanya memetakan folder yang diizinkan', () => {
   assert.equal(resolveAsset('/renderer/index.html', roots), join('/a/desktop', 'renderer/index.html'));
