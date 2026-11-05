@@ -65,6 +65,17 @@ test('callStt menolak skema selain http dan https', async () => {
   assert.equal(r.ok, false);
 });
 
+test('built-in STT goes to the address of the running engine', async () => {
+  const res = await callStt({ bytes: new TextEncoder().encode('x'), baseUrl: globalThis.MeetStt.BUILTIN_URL, model: 'm', fileName: 'audio.wav' }, async () => base);
+  assert.equal(res.ok, true);
+  assert.match(seen.at(-1).body, /filename="audio\.wav"/);
+});
+
+test('an engine that cannot start becomes a failed result', async () => {
+  const res = await callStt({ bytes: new Uint8Array(1), baseUrl: globalThis.MeetStt.BUILTIN_URL, model: 'm' }, async () => { throw new Error('not installed'); });
+  assert.deepEqual([res.ok, res.error], [false, 'not installed']);
+});
+
 test('bridge renderer melempar ulang error dengan nama dan pesan asli', async () => {
   globalThis.window = {
     desktop: { net: {
@@ -84,4 +95,19 @@ test('bridge renderer melempar ulang error dengan nama dan pesan asli', async ()
   const res = await globalThis.bridgeFetch('http://x/models', { headers: { Authorization: 'Bearer kk' } });
   assert.equal(res.status, 200);
   assert.equal(res.key, 'kk');
+});
+
+test('bridge converts audio to WAV only for the built-in engine', async () => {
+  const sent = [];
+  globalThis.window.desktop.net.stt = async (args) => {
+    sent.push(args);
+    return { ok: true, value: {} };
+  };
+  globalThis.MeetWav = { speechWav: async () => new Blob(['wave']) };
+  const { BUILTIN_URL } = globalThis.MeetStt;
+  delete require.cache[require.resolve('../renderer/openai-bridge.js')];
+  require('../renderer/openai-bridge.js');
+  await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['webm-bytes']), baseUrl: BUILTIN_URL, model: 'm' });
+  await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['webm-bytes']), baseUrl: 'http://stt/v1', model: 'm' });
+  assert.deepEqual(sent.map((args) => [args.fileName, args.bytes.byteLength]), [['audio.wav', 4], [undefined, 10]]);
 });

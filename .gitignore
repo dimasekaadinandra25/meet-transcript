@@ -3,3 +3,4 @@
 dist/
 .claude/worktrees/
 desktop/node_modules/
+desktop/engine/

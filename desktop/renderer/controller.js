@@ -5,7 +5,7 @@
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
 
   function createController(deps) {
-    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, saveFile, now } = deps;
+    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, saveFile, now } = deps;
     let rec = { ...IDLE };
     let activeId = null;
     let starting = null;
@@ -58,6 +58,11 @@
 
     async function checkStt(settings) {
       const { baseUrl, apiKey } = stt.sttEndpoint(settings);
+      if (baseUrl === stt.BUILTIN_URL) {
+        const engine = await startEngine();
+        if (!engine.ok) warn(`${engine.error} Recording continues, and you can make the transcript later from History.`);
+        return;
+      }
       if (!baseUrl) {
         warn('Speech-to-text is not set up, so this recording will have no transcript. Add it in Settings.');
         return;

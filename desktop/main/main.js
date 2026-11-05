@@ -6,7 +6,8 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
-const { loadLib, callChat, callTest, callStt, probe } = require('./net');
+const { loadLib, netCall, callChat, callTest, callStt, probe } = require('./net');
+const { createEngine } = require('./engine');
 const { createRecordingFolder } = require('./recordings');
 const { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep } = require('./lifecycle');
 const { RELEASES_URL, checkForUpdate } = require('./update');
@@ -37,6 +38,7 @@ let tray;
 let quitting = false;
 let sleepBlocker;
 let recordingFolder;
+let engine;
 let recState = { recording: false, transcribing: false, muted: false };
 
 const t = (text) => globalThis.MeetI18n.t(text);
@@ -157,9 +159,12 @@ function serveStore() {
 
 function serveNet() {
   loadLib(sharedRoot());
+  engine = createEngine({ dir: join(app.isPackaged ? process.resourcesPath : APP_ROOT, 'engine') });
   handleFromApp('net:chat', callChat);
   handleFromApp('net:test', callTest);
-  handleFromApp('net:stt', callStt);
+  handleFromApp('net:stt', (args) => callStt(args, engine.url));
+  handleFromApp('engine:available', () => engine.available());
+  handleFromApp('engine:start', () => netCall(engine.url));
   handleFromApp('net:probe', probe);
 }
 
@@ -226,7 +231,10 @@ function createWindow() {
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', showWindow);
 app.on('before-quit', () => { quitting = true; });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  engine?.stop();
+});
 
 app.whenReady().then(() => {
   handleAssets();
@@ -244,7 +252,10 @@ app.whenReady().then(() => {
   handleFromApp('app:update-check', () => checkForUpdate({ current: app.getVersion() }).catch((e) => ({ status: 'failed', error: e.message })));
   handleFromApp('app:update-open', () => shell.openExternal(RELEASES_URL));
   handleFromApp('pdf:make', () => mainWindow.webContents.printToPDF({ printBackground: false }));
-  handleFromApp('app:quit', () => app.exit(0));
+  handleFromApp('app:quit', () => {
+    engine.stop();
+    app.exit(0);
+  });
   handleFromApp('shell:open', (url) => {
     if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);
     return undefined;

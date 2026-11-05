@@ -33,10 +33,18 @@
     onState: (state) => desktop.recState?.(state),
     onWarning: () => desktop.revealWindow(),
     probeStt: (url, key) => desktop.net.probe(url, key),
+    startEngine: () => desktop.engine.start(),
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     now: () => Date.now(),
   });
   controller.recover().catch((e) => console.error(e));
+
+  async function useEngineByDefault() {
+    const { settings } = await shim.storage.local.get('settings');
+    if (settings?.sttMode || settings?.sttBaseUrl || !await desktop.engine.available()) return;
+    await globalThis.MeetUi.patchSettings({ sttMode: 'builtin' });
+  }
+  useEngineByDefault().catch((e) => console.error(e));
 
   const tellLanguage = (settings) => desktop.setLanguage(settings?.uiLang);
   shim.storage.local.get('settings').then(({ settings }) => tellLanguage(settings));
@@ -210,6 +218,7 @@
     recordControls,
     titleEditor,
     makePdf: () => desktop.makePdf(),
+    hasEngine: () => desktop.engine.available(),
     settingsRows,
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
     aiLabel: (name) => `Copy & open ${name}`,

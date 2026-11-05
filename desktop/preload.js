@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('desktop', {
     sources: () => ipcRenderer.invoke('capture:sources'),
     use: (id) => ipcRenderer.invoke('capture:use', id),
   },
+  engine: {
+    available: () => ipcRenderer.invoke('engine:available'),
+    start: () => ipcRenderer.invoke('engine:start'),
+  },
   net: {
     chat: (args) => ipcRenderer.invoke('net:chat', args),
     test: (args) => ipcRenderer.invoke('net:test', args),

@@ -346,7 +346,7 @@ async function renderMeeting(id, live, epoch) {
         setLabel('Transcribing…');
         momErrors.delete(meeting.id);
         try {
-          await ensureOrigins([globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl].filter(Boolean));
+          await ensureOrigins([globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl].filter((url) => url && url !== globalThis.MeetStt.BUILTIN_URL));
         } catch (e) {
           momErrors.set(meeting.id, e.message + ' Transcription did not run. Check the STT Base URL in Settings.');
           render();
@@ -451,6 +451,7 @@ async function renderHistory(epoch) {
 
 async function renderSettings(epoch) {
   const { settings = {} } = await chrome.storage.local.get('settings');
+  const hasEngine = await Host?.hasEngine();
   if (epoch !== renderEpoch) return;
   lastRenderedKey = null;
   view.replaceChildren();
@@ -515,9 +516,12 @@ async function renderSettings(epoch) {
   const ST = globalThis.MeetStt;
   const sttModeSel = field('STT mode',
     document.createElement('select'));
+  const engineSaved = ST.sttMode(settings) === 'builtin';
+  if (hasEngine || engineSaved) addOptions(sttModeSel, [['builtin', 'Built-in (on this computer)']]);
   addOptions(sttModeSel, [['whisper-local', 'Local Whisper (your own server)'], ['api', 'STT API']]);
   sttModeSel.value = ST.sttMode(settings);
   const INFO = {
+    builtin: 'Audio stays on this computer, and no server or internet is needed. Speed depends on your computer, and accuracy is lower than larger models on your own server.',
     'whisper-local': 'Audio goes to your own OpenAI-compatible whisper server '
       + '(whisper.cpp, faster-whisper, and others) at the URL below. Audio stays on '
       + 'your network, but the server must be running during transcription. If it is down, '
@@ -526,7 +530,7 @@ async function renderSettings(epoch) {
   const sttInfo = el('div', 'info');
   view.append(sttInfo);
   const savedMode = ST.sttMode(settings);
-  const initialUrl = settings.sttBaseUrl || (savedMode === 'api' ? '' : ST.WHISPER_DEFAULT);
+  const initialUrl = settings.sttBaseUrl || (savedMode === 'whisper-local' ? ST.WHISPER_DEFAULT : '');
   const sttBaseUrl = field('STT Base URL',
     mkEl('input', { value: initialUrl }));
   const sttApiKey = field('STT API key (empty = no auth)',
@@ -540,7 +544,7 @@ async function renderSettings(epoch) {
     const m = sttModeSel.value;
     show(source, HAS_AUDIO && !Host);
     show(sttModeSel, audio);
-    show(sttBaseUrl, audio);
+    show(sttBaseUrl, audio && m !== 'builtin');
     show(sttApiKey, audio && m === 'api');
     show(sttModel, audio && m === 'api');
     show(sttLanguage, audio);
@@ -548,8 +552,8 @@ async function renderSettings(epoch) {
     sttInfo.textContent = info ? 'ⓘ ' + INFO[m] : '';
     sttInfo.hidden = !info;
   }
-  const urlByMode = { 'whisper-local': ST.WHISPER_DEFAULT, api: '' };
-  let urlMode = savedMode === 'api' ? 'api' : 'whisper-local';
+  const urlByMode = { 'whisper-local': ST.WHISPER_DEFAULT, api: '', builtin: '' };
+  let urlMode = savedMode;
   urlByMode[urlMode] = initialUrl;
   sttModeSel.addEventListener('change', () => {
     urlByMode[urlMode] = sttBaseUrl.value.trim();

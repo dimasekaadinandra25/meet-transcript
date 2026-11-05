@@ -82,15 +82,17 @@ Pasang langsung dari Add-ons resmi Mozilla: **[Transcripables di Firefox Add-ons
 
 ## 🖥️ Aplikasi Desktop (Windows)
 
-Aplikasi desktop merekam audio komputer dan mikrofon, jadi berfungsi untuk aplikasi meeting apa pun yang suaranya keluar lewat speaker atau headset, termasuk Zoom, Teams, Slack, Webex, Discord, dan WhatsApp desktop. Hasilnya: transkrip berlabel **You** dan **Others**, MoM, dan satu file rekaman per meeting. Tidak ada nama pembicara selain dua label itu. Dukungan macOS menyusul.
+Aplikasi desktop merekam audio komputer dan mikrofon, jadi berfungsi untuk aplikasi meeting apa pun yang suaranya keluar lewat speaker atau headset, termasuk Zoom, Teams, Slack, Webex, Discord, dan WhatsApp desktop. Hasilnya: transkrip berlabel **You** dan **Others**, MoM, dan satu file rekaman per meeting. Bila layanan STT Anda mengembalikan pembicara, **Others** menjadi **Speaker A**, **Speaker B**, dan seterusnya. Dukungan macOS belum selesai: pengaturan build sudah ada, tetapi belum pernah dijalankan di Mac.
 
 ### Instalasi
 
 1. Jalankan `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen memperingatkan installer yang belum ditandatangani. Pilih **More info**, lalu **Run anyway**.
-3. Buka **Settings** dan isi endpoint STT serta LLM.
+3. Buka **Settings** dan isi endpoint LLM untuk MoM. Speech-to-text memakai mesin bawaan secara default, jadi tidak perlu server atau internet.
 
-Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --prefix desktop run dist`. Hasilnya ada di `desktop/dist/`.
+Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --prefix desktop run dist`. Perintah ini mengunduh mesin suara, memeriksa SHA-256-nya, dan menyimpan installer di `desktop/dist/`.
+
+**Code signing:** installer belum ditandatangani karena proyek ini belum punya sertifikat. Dengan file `.pfx`, isi `WIN_CSC_LINK` dan `WIN_CSC_KEY_PASSWORD` sebelum `npm run dist`, lalu electron-builder menandatanganinya. Sertifikat di token perangkat keras atau layanan cloud perlu pengaturan penandatanganan dari penyedianya di pengaturan build `win`.
 
 ### Penggunaan
 
@@ -101,6 +103,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Stop | **Stop recording** | `Alt+Shift+S` |
 | Bisukan atau nyalakan mikrofon | **Mute microphone** | `Alt+Shift+M` |
 
+* **Language** di Settings mengganti bahasa aplikasi antara English dan Bahasa Indonesia. Transkrip, MoM, dan judul tidak pernah diterjemahkan, dan huruf shortcut `Alt` sama di kedua bahasa.
 * Klik kanan ikon tray untuk merekam, berhenti, membisukan, atau membuka folder rekaman tanpa membuka jendela.
 * **Check for updates** di Settings mencari rilis GitHub baru dan membuka halaman unduhnya. Tidak memasang apa pun sendiri.
 * Setiap tombol juga punya shortcut `Alt` yang berfungsi saat jendela aktif. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol.
@@ -116,6 +119,8 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 
 * Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir.
 * API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
+* Mesin bawaan memakai model kecil (`ggml-base-q5_1`), jadi model lebih besar di server Anda sendiri lebih akurat. Mesin ini memerlukan Microsoft Visual C++ Redistributable, dan aplikasi memberi tahu bila mesin tidak bisa dimulai.
+* Huruf pembicara berasal dari layanan STT Anda, per bagian rekaman. **Speaker A** di satu bagian 2 menit bisa jadi orang berbeda dari **Speaker A** di bagian berikutnya. Model `gpt-4o-transcribe-diarize` diminta dengan `diarized_json`. Layanan lain harus mengembalikan kolom `speaker` di setiap segmen.
 
 ---
 
@@ -154,6 +159,7 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 
 | Mode (label di UI) | Kebutuhan | Audio dikirim ke | Deskripsi |
 | --- | --- | --- | --- |
+| **Built-in (on this computer)** | Hanya aplikasi desktop | Tidak ke mana pun: tetap di komputer Anda | **[Default desktop]** Memakai mesin whisper.cpp bawaan |
 | **Local Whisper (your own server)** | Server Whisper OpenAI-compatible | URL yang **Anda** isi | **[Default]** Terisi `http://localhost:8080/v1` |
 | **STT API** | URL + API Key (**wajib diisi**) | 🌐 Endpoint tersebut | Tercepat. Menyediakan opsi Model & Bahasa STT. |
 

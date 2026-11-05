@@ -22,6 +22,7 @@ let fakeStore;
 let states;
 let warned;
 let probes;
+let engineAnswer = { ok: true, value: 'http://127.0.0.1:1/v1' };
 let probeAnswer;
 let saved;
 let failWrites;
@@ -117,6 +118,7 @@ beforeEach(() => {
     onState: (s) => states.push(s),
     onWarning: () => { warned++; },
     probeStt: async (url, key) => { probes.push({ url, key }); return probeAnswer; },
+    startEngine: async () => engineAnswer,
     saveFile: async (name, blob, first) => {
       if (fakeStore.failSave) throw new Error(fakeStore.failSave);
       saved.push({ name, blob, first });
@@ -561,4 +563,30 @@ test('MoM otomatis gagal: pengguna diberi tahu', async () => {
   await runRecording();
   await settle();
   assert.match(recStates().at(-1).error, /LLM down/);
+});
+
+async function startWithEngine(answer) {
+  globalThis.desktop = {};
+  engineAnswer = answer;
+  data.settings = { sttMode: 'builtin' };
+  try {
+    await ctl.handle(START);
+    await settle();
+  } finally {
+    delete globalThis.desktop;
+    engineAnswer = { ok: true, value: 'http://127.0.0.1:1/v1' };
+  }
+}
+
+test('built-in engine starts with the recording, and no address is probed', async () => {
+  await startWithEngine({ ok: true, value: 'http://127.0.0.1:1/v1' });
+  assert.equal(probes.length, 0);
+  assert.equal(warned, 0);
+});
+
+test('a built-in engine that cannot start warns and recording continues', async () => {
+  await startWithEngine({ ok: false, error: 'The built-in speech engine is not installed.' });
+  assert.equal(warned, 1);
+  assert.ok(messages.some((m) => m.error?.startsWith('The built-in speech engine is not installed. Recording continues')));
+  assert.equal(meeting().endedAt, null);
 });

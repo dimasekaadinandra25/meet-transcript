@@ -84,15 +84,17 @@ Install directly from Mozilla's official Add-ons site: **[Transcripables on Fire
 
 ## 🖥️ Desktop App (Windows)
 
-The desktop app records your computer's audio and your microphone, so it works with any meeting app that plays through your speakers or headset, including Zoom, Teams, Slack, Webex, Discord, and WhatsApp desktop. It produces a transcript labeled **You** and **Others**, MoM, and one recording file per meeting. It has no speaker names beyond those two labels. macOS support comes later.
+The desktop app records your computer's audio and your microphone, so it works with any meeting app that plays through your speakers or headset, including Zoom, Teams, Slack, Webex, Discord, and WhatsApp desktop. It produces a transcript labeled **You** and **Others**, MoM, and one recording file per meeting. If your STT service returns speakers, **Others** becomes **Speaker A**, **Speaker B**, and so on. macOS support is not finished: the build settings exist, but it has never run on a Mac.
 
 ### Install
 
 1. Run `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen warns about the unsigned installer. Choose **More info**, then **Run anyway**.
-3. Open **Settings** and fill in your STT and LLM endpoints.
+3. Open **Settings** and fill in your LLM endpoint for MoM. Speech-to-text uses the built-in engine by default, so it needs no server or internet.
 
-To build the installer yourself: `npm --prefix desktop install`, then `npm --prefix desktop run dist`. It is saved in `desktop/dist/`.
+To build the installer yourself: `npm --prefix desktop install`, then `npm --prefix desktop run dist`. It downloads the speech engine, checks its SHA-256, and saves the installer in `desktop/dist/`.
+
+**Code signing:** the installer is unsigned because the project has no certificate. With a `.pfx` file, set `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` before `npm run dist`, and electron-builder signs it. A certificate kept on a hardware token or cloud service needs that provider's signing setup in the `win` build settings.
 
 ### Use
 
@@ -103,6 +105,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Stop | **Stop recording** | `Alt+Shift+S` |
 | Mute or unmute your microphone | **Mute microphone** | `Alt+Shift+M` |
 
+* **Language** in Settings switches the app between English and Bahasa Indonesia. Transcripts, MoM, and titles are never translated, and `Alt` shortcut letters stay the same in both languages.
 * Right-click the tray icon to record, stop, mute, or open the recordings folder without opening the window.
 * **Check for updates** in Settings looks for a new GitHub release and opens its download page. It does not install anything by itself.
 * Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
@@ -118,6 +121,8 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 
 * If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes.
 * API keys are encrypted on your computer, but **Export backup** stores them in plain text.
+* The built-in engine uses a small model (`ggml-base-q5_1`), so a larger model on your own server is more accurate. It needs the Microsoft Visual C++ Redistributable, and the app says so if the engine cannot start.
+* Speaker letters come from your STT service, one recording part at a time. **Speaker A** in one 2-minute part may be a different person from **Speaker A** in the next. The `gpt-4o-transcribe-diarize` model is requested with `diarized_json`. Other services must return a `speaker` field in each segment.
 
 ---
 
@@ -156,6 +161,7 @@ You can record tab audio and transcribe it through STT, either alone or together
 
 | Mode (UI label) | Requirements | Audio is sent to | Description |
 | --- | --- | --- | --- |
+| **Built-in (on this computer)** | Desktop app only | Nowhere: it stays on your computer | **[Desktop default]** Uses the bundled whisper.cpp engine |
 | **Local Whisper (your own server)** | OpenAI-compatible Whisper server | The URL **you** enter | **[Default]** Pre-filled with `http://localhost:8080/v1` |
 | **STT API** | URL + API key (**required**) | 🌐 That endpoint | Fastest. Offers STT model and language options. |
 

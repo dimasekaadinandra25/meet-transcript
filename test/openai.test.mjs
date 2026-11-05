@@ -95,3 +95,20 @@ test('other models keep verbose_json', async () => {
   assert.equal(form.get('response_format'), 'verbose_json');
   assert.equal(form.get('chunking_strategy'), null);
 });
+
+test('the uploaded file keeps the name it is given', async () => {
+  const realFetch = globalThis.fetch;
+  let form;
+  globalThis.fetch = async (_url, init) => {
+    form = init.body;
+    return new Response('{"segments":[]}', { status: 200 });
+  };
+  try {
+    await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x']), fileName: 'audio.wav', baseUrl: 'http://127.0.0.1:1/v1', model: 'm' });
+    assert.equal(form.get('file').name, 'audio.wav');
+    await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x']), baseUrl: 'http://127.0.0.1:1/v1', model: 'm' });
+    assert.equal(form.get('file').name, 'audio.webm');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

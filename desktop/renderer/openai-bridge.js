@@ -9,7 +9,11 @@
   Object.assign(globalThis.MeetOpenAI, {
     generateMoM: async (args) => unwrap(await net.chat(args)),
     testConnection: async (args) => unwrap(await net.test(args)),
-    transcribeAudio: async ({ blob, ...args }) => unwrap(await net.stt({ ...args, bytes: await blob.arrayBuffer() })),
+    transcribeAudio: async ({ blob, ...args }) => {
+      if (args.baseUrl !== globalThis.MeetStt.BUILTIN_URL) return unwrap(await net.stt({ ...args, bytes: await blob.arrayBuffer() }));
+      const wav = await globalThis.MeetWav.speechWav(blob);
+      return unwrap(await net.stt({ ...args, fileName: 'audio.wav', bytes: await wav.arrayBuffer() }));
+    },
   });
 
   globalThis.bridgeFetch = async (url, init = {}) => {

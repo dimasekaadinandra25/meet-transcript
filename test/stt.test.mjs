@@ -170,3 +170,23 @@ test('mergeSttChunks names the speaker from the service', () => {
   const out = mergeSttChunks([{ segments: [{ start: 0, text: 'halo', speaker: 'B' }, { start: 1, text: 'hai' }] }], 1000, 0);
   assert.deepEqual(out.map((s) => s.speaker), ['Speaker B', '']);
 });
+
+test('built-in mode uses the engine in the desktop app', () => {
+  globalThis.desktop = {};
+  try {
+    const { sttMode, sttEndpoint, BUILTIN_URL } = globalThis.MeetStt;
+    const settings = { sttMode: 'builtin', sttBaseUrl: 'http://old', sttApiKey: 'k', sttLanguage: 'en' };
+    assert.equal(sttMode(settings), 'builtin');
+    const endpoint = sttEndpoint(settings);
+    assert.equal(endpoint.baseUrl, BUILTIN_URL);
+    assert.equal(endpoint.apiKey, '');
+    assert.equal(endpoint.language, 'en');
+  } finally {
+    delete globalThis.desktop;
+  }
+});
+
+test('a backup from the desktop app falls back to Local Whisper in the extension', () => {
+  const { sttMode } = globalThis.MeetStt;
+  assert.equal(sttMode({ sttMode: 'builtin' }), 'whisper-local');
+});

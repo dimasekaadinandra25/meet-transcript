@@ -10,8 +10,10 @@
     "start": "node scripts/start.js",
     "test": "node --test test/",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dist": "electron-builder --win --publish never",
-    "dist:dir": "electron-builder --win dir --publish never"
+    "fetch-engine": "node scripts/fetch-engine.js",
+    "dist": "node scripts/fetch-engine.js && electron-builder --win --publish never",
+    "dist:dir": "electron-builder --win dir --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "devDependencies": {
     "@types/node": "20.19.43",
@@ -48,9 +50,26 @@
       }
     ],
     "win": {
+      "extraResources": [
+        {
+          "from": "engine",
+          "to": "engine"
+        }
+      ],
       "target": "nsis",
       "icon": "assets/icon.png",
       "artifactName": "Transcripables-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.png",
+      "category": "public.app-category.productivity",
+      "artifactName": "Transcripables-${version}.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Transcripables records your microphone when you start a recording.",
+        "NSAudioCaptureUsageDescription": "Transcripables records computer audio when you start a recording.",
+        "NSScreenCaptureUsageDescription": "Transcripables records your screen when you choose audio + video."
+      }
     },
     "nsis": {
       "oneClick": false,

@@ -32,9 +32,10 @@ const callTest = (args) => netCall(async () => {
   return globalThis.MeetOpenAI.testConnection(args);
 });
 
-const callStt = ({ bytes, ...args }) => netCall(async () => {
-  assertHttp(args.baseUrl);
-  return globalThis.MeetOpenAI.transcribeAudio({ ...args, blob: new Blob([bytes]) });
+const callStt = ({ bytes, ...args }, engineUrl) => netCall(async () => {
+  const baseUrl = args.baseUrl === globalThis.MeetStt.BUILTIN_URL ? await engineUrl() : args.baseUrl;
+  assertHttp(baseUrl);
+  return globalThis.MeetOpenAI.transcribeAudio({ ...args, baseUrl, blob: new Blob([bytes]) });
 });
 
 const probe = (url, key) => netCall(async () => {
