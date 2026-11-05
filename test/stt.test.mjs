@@ -151,3 +151,12 @@ test('mergeSttChunks mengabaikan indices yang panjangnya tidak sepadan', () => {
     { segments: [{ start: 0, text: 'c' }] }];
   assert.deepEqual(mergeSttChunks(r, 600000, 0, [0, 2]).map((s) => s.t), [0, 600000, 1200000]);
 });
+
+test('sttEndpoint whisper-local: default model STT API yang terbawa Simpan tidak dikirim ke whisper', () => {
+  const saved = { sttMode: 'whisper-local', sttModel: globalThis.MeetStt.DEFAULT_API_MODEL };
+  assert.equal(sttEndpoint(saved).model, 'whisper-1');
+});
+
+test('sttEndpoint whisper-local: model pilihan user tetap dipakai', () => {
+  assert.equal(sttEndpoint({ sttMode: 'whisper-local', sttModel: 'large-v3' }).model, 'large-v3');
+});
