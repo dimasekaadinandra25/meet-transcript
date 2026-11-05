@@ -179,6 +179,7 @@
     runCommand,
     recordControls,
     titleEditor,
+    makePdf: () => desktop.makePdf(),
     settingsRows,
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
     aiLabel: (name) => `Copy & open ${name}`,

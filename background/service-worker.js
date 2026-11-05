@@ -352,6 +352,7 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
   if (segments.length && !meeting.segments.some((s) => String(s.id ?? '').startsWith(tag))) {
     broadcastRec({ error: 'The audio transcript matches the captions, so no new lines were added.' });
   }
+  return meetingId;
 }
 
 async function saveSegments({ meetingId, title, segs }) {
@@ -367,6 +368,18 @@ async function saveSegments({ meetingId, title, segs }) {
   notifyPanel({ type: 'meeting-updated', id: meetingId });
 }
 
+async function autoMom(id) {
+  const key = meetingKey(id);
+  const { settings = {}, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
+  if (!settings.autoMom || !settings.apiKey || !meeting?.segments.length) return;
+  try {
+    await generateMomOnce(id);
+    notifyPanel({ type: 'meeting-updated', id });
+  } catch (e) {
+    broadcastRec({ error: `MoM could not be made automatically: ${e.message}` });
+  }
+}
+
 async function endMeeting(meetingId) {
   if (active.id === meetingId) {
     active = { ...ACTIVE_IDLE };
@@ -379,6 +392,7 @@ async function endMeeting(meetingId) {
   data[key].endedAt = Date.now();
   await chrome.storage.local.set({ [key]: data[key] });
   notifyPanel({ type: 'meeting-updated', id: meetingId });
+  if (data[key].source !== 'audio') autoMom(meetingId).catch((e) => console.error(e));
 }
 
 async function generateMom(id) {
@@ -593,7 +607,10 @@ const HANDLERS = {
     broadcastRec({ error: msg.segments.length
       ? msg.error ?? null
       : 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.' });
-    enqueueWrite(() => saveAudioTranscript(msg));
+    enqueueWrite(async () => {
+      const id = await saveAudioTranscript(msg);
+      if (msg.segments.length && !msg.error) autoMom(id).catch((e) => console.error(e));
+    });
     closeOffscreen();
   },
   'audio-saved': (msg) => {

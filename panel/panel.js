@@ -292,6 +292,19 @@ async function renderMeeting(id, live, epoch) {
   const dl = dropdown('unduh', 'Download');
   dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatTranscript(meeting.segments)));
   dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
+  dl.item('Download .docx', async () => download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting)));
+  dl.item('Save as PDF', async () => {
+    if (!Host) {
+      chrome.tabs.create({ url: chrome.runtime.getURL(`panel/print.html?id=${encodeURIComponent(meeting.id)}`) });
+      return;
+    }
+    try {
+      download(`${meeting.title}.pdf`, new Blob([await Host.makePdf()], { type: 'application/pdf' }));
+    } catch (e) {
+      flash(dl.head, 'PDF failed', 3000);
+      console.error(e);
+    }
+  });
   if (!live && recState.transcribing && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
     actions.append(el('span', 'muted', busyLabel()));
   }
@@ -388,25 +401,50 @@ async function renderMeeting(id, live, epoch) {
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
 }
 
-async function renderHistory(epoch) {
-  const { meetings = [] } = await chrome.storage.local.get('meetings');
-  const items = (await Promise.all(meetings.map(getMeeting))).filter(Boolean);
-  if (epoch !== renderEpoch) return;
-  lastRenderedKey = null;
-  view.replaceChildren();
-  if (!items.length) {
-    view.append(el('p', 'muted', 'No history yet.'));
-    return;
-  }
-  for (const m of items) {
+let historyQuery = '';
+
+function historyList(items) {
+  const found = items.filter((m) => M.matchesSearch(m, historyQuery));
+  if (!found.length) return [el('p', 'muted', 'No meetings match.')];
+  return found.map((m) => {
     const item = el('button', 'item');
     item.append(
       el('div', 'who', m.title),
       el('div', 'muted',
         `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} segments${m.mom ? ' — MoM ✓' : ''}`)
     );
+    const snippet = M.searchSnippet(m, historyQuery);
+    if (snippet) item.append(el('div', 'snippet', snippet));
     item.addEventListener('click', () => { viewingId = m.id; render(); });
-    view.append(item);
+    return item;
+  });
+}
+
+async function renderHistory(epoch) {
+  const { meetings = [] } = await chrome.storage.local.get('meetings');
+  const items = (await Promise.all(meetings.map(getMeeting))).filter(Boolean);
+  if (epoch !== renderEpoch) return;
+  lastRenderedKey = null;
+  const previous = document.getElementById('history-search');
+  const wasTyping = document.activeElement === previous && previous;
+  const caret = wasTyping ? previous.selectionStart : 0;
+  view.replaceChildren();
+  if (!items.length) {
+    view.append(el('p', 'muted', 'No history yet.'));
+    return;
+  }
+  const search = mkEl('input', { type: 'search', id: 'history-search', value: historyQuery, placeholder: 'Search titles, transcripts, and MoM' });
+  search.setAttribute('aria-label', 'Search meetings');
+  const list = el('div');
+  list.append(...historyList(items));
+  search.addEventListener('input', () => {
+    historyQuery = search.value;
+    list.replaceChildren(...historyList(items));
+  });
+  view.append(search, list);
+  if (wasTyping) {
+    search.focus();
+    search.setSelectionRange(caret, caret);
   }
 }
 
@@ -607,6 +645,11 @@ async function renderSettings(epoch) {
   const actions = el('div', 'actions');
   actions.append(test, save, note);
   view.append(actions);
+  const autoMomBox = mkEl('input', { type: 'checkbox', checked: !!settings.autoMom });
+  const autoMomLabel = el('label');
+  autoMomLabel.append(autoMomBox, 'Make MoM automatically when a transcript is ready (sends it to your LLM)');
+  autoMomBox.addEventListener('change', () => patchSettings({ autoMom: autoMomBox.checked }));
+  view.append(autoMomLabel);
   for (const row of Host?.settingsRows(settings) ?? []) view.append(row);
   view.append(el('h3', null, 'Backup'));
   const bnote = el('span', 'muted', '');

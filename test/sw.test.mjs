@@ -7,7 +7,7 @@ const SRC = readFileSync(new URL('../background/service-worker.js', import.meta.
 const SESSION = readFileSync(new URL('../content/session.js', import.meta.url), 'utf8');
 const MERGE = readFileSync(new URL('../lib/merge.js', import.meta.url), 'utf8');
 
-function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {} }) {
+function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {}, generateMoM = async () => 'MOM OTOMATIS' }) {
   const sent = [];
   const scripts = [];
   const tabUpdated = [];
@@ -66,6 +66,8 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   };
   ctx.MeetStt.sttEndpoint = () => ({ mode: 'api', baseUrl: 'http://localhost:1/v1',
     apiKey: '', model: 'whisper-1', language: '' });
+  vm.runInContext('globalThis.MeetOpenAI = { DEFAULT_MODEL: "m" };', ctx);
+  ctx.MeetOpenAI.generateMoM = generateMoM;
   vm.runInContext(SESSION, ctx);
   vm.runInContext(MERGE, ctx);
   vm.runInContext(SRC, ctx);
@@ -443,4 +445,49 @@ test('baris audio baru tersimpan tanpa pemberitahuan itu', async () => {
   await flush();
   assert.equal(sw.store['meeting:a'].segments.length, 2);
   assert.ok(!sw.sent.some((m) => m.type === 'rec-state' && /matches the captions/.test(m.error ?? '')));
+});
+
+const wait = () => new Promise((r) => setTimeout(r, 20));
+const autoStore = (extra = {}) => ({
+  settings: { apiKey: 'k', autoMom: true, ...extra },
+  meetings: ['a'],
+  'meeting:a': { id: 'a', title: 'A', startedAt: 0, segments: [{ id: 'cap-1', speaker: 'Ani', text: 'halo semua', t: 1 }], mom: null },
+});
+
+test('MoM otomatis setelah transkrip audio tersimpan', async () => {
+  const sw = loadSw({ offscreen: null, store: autoStore() });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'a', baseTime: 500, segments: [{ t: 90000, speaker: '', text: 'isi baru' }] });
+  await wait();
+  assert.equal(sw.store['meeting:a'].mom, 'MOM OTOMATIS');
+  assert.ok(sw.sent.some((m) => m.type === 'meeting-updated' && m.id === 'a'));
+});
+
+test('MoM otomatis setelah meeting caption berakhir', async () => {
+  const sw = loadSw({ offscreen: null, store: autoStore() });
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'a', inCall: true, captionsOn: true });
+  port.disconnect();
+  await wait();
+  assert.equal(sw.store['meeting:a'].mom, 'MOM OTOMATIS');
+});
+
+test('MoM otomatis tidak jalan bila dimatikan', async () => {
+  const sw = loadSw({ offscreen: null, store: autoStore({ autoMom: false }) });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'a', baseTime: 500, segments: [{ t: 90000, speaker: '', text: 'isi baru' }] });
+  await wait();
+  assert.equal(sw.store['meeting:a'].mom, null);
+});
+
+test('MoM otomatis dilewati bila ada potongan gagal', async () => {
+  const sw = loadSw({ offscreen: null, store: autoStore() });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'a', baseTime: 500, error: '1/2 parts failed', segments: [{ t: 90000, speaker: '', text: 'isi baru' }] });
+  await wait();
+  assert.equal(sw.store['meeting:a'].mom, null);
+});
+
+test('MoM otomatis gagal: pengguna diberi tahu', async () => {
+  const sw = loadSw({ offscreen: null, store: autoStore(), generateMoM: async () => { throw new Error('LLM down'); } });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'a', baseTime: 500, segments: [{ t: 90000, speaker: '', text: 'isi baru' }] });
+  await wait();
+  assert.ok(sw.sent.some((m) => m.type === 'rec-state' && /LLM down/.test(m.error ?? '')));
 });

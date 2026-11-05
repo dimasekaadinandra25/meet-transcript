@@ -16,7 +16,7 @@ test('tiap tombol mendapat shortcut dari labelnya', () => {
     Live: '1', History: '2', Settings: '3', '← History': 'B', Copy: 'C', 'Copy transcript': 'T', 'Copy prompt + transcript': 'P',
     'Generate MoM': 'M', 'Regenerate MoM': 'M', 'Paste into Gemini': 'G', 'Paste into ChatGPT': 'C',
     'Copy & open Gemini': 'G', 'Copy & open ChatGPT': 'C', Download: 'U', 'Download .txt': 'T', 'Download .md': 'M',
-    'Download recording — 14:00': 'R', 'Download audio (3 file)': 'A', 'Download video': 'V', Delete: 'X',
+    'Download recording — 14:00': 'R', 'Download audio (3 file)': 'A', 'Download video': 'V', 'Download .docx': 'W', 'Save as PDF': 'P', Delete: 'X',
     'Generate transcript': 'T', Retranscribe: 'T', 'Transcribe audio': 'T', 'Stop recording': 'Q',
     'Mute microphone': 'N', 'Unmute microphone': 'N', 'Record audio': 'R', 'Record audio + video': 'V', 'Got it': 'O',
     'Open recordings folder': 'O', 'Allow microphone': 'A', 'Test connection': 'T', Save: 'S', 'Export backup (.zip)': 'X', 'Import backup': 'I',

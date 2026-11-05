@@ -139,6 +139,8 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .seg > div:first-child { margin-bottom: 4px; }
 .item { display: block; width: 100%; text-align: left; margin-bottom: var(--gap); }
 .item .who { font-weight: 600; margin-bottom: 2px; }
+.item .snippet { margin-top: 4px; color: var(--muted); font-style: italic; }
+#history-search { margin: 0 0 var(--gap); }
 .mom { white-space: pre-wrap; }
 
 .info, .error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--gap); padding: 12px 14px; border-radius: var(--radius-small); margin: var(--gap) 0; }
@@ -253,6 +255,20 @@ input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; acce
 .show-keys .menu-list > [data-shortcut]::before { top: 50%; right: 6px; transform: translateY(-50%); }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media print {
+  :root {
+    --text: #000;
+    --muted: #333;
+    --accent: #000;
+    --bg: #fff;
+    --border: transparent;
+  }
+  html, body { background: #fff; }
+  body::before, nav, .actions, main > button, #history-search, #crash { display: none !important; }
+  main { height: auto; overflow: visible; padding: 0; mask-image: none; }
+  .seg, .mom, main > input { background: none; border: 0; box-shadow: none; padding: 2px 0; break-inside: avoid; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   button, details.menu > summary { transition: none; }

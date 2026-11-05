@@ -533,3 +533,32 @@ test('potongan dari rekaman yang sudah berhenti diabaikan', async () => {
   await settle();
   assert.equal(fakeOpenAI.transcribeCalls.length, calls);
 });
+
+test('MoM otomatis dibuat setelah transkrip selesai', async () => {
+  data.settings.autoMom = true;
+  await runRecording();
+  await settle();
+  assert.equal(meeting().mom, 'MOM HASIL');
+});
+
+test('MoM otomatis mati secara bawaan', async () => {
+  await runRecording();
+  await settle();
+  assert.equal(fakeOpenAI.momCalls ?? 0, 0);
+});
+
+test('MoM otomatis dilewati bila transkrip gagal sebagian', async () => {
+  data.settings.autoMom = true;
+  fakeOpenAI.failFor = 'mic';
+  await runRecording();
+  await settle();
+  assert.equal(fakeOpenAI.momCalls ?? 0, 0);
+});
+
+test('MoM otomatis gagal: pengguna diberi tahu', async () => {
+  data.settings.autoMom = true;
+  fakeOpenAI.generateMoM = async () => { throw new Error('LLM down'); };
+  await runRecording();
+  await settle();
+  assert.match(recStates().at(-1).error, /LLM down/);
+});

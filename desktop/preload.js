@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('desktop', {
     write: (name, bytes, first) => ipcRenderer.invoke('recordings:write', name, bytes, first),
     open: () => ipcRenderer.invoke('recordings:open'),
   },
+  makePdf: () => ipcRenderer.invoke('pdf:make'),
   capture: {
     sources: () => ipcRenderer.invoke('capture:sources'),
     use: (id) => ipcRenderer.invoke('capture:use', id),

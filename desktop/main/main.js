@@ -215,6 +215,7 @@ app.whenReady().then(() => {
   serveRecordings();
   handleFromApp('rec:state', applyRecState);
   handleFromApp('window:reveal', revealWindow);
+  handleFromApp('pdf:make', () => mainWindow.webContents.printToPDF({ printBackground: false }));
   handleFromApp('app:quit', () => app.exit(0));
   handleFromApp('shell:open', (url) => {
     if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);

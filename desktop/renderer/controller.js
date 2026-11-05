@@ -219,6 +219,13 @@
       }
     }
 
+    async function autoMom(id) {
+      const settings = await readSettings();
+      if (!settings.autoMom || !settings.apiKey) return;
+      const result = await generateMomOnce(id);
+      if (!result.ok) broadcast({ error: `MoM could not be made automatically: ${result.error}` });
+    }
+
     async function finishRecording(meetingId, baseTime) {
       const { peaks } = await recorder.stop();
       await updateMeeting(meetingId, (meeting) => {
@@ -249,6 +256,7 @@
         const error = runStt ? await transcribe(meetingId, baseTime, false, session?.done) : null;
         rec = { ...IDLE };
         broadcast({ error });
+        if (runStt && !error) autoMom(meetingId).catch((e) => console.error(e));
       } catch (e) {
         rec = { ...IDLE };
         broadcast({ error: e.message });
