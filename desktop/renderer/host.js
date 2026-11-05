@@ -51,7 +51,7 @@
   desktop.onWarn((message) => controller.warn(message));
 
   function consentNotice() {
-    const box = el('div', 'error');
+    const box = el('div', 'info');
     box.append(el('div', null, 'Sebelum merekam, pastikan peserta meeting mengizinkan. Izin peserta menjadi tanggung jawabmu.'));
     mkBtn('Mengerti', async () => {
       await shim.storage.local.set({ consentShown: true });
@@ -83,13 +83,13 @@
     if (rec.transcribing) {
       box.append(el('span', 'muted', busyText));
     } else if (rec.recording) {
-      mkBtn('Stop rekam', () => send({ type: 'stop-recording' }), box);
+      mkBtn('Stop rekam', () => send({ type: 'stop-recording' }), box).classList.add('danger');
       mkBtn(rec.muted ? 'Nyalakan mikrofon' : 'Bisukan mikrofon', () => send({ type: 'set-muted', on: !rec.muted }), box);
-      box.append(el('span', 'muted', rec.muted ? '● merekam, mikrofon dibisukan' : '● merekam'));
+      box.append(el('span', 'recording', rec.muted ? '● merekam, mikrofon dibisukan' : '● merekam'));
       box.append(el('div', 'muted', 'Mute di aplikasi meeting tidak menghentikan rekaman mikrofon. Pakai tombol Bisukan di sini.'));
     } else {
       if (!consentShown) box.append(consentNotice());
-      mkBtn('Rekam audio', () => send({ type: 'start-recording', video: false }), box);
+      mkBtn('Rekam audio', () => send({ type: 'start-recording', video: false }), box).classList.add('primary');
       mkBtn('Rekam audio + video', () => send({ type: 'start-recording', video: true }), box);
       box.append(sourcePicker());
       box.append(el('div', 'muted', 'Tanpa headset, suara peserta bisa bocor ke mikrofon dan muncul dobel sebagai "You".'));

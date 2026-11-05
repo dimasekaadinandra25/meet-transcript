@@ -7,32 +7,31 @@
   <style>
     body { width: 228px; }
 
-    header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #ddd; }
+    header { display: flex; align-items: center; gap: 8px; margin: 8px 8px 0; padding: 8px 10px;
+      background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--highlight); backdrop-filter: var(--blur); }
     header img { width: 20px; height: 20px; }
     header b { font-weight: 600; }
 
-    .rows { padding: 4px; }
+    .rows { padding: 6px 8px 8px; }
     .rows > button,
     .rows > .menu > summary { display: flex; align-items: center; gap: 8px;
-      width: 100%; box-sizing: border-box; padding: 8px 10px; border: 0; border-radius: 6px;
-      background: none; font: inherit; text-align: left; cursor: pointer; }
-    .rows svg { width: 16px; height: 16px; flex: none; fill: none; stroke: #5f6368;
+      width: 100%; box-sizing: border-box; padding: 8px 10px; border-color: transparent; border-radius: var(--radius-small);
+      background: none; box-shadow: none; text-align: left; }
+    .rows svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--muted);
       stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-    .rows svg.solid { fill: #d93025; stroke: none; }
-    .sep { height: 1px; background: #ddd; margin: 4px 10px; }
+    .rows svg.solid { fill: var(--danger); stroke: none; }
+    .sep { height: 1px; background: var(--edge); margin: 4px 10px; }
     .rows > button:hover,
-    .rows > .menu > summary:hover { background: #f1f3f4; }
-    .rows > button:focus-visible,
-    .rows > .menu > summary:focus-visible { outline: 2px solid #1a73e8; outline-offset: -2px; }
-    .rows > .menu[open] > summary { background: #f1f3f4; }
-    .menu.inline > summary::after { content: '›'; color: #888; margin-left: auto; }
+    .rows > .menu > summary:hover,
+    .rows > .menu[open] > summary { background: var(--glass-hover); }
+    .menu.inline > summary::after { content: '›'; color: var(--muted); margin-left: auto; }
     .menu.inline[open] > summary::after { content: '⌄'; }
     .rows > .menu > .menu-list { position: static; min-width: 0; padding: 0;
-      border: 0; border-radius: 0; box-shadow: none; background: none; }
-    .rows > .menu > .menu-list > button { display: block; padding: 8px 10px 8px 34px; border-radius: 6px;
+      border: 0; border-radius: 0; box-shadow: none; background: none; backdrop-filter: none; }
+    .rows > .menu > .menu-list > button { display: block; padding: 8px 10px 8px 34px; border-radius: var(--radius-small);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .rows > .menu > .menu-list > .muted { padding: 6px 10px 6px 34px; font-size: inherit; }
-    .rows > .menu > .menu-list > button:focus-visible { outline: 2px solid #1a73e8; outline-offset: -2px; }
     .rows .state { padding: 2px 10px 6px; }
     .rows .err { padding: 2px 10px 6px; }
   </style>

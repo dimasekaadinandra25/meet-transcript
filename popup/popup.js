@@ -93,7 +93,7 @@ function render() {
     view.append(el('div', 'muted state', rec.saving ? 'Menyimpan rekaman…' : 'Mentranskrip…'));
   } else if (rec.recording) {
     row('Stop rekam', ICON.stop(), () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
-    view.append(el('div', 'muted state', '● Merekam'));
+    view.append(el('div', 'recording state', '● Merekam'));
   } else {
     const d = mkDropdown(view, 'rec', 'Rekam', { cls: 'inline', caret: '' });
     d.head.prepend(ICON.rekam());

@@ -181,7 +181,8 @@ async function renderMeeting(id, live, epoch) {
     } else if (recState.recording) {
       const stop = el('button', null, 'Stop rekam');
       stop.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
-      bar.append(stop, el('span', 'muted', ' ● merekam'));
+      stop.classList.add('danger');
+      bar.append(stop, el('span', 'recording', ' ● merekam'));
     } else {
       bar.append(el('span', 'muted', 'Mulai rekam dari ikon extension → Rekam.'));
     }
@@ -325,7 +326,7 @@ async function renderMeeting(id, live, epoch) {
     }
   }
   if (!live) {
-    btn('Hapus meeting', async () => {
+    const remove = btn('Hapus meeting', async () => {
       if (!confirm(`Hapus "${meeting.title}" beserta rekamannya? Tindakan ini tidak bisa dibatalkan.`)) return;
       momErrors.delete(meeting.id);
       const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
@@ -333,6 +334,7 @@ async function renderMeeting(id, live, epoch) {
       else momErrors.set(meeting.id, res?.error ?? 'Gagal menghubungi service worker.');
       render();
     });
+    remove.classList.add('danger');
   }
   view.append(actions);
   const list = el('div');
