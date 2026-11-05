@@ -139,7 +139,7 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .item .who { font-weight: 600; margin-bottom: 2px; }
 .mom { white-space: pre-wrap; }
 
-.info, .error { padding: 10px 12px; border-radius: var(--radius-small); margin: var(--gap) 0; }
+.info, .error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--gap); padding: 12px 14px; border-radius: var(--radius-small); margin: var(--gap) 0; }
 .info { background: var(--info-tint); border: 1px solid var(--accent); }
 .error { background: var(--danger-tint); border: 1px solid var(--danger); }
 #crash { white-space: pre-wrap; word-break: break-word; user-select: text; font-size: 12px; max-height: 40vh; overflow: auto; margin: 0; }
