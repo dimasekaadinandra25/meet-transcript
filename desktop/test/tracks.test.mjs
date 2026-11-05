@@ -59,3 +59,10 @@ test('sebagian potongan gagal tidak memblokir bila track itu masih punya teks', 
 test('rekaman tanpa track mikrofon tidak diblokir', () => {
   assert.equal(replaceBlocker({ system: { results: [text('a')] }, mic: { results: [] } }), null);
 });
+
+test('speakers from the service replace Others, while the microphone stays You', () => {
+  const segs = mergeTracks({ chunkMs: 1000, baseTime: 0,
+    system: { results: [{ segments: [{ start: 0, text: 'a', speaker: 'A' }, { start: 0.1, text: 'b' }] }], indices: [0] },
+    mic: { results: [{ segments: [{ start: 0.2, text: 'c', speaker: 'B' }] }], indices: [0] } });
+  assert.deepEqual(segs.map((s) => s.speaker), ['Speaker A', 'Others', 'You']);
+});

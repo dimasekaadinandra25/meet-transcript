@@ -1,14 +1,13 @@
 (() => {
   const LABEL = { system: 'Others', mic: 'You' };
 
-  function labelled(track, speaker, chunkMs, baseTime) {
-    return globalThis.MeetStt.mergeSttChunks(track.results, chunkMs, baseTime, track.indices)
-      .map((segment) => ({ ...segment, speaker }));
-  }
+  const segmentsOf = (track, chunkMs, baseTime) => globalThis.MeetStt.mergeSttChunks(track.results, chunkMs, baseTime, track.indices);
 
   function mergeTracks({ system, mic, chunkMs, baseTime }) {
-    return [...labelled(system, LABEL.system, chunkMs, baseTime), ...labelled(mic, LABEL.mic, chunkMs, baseTime)]
-      .sort((a, b) => a.t - b.t);
+    return [
+      ...segmentsOf(system, chunkMs, baseTime).map((segment) => ({ ...segment, speaker: segment.speaker || LABEL.system })),
+      ...segmentsOf(mic, chunkMs, baseTime).map((segment) => ({ ...segment, speaker: LABEL.mic })),
+    ].sort((a, b) => a.t - b.t);
   }
 
   const hasText = (track) => track.results.some((r) => r?.segments?.length);

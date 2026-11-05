@@ -160,3 +160,13 @@ test('sttEndpoint whisper-local: default model STT API yang terbawa Simpan tidak
 test('sttEndpoint whisper-local: model pilihan user tetap dipakai', () => {
   assert.equal(sttEndpoint({ sttMode: 'whisper-local', sttModel: 'large-v3' }).model, 'large-v3');
 });
+
+test('parseSttResponse keeps the speaker the service returns', () => {
+  const r = parseSttResponse({ segments: [{ start: 1, text: 'halo', speaker: 'A' }, { start: 2, text: 'hai' }] });
+  assert.deepEqual(r, { segments: [{ start: 1, text: 'halo', speaker: 'A' }, { start: 2, text: 'hai' }] });
+});
+
+test('mergeSttChunks names the speaker from the service', () => {
+  const out = mergeSttChunks([{ segments: [{ start: 0, text: 'halo', speaker: 'B' }, { start: 1, text: 'hai' }] }], 1000, 0);
+  assert.deepEqual(out.map((s) => s.speaker), ['Speaker B', '']);
+});

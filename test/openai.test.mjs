@@ -67,3 +67,31 @@ test('chat: body 200 tanpa content dan tanpa error tetap "Respons kosong"', asyn
       () => generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'https://x.test/v1' }),
       /Empty response/));
 });
+
+async function sentForm(model) {
+  await import('../lib/stt.js');
+  const realFetch = globalThis.fetch;
+  let form;
+  globalThis.fetch = async (_url, init) => {
+    form = init.body;
+    return new Response('{"segments":[]}', { status: 200 });
+  };
+  try {
+    await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x']), baseUrl: 'https://stt.example/v1', apiKey: 'k', model, language: 'id' });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  return form;
+}
+
+test('a diarize model asks for speaker labels', async () => {
+  const form = await sentForm('gpt-4o-transcribe-diarize');
+  assert.equal(form.get('response_format'), 'diarized_json');
+  assert.equal(form.get('chunking_strategy'), 'auto');
+});
+
+test('other models keep verbose_json', async () => {
+  const form = await sentForm('whisper-1');
+  assert.equal(form.get('response_format'), 'verbose_json');
+  assert.equal(form.get('chunking_strategy'), null);
+});
