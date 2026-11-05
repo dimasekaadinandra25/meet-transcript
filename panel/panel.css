@@ -26,10 +26,11 @@
   --radius: 12px;
   --radius-small: 8px;
   --edge-gap: 12px;
-  --gap: 8px;
-  --section-gap: 14px;
-  --card-padding: 10px 12px;
-  --control-height: 34px;
+  --gap: 12px;
+  --button-gap: 10px;
+  --section-gap: 20px;
+  --card-padding: 12px 14px;
+  --control-height: 36px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -70,7 +71,7 @@
 }
 
 html { background: var(--bg); }
-body { font: 13px/1.5 system-ui, sans-serif; margin: 0; color: var(--text); }
+body { font: 13px/1.55 system-ui, sans-serif; margin: 0; color: var(--text); }
 body::before {
   content: '';
   position: fixed;
@@ -89,8 +90,8 @@ nav {
   right: var(--edge-gap);
   z-index: 20;
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: 6px;
+  padding: 5px;
   background: var(--nav-glass);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -101,26 +102,26 @@ nav button { flex: 1; padding: 7px 8px; border-color: transparent; background: n
 nav button:hover { background: var(--glass-hover); }
 nav button.active { font-weight: 600; color: var(--accent); background: var(--glass-hover); border-color: var(--border); box-shadow: var(--highlight); }
 main {
-  padding: 70px var(--edge-gap) 16px;
+  padding: 76px var(--edge-gap) 20px;
   overflow-y: auto;
   height: 100vh;
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: var(--edge) transparent;
-  mask-image: linear-gradient(to bottom, transparent var(--edge-gap), #000 24px);
+  mask-image: linear-gradient(to bottom, transparent var(--edge-gap), #000 26px);
 }
 main > :first-child { margin-top: 0; }
 p { margin: var(--gap) 0; }
 h2 + .muted, main > input + .muted { margin-top: 0; }
-main > input { margin: 0 0 2px; }
+main > input { margin: 0 0 4px; }
 main > button + input { margin-top: var(--gap); }
 
-h2 { font-size: 16px; font-weight: 650; margin: 8px 0 2px; }
-h3 { font-size: 13px; margin: var(--section-gap) 0 6px; }
+h2 { font-size: 16px; font-weight: 650; margin: var(--gap) 0 4px; }
+h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .muted { color: var(--muted); }
 .ok { color: var(--ok); }
 .err { color: var(--danger); }
-.recording { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-weight: 600; }
+.recording { display: inline-flex; align-items: center; gap: 8px; color: var(--danger); font-weight: 600; }
 .recording::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--record); }
 
 .seg, .item, .mom {
@@ -132,30 +133,31 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 6px; }
 }
 .seg { margin-bottom: var(--gap); }
 .seg .who { font-weight: 600; color: var(--accent); }
-.seg .time { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.seg .time { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.seg > div:first-child { margin-bottom: 4px; }
 .item { display: block; width: 100%; text-align: left; margin-bottom: var(--gap); }
-.item .who { font-weight: 600; }
+.item .who { font-weight: 600; margin-bottom: 2px; }
 .mom { white-space: pre-wrap; }
 
-.info, .error { padding: 8px 10px; border-radius: var(--radius-small); margin: 10px 0; }
+.info, .error { padding: 10px 12px; border-radius: var(--radius-small); margin: var(--gap) 0; }
 .info { background: var(--info-tint); border: 1px solid var(--accent); }
 .error { background: var(--danger-tint); border: 1px solid var(--danger); }
 #crash { white-space: pre-wrap; word-break: break-word; user-select: text; font-size: 12px; max-height: 40vh; overflow: auto; margin: 0; }
 
-.actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: var(--gap) 0; }
+.actions { display: flex; gap: var(--button-gap); flex-wrap: wrap; align-items: center; margin: var(--gap) 0; }
 .actions > div { flex-basis: 100%; }
 .actions .actions { margin: 0; }
-.actions select { flex: 1 1 120px; width: auto; min-width: 0; margin: 0; }
+.actions select { flex-basis: 100%; margin: 0; }
 
 button, details.menu > summary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
   box-sizing: border-box;
   min-height: var(--control-height);
-  padding: 6px 10px;
+  padding: 7px 12px;
   color: var(--text);
   background: var(--glass);
   border: 1px solid var(--border);
@@ -193,8 +195,8 @@ details.menu > .menu-list {
   min-width: 200px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px;
+  gap: 4px;
+  padding: 8px;
   background: var(--glass-solid);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -205,14 +207,14 @@ details.menu > .menu-list > button { justify-content: flex-start; white-space: n
 details.menu > .menu-list > button:hover { background: var(--glass-hover); }
 details.menu > .menu-list > .muted { font-size: 12px; padding: 0 6px 2px; }
 
-label { display: block; font-weight: 600; margin-top: 10px; }
-label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 6px; }
+label { display: block; font-weight: 600; margin-top: 14px; }
+label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 8px; }
 textarea, input, select {
   width: 100%;
   box-sizing: border-box;
-  margin: 4px 0;
+  margin: 6px 0 2px;
   min-height: var(--control-height);
-  padding: 6px 9px;
+  padding: 7px 11px;
   color: var(--text);
   background: var(--glass);
   border: 1px solid var(--field-border);

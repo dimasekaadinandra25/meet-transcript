@@ -7,33 +7,33 @@
   <style>
     body { width: 228px; }
 
-    header { display: flex; align-items: center; gap: 8px; margin: 8px 8px 0; padding: 8px 10px;
+    header { display: flex; align-items: center; gap: 10px; margin: 10px 10px 0; padding: 10px 12px;
       background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius);
       box-shadow: var(--highlight); backdrop-filter: var(--blur); }
     header img { width: 20px; height: 20px; }
     header b { font-weight: 600; }
 
-    .rows { padding: 6px 8px 8px; }
+    .rows { display: flex; flex-direction: column; gap: 4px; padding: 10px; }
     .rows > button,
-    .rows > .menu > summary { display: flex; align-items: center; gap: 8px;
-      justify-content: flex-start; width: 100%; box-sizing: border-box; padding: 8px 10px; border-color: transparent; border-radius: var(--radius-small);
+    .rows > .menu > summary { display: flex; align-items: center; gap: 10px;
+      justify-content: flex-start; width: 100%; box-sizing: border-box; padding: 9px 12px; border-color: transparent; border-radius: var(--radius-small);
       background: none; box-shadow: none; text-align: left; }
     .rows svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--muted);
       stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .rows svg.solid { fill: var(--record); stroke: none; }
-    .sep { height: 1px; background: var(--edge); margin: 4px 10px; }
+    .sep { flex: none; height: 1px; background: var(--edge); margin: 6px 12px; }
     .rows > button:hover,
     .rows > .menu > summary:hover,
     .rows > .menu[open] > summary { background: var(--glass-hover); }
     .rows > .menu.inline > summary::after { margin-left: auto; color: var(--muted); transform: rotate(-45deg); }
     .rows > .menu.inline[open] > summary::after { transform: translateY(-1px) rotate(45deg); }
-    .rows > .menu > .menu-list { position: static; min-width: 0; padding: 0;
+    .rows > .menu > .menu-list { position: static; min-width: 0; padding: 4px 0 0;
       border: 0; border-radius: 0; box-shadow: none; background: none; backdrop-filter: none; }
-    .rows > .menu > .menu-list > button { display: block; padding: 8px 10px 8px 34px; border-radius: var(--radius-small);
+    .rows > .menu > .menu-list > button { display: block; padding: 9px 12px 9px 38px; border-radius: var(--radius-small);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .rows > .menu > .menu-list > .muted { padding: 6px 10px 6px 34px; font-size: inherit; }
-    .rows .state { padding: 2px 10px 6px; }
-    .rows .err { padding: 2px 10px 6px; }
+    .rows > .menu > .menu-list > .muted { padding: 6px 12px 6px 38px; font-size: inherit; }
+    .rows .state { padding: 2px 12px 6px; }
+    .rows .err { padding: 2px 12px 6px; }
   </style>
 </head>
 <body>
