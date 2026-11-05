@@ -216,7 +216,7 @@ test('recId yang sudah terpangkas ditolak dengan pesan yang menjelaskan', async 
     recordings: [{ recId: 1000, meetingId: 'abc-defg-hij', count: 2 }] });
   const res = await sw.ask({ type: 'regenerate-transcript', id: 'abc-defg-hij', recId: 999 });
   assert.equal(res.ok, false);
-  assert.match(res.error, /5 rekaman terakhir/);
+  assert.match(res.error, /last 5 recordings/);
   assert.ok(!sw.sent.some((m) => m.op === 'retranscribe'));
 });
 
@@ -225,7 +225,7 @@ test('recId milik meeting lain ditolak', async () => {
     recordings: [{ recId: 1000, meetingId: 'discord-1-2', count: 2 }] });
   const res = await sw.ask({ type: 'regenerate-transcript', id: 'abc-defg-hij', recId: 1000 });
   assert.equal(res.ok, false);
-  assert.match(res.error, /meeting lain/);
+  assert.match(res.error, /another meeting/);
   assert.ok(!sw.sent.some((m) => m.op === 'retranscribe'));
 });
 
@@ -433,7 +433,7 @@ test('semua baris audio sama dengan caption: pengguna diberi tahu', async () => 
   await sw.ask(finished('halo semuanya mari kita mulai'));
   await flush();
   await flush();
-  assert.ok(sw.sent.some((m) => m.type === 'rec-state' && /sama dengan caption/.test(m.error ?? '')));
+  assert.ok(sw.sent.some((m) => m.type === 'rec-state' && /matches the captions/.test(m.error ?? '')));
 });
 
 test('baris audio baru tersimpan tanpa pemberitahuan itu', async () => {
@@ -442,5 +442,5 @@ test('baris audio baru tersimpan tanpa pemberitahuan itu', async () => {
   await flush();
   await flush();
   assert.equal(sw.store['meeting:a'].segments.length, 2);
-  assert.ok(!sw.sent.some((m) => m.type === 'rec-state' && /sama dengan caption/.test(m.error ?? '')));
+  assert.ok(!sw.sent.some((m) => m.type === 'rec-state' && /matches the captions/.test(m.error ?? '')));
 });

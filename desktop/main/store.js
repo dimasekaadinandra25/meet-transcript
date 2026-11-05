@@ -25,7 +25,7 @@ function createStore({ dir, cipher, onChange = (_changes) => {} }) {
     const secrets = {};
     for (const field of SECRET_FIELDS) {
       if (!sealed[field]) continue;
-      if (!cipher.available()) throw new Error('Enkripsi API key tidak tersedia di komputer ini.');
+      if (!cipher.available()) throw new Error('API key encryption is not available on this computer.');
       secrets[field] = cipher.encrypt(sealed[field]);
       delete sealed[field];
     }

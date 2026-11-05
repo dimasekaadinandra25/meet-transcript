@@ -24,7 +24,7 @@
       const recorder = new MediaRecorder(track.stream, { mimeType: audioMime });
       recorder.ondataavailable = (e) => { if (e.data.size) data.push(e.data); };
       recorder.onstop = () => keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId),
-        `Satu potongan track ${track.name} gagal disimpan: `);
+        `A ${track.name} track part could not be saved: `);
       recorder.start();
       track.recorder = recorder;
     }
@@ -61,16 +61,16 @@
         s.micStream = await deps.getUserMedia({ audio: true });
         s.ctx.createMediaStreamSource(s.micStream).connect(gain);
         s.micStream.getAudioTracks()[0]?.addEventListener('ended', () =>
-          warn('Mikrofon terputus. Rekaman audio komputer tetap berjalan.'));
+          warn('Microphone disconnected. Computer audio keeps recording.'));
       } catch (e) {
-        warn(`Mikrofon tidak bisa dipakai (${e.message}). Rekaman audio komputer tetap berjalan.`);
+        warn(`The microphone could not be used (${e.message}). Computer audio keeps recording.`);
       }
     }
 
     function startMix(s, mix) {
       const recorder = new MediaRecorder(mix.stream, { mimeType: audioMime });
       recorder.ondataavailable = (e) => {
-        if (e.data.size) keepSave(s, store.appendMixPart(e.data, s.recId), 'Satu bagian file rekaman gagal disimpan: ');
+        if (e.data.size) keepSave(s, store.appendMixPart(e.data, s.recId), 'A part of the recording file could not be saved: ');
       };
       recorder.start(MIX_PART_MS);
       s.mix = recorder;
@@ -82,24 +82,24 @@
         const recorder = new MediaRecorder(stream, { mimeType: videoMime,
           videoBitsPerSecond: VIDEO_BITRATE, audioBitsPerSecond: VIDEO_AUDIO_BITRATE });
         recorder.ondataavailable = (e) => {
-          if (e.data.size) keepSave(s, store.appendVideoPart(e.data, s.recId), 'Satu bagian video gagal disimpan: ');
+          if (e.data.size) keepSave(s, store.appendVideoPart(e.data, s.recId), 'A part of the video could not be saved: ');
         };
         recorder.start(MIX_PART_MS);
         s.video = recorder;
       } catch (e) {
-        warn(`Rekaman video gagal dimulai (${e.message}). Rekaman audio tetap berjalan.`);
+        warn(`Video recording could not start (${e.message}). Audio keeps recording.`);
       }
     }
 
     async function begin(s, { mic, video, chunkMs, prepare }) {
       s.display = await deps.getDisplayMedia(DISPLAY_CONSTRAINTS);
       const systemAudio = s.display.getAudioTracks();
-      if (!systemAudio.length) throw new Error('Audio komputer tidak tersedia.');
+      if (!systemAudio.length) throw new Error('Computer audio is not available.');
       await prepare?.();
       if (video) s.display.getVideoTracks().forEach((t) => { t.contentHint = 'detail'; });
       else s.display.getVideoTracks().forEach((t) => t.stop());
       systemAudio[0].addEventListener('ended', () =>
-        warn('Audio komputer terputus. Rekaman mikrofon tetap berjalan.'));
+        warn('Computer audio disconnected. The microphone keeps recording.'));
 
       s.ctx = new deps.AudioContext();
       await s.ctx.resume();
@@ -129,7 +129,7 @@
     }
 
     async function start(options) {
-      if (session) throw new Error('Rekaman masih berjalan.');
+      if (session) throw new Error('A recording is still running.');
       const s = { recId: options.baseTime, tracks: [], timers: [], saves: [], peaks: { system: [], mic: [] } };
       session = s;
       try {
@@ -155,10 +155,10 @@
 
     async function stop() {
       const s = session;
-      if (!s) throw new Error('Tidak ada rekaman aktif.');
+      if (!s) throw new Error('No active recording.');
       const recorders = [...s.tracks.map((t) => t.recorder), s.mix, s.video];
       const finished = await Promise.all(recorders.map(finalize));
-      if (finished.includes(false)) warn('Bagian akhir rekaman gagal difinalisasi dan mungkin hilang.');
+      if (finished.includes(false)) warn('The end of the recording could not be finished and may be lost.');
       await Promise.all(s.saves);
       await release(s);
       session = null;

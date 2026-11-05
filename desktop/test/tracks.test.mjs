@@ -25,7 +25,7 @@ test('indeks asli menjaga waktu potongan yang bolong', () => {
 test('potongan gagal tetap ditandai dengan label tracknya', () => {
   const segs = mergeTracks({ chunkMs: 1000, baseTime: 0,
     system: { results: [{ error: 'x' }], indices: [0] }, mic: { results: [], indices: [] } });
-  assert.deepEqual(segs.map((s) => [s.speaker, s.text]), [['Others', '[transkrip gagal]']]);
+  assert.deepEqual(segs.map((s) => [s.speaker, s.text]), [['Others', '[transcript failed]']]);
 });
 
 test('track tanpa potongan tidak menghasilkan baris', () => {
@@ -48,7 +48,7 @@ test('mikrofon sunyi tanpa error tidak memblokir', () => {
 
 test('tanpa teks sama sekali diblokir', () => {
   const none = { results: [{ segments: [] }] };
-  assert.match(replaceBlocker({ system: none, mic: none }), /tidak menghasilkan teks/);
+  assert.match(replaceBlocker({ system: none, mic: none }), /returned no text/);
 });
 
 test('sebagian potongan gagal tidak memblokir bila track itu masih punya teks', () => {

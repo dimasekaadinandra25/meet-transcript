@@ -10,7 +10,7 @@ function loadLib(root) {
 function assertHttp(url) {
   if (!url) return;
   const { protocol } = new URL(url);
-  if (protocol !== 'http:' && protocol !== 'https:') throw new Error(`URL tidak valid: ${url}`);
+  if (protocol !== 'http:' && protocol !== 'https:') throw new Error(`Invalid URL: ${url}`);
 }
 
 async function netCall(fn) {

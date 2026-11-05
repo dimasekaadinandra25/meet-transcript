@@ -27,7 +27,7 @@
 
     const updateMeeting = (id, change) => enqueue(async () => {
       const meeting = await readMeeting(id);
-      if (!meeting) throw new Error('Meeting tidak ditemukan.');
+      if (!meeting) throw new Error('Meeting not found.');
       change(meeting);
       await storage.set({ [meetingKey(id)]: meeting });
       notify({ type: 'meeting-updated', id });
@@ -51,7 +51,7 @@
     }
 
     async function startRecording({ video }) {
-      if (busy()) return { ok: false, error: 'Rekaman masih berjalan.' };
+      if (busy()) return { ok: false, error: 'A recording is still running.' };
       const baseTime = now();
       const meetingId = `desktop-${baseTime}`;
       rec = { recording: true, transcribing: false, meetingId, baseTime };
@@ -60,7 +60,7 @@
         const settings = await readSettings();
         await recorder.start({ baseTime, mic: !!settings.mic, video: !!video, chunkMs: CHUNK_MS,
           prepare: () => audioStore.beginAudio({ meetingId, chunkMs: CHUNK_MS, baseTime }) });
-        await addMeeting({ id: meetingId, title: new Date(baseTime).toLocaleString('id-ID'), startedAt: baseTime,
+        await addMeeting({ id: meetingId, title: new Date(baseTime).toLocaleString(), startedAt: baseTime,
           endedAt: null, segments: [], mom: null, source: 'audio' }).catch(async (e) => {
           await recorder.stop().catch(() => {});
           throw e;
@@ -104,7 +104,7 @@
       const endpoint = stt.sttEndpoint(await readSettings());
       const [system, mic] = await Promise.all([audioStore.loadSystem(recId), audioStore.loadMic(recId)]);
       const source = system ?? mic;
-      if (!source) throw new Error('Audio rekaman tidak tersimpan lagi.');
+      if (!source) throw new Error('The recording audio is no longer saved.');
       const micPeaks = (await readMeeting(meetingId))?.audioPeaks?.[recId] ?? [];
       const silent = (index) => micPeaks[index] !== undefined && micPeaks[index] !== null && micPeaks[index] < SILENT_PEAK;
       const skippedMic = mic ? mic.indices.filter(silent).length : 0;
@@ -122,9 +122,9 @@
       await updateMeeting(meetingId, (meeting) => {
         meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, replace });
       });
-      if (!segments.length) return 'Transkrip kosong. STT tidak menghasilkan teks, cek endpoint dan model STT di Settings.';
+      if (!segments.length) return 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.';
       const failures = [...systemTrack.results, ...micTrack.results].filter((r) => r.error);
-      return failures.length ? `${failures.length}/${total} potongan gagal ditranskrip: ${failures[0].error}` : null;
+      return failures.length ? `${failures.length}/${total} parts failed to transcribe: ${failures[0].error}` : null;
     }
 
     async function finishRecording(meetingId, baseTime) {
@@ -157,13 +157,13 @@
     }
 
     async function regenerate({ id, recId }) {
-      if (busy()) return { ok: false, error: 'Rekaman atau transkrip masih berjalan.' };
+      if (busy()) return { ok: false, error: 'A recording or transcript is still running.' };
       rec = { ...rec, transcribing: true, meetingId: id };
       broadcast({ error: null });
       try {
         const target = (await audioStore.listRecordings()).find((r) => r.recId === Number(recId));
-        if (!target) throw new Error('Rekaman itu sudah tidak tersimpan, hanya 5 rekaman terakhir yang disimpan.');
-        if (target.meetingId !== id) throw new Error('Rekaman itu milik meeting lain.');
+        if (!target) throw new Error('That recording is no longer saved. Only the last 5 recordings are kept.');
+        if (target.meetingId !== id) throw new Error('That recording belongs to another meeting.');
         const error = await transcribe(id, target.recId, true);
         rec = { ...IDLE };
         broadcast({ error });
@@ -177,9 +177,9 @@
 
     async function generateMom(id) {
       const settings = await readSettings();
-      if (!settings.apiKey) throw new Error('API key belum diisi di tab Settings.');
+      if (!settings.apiKey) throw new Error('Add an API key in the Settings tab first.');
       const meeting = await readMeeting(id);
-      if (!meeting?.segments.length) throw new Error('Transkrip kosong.');
+      if (!meeting?.segments.length) throw new Error('The transcript is empty.');
       const prompt = merge.fillTemplate(settings.momTemplate || merge.DEFAULT_MOM_TEMPLATE,
         merge.formatTranscript(meeting.segments));
       const mom = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl, prompt,
@@ -199,7 +199,7 @@
     }
 
     async function deleteMeeting({ id }) {
-      if (rec.meetingId === id) return { ok: false, error: 'Meeting masih berjalan. Hentikan dulu sebelum menghapus.' };
+      if (rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before deleting.' };
       try {
         await audioStore.removeRecordings(id);
         await enqueue(async () => {

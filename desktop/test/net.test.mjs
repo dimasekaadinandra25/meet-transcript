@@ -28,8 +28,8 @@ before(async () => {
 after(() => server.close());
 
 test('pesan error tiba utuh tanpa awalan IPC', async () => {
-  const r = await netCall(async () => { throw new Error('HTTP 404 (endpoint/model STT tidak ditemukan?)'); });
-  assert.deepEqual(r, { ok: false, name: 'Error', error: 'HTTP 404 (endpoint/model STT tidak ditemukan?)' });
+  const r = await netCall(async () => { throw new Error('HTTP 404 (STT endpoint or model not found?)'); });
+  assert.deepEqual(r, { ok: false, name: 'Error', error: 'HTTP 404 (STT endpoint or model not found?)' });
 });
 
 test('nama TimeoutError dipertahankan', async () => {

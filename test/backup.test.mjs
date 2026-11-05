@@ -44,14 +44,14 @@ const zipOf = (json, extra = []) =>
 test('zip tanpa backup.json ditolak SEBELUM storage.clear()', async () => {
   const calls = stubEnv();
   const zip = await makeZip([{ name: 'catatan.txt', data: 'bukan backup' }]);
-  await assert.rejects(importBackup(zip), /backup\.json tidak ada/);
+  await assert.rejects(importBackup(zip), /backup\.json is missing/);
   assert.equal(calls.cleared, 0);
 });
 
 test('backup.json bukan JSON ditolak SEBELUM storage.clear()', async () => {
   const calls = stubEnv();
   const zip = await makeZip([{ name: 'backup.json', data: '{rusak' }]);
-  await assert.rejects(importBackup(zip), /bukan JSON/);
+  await assert.rejects(importBackup(zip), /not JSON/);
   assert.equal(calls.cleared, 0);
 });
 
@@ -64,7 +64,7 @@ test('backup.json cacat ditolak SEBELUM storage.clear()', async () => {
     { version: 1, storage: {}, audioMeta: 'x' },
   ]) {
     const calls = stubEnv();
-    await assert.rejects(importBackup(await zipOf(bad)), /rusak|tidak dikenal/);
+    await assert.rejects(importBackup(await zipOf(bad)), /damaged|Unknown/);
     assert.equal(calls.cleared, 0, `clear() jalan untuk backup cacat: ${JSON.stringify(bad)}`);
   }
 });

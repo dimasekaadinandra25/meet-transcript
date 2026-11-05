@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Transcripables",
   "version": "0.8.0",
-  "description": "Transkrip Google Meet dari caption & rekam meeting Teams/Webex/Slack/Discord/Zoom web, lalu jadikan Minutes of Meeting.",
+  "description": "Transcribe Google Meet from captions, record Teams, Webex, Slack, Discord, and Zoom web meetings, and turn them into Minutes of Meeting.",
   "minimum_chrome_version": "116",
   "permissions": ["sidePanel", "storage", "unlimitedStorage", "tabCapture", "offscreen", "activeTab", "contextMenus", "scripting"],
   "host_permissions": [
@@ -14,9 +14,9 @@
   ],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "commands": {
-    "rec-start": { "suggested_key": { "default": "Alt+Shift+R" }, "description": "Rekam audio meeting" },
-    "rec-start-video": { "suggested_key": { "default": "Alt+Shift+V" }, "description": "Rekam audio + video meeting" },
-    "rec-stop": { "suggested_key": { "default": "Alt+Shift+S" }, "description": "Stop rekam" }
+    "rec-start": { "suggested_key": { "default": "Alt+Shift+R" }, "description": "Record meeting audio" },
+    "rec-start-video": { "suggested_key": { "default": "Alt+Shift+V" }, "description": "Record meeting audio + video" },
+    "rec-stop": { "suggested_key": { "default": "Alt+Shift+S" }, "description": "Stop recording" }
   },
   "background": { "service_worker": "background/service-worker.js" },
   "content_scripts": [

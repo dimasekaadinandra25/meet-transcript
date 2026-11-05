@@ -19,8 +19,8 @@ test('tanpa rekaman jendela menutup', () => {
 
 test('tampilan tray mengikuti rekaman dan mute', () => {
   assert.deepEqual(trayLook({ recording: false, muted: false }), { image: 'tray-idle', tooltip: 'Transcripables' });
-  assert.deepEqual(trayLook({ recording: true, muted: false }), { image: 'tray-recording', tooltip: 'Transcripables: merekam' });
-  assert.deepEqual(trayLook({ recording: true, muted: true }), { image: 'tray-muted', tooltip: 'Transcripables: merekam, mikrofon dibisukan' });
+  assert.deepEqual(trayLook({ recording: true, muted: false }), { image: 'tray-recording', tooltip: 'Transcripables: recording' });
+  assert.deepEqual(trayLook({ recording: true, muted: true }), { image: 'tray-muted', tooltip: 'Transcripables: recording, microphone muted' });
 });
 
 test('shortcut memakai kombinasi dari plan', () => {
@@ -42,11 +42,11 @@ test('keluar saat transkrip berjalan meminta konfirmasi', () => {
 
 test('tray menunjukkan transkrip sedang berjalan', () => {
   assert.deepEqual(trayLook({ recording: false, transcribing: true, muted: false }),
-    { image: 'tray-idle', tooltip: 'Transcripables: mentranskrip' });
+    { image: 'tray-idle', tooltip: 'Transcripables: transcribing' });
 });
 
 test('konfirmasi keluar menjelaskan apa yang berjalan', () => {
-  assert.equal(quitPrompt({ recording: true }).button, 'Hentikan rekaman lalu keluar');
-  assert.equal(quitPrompt({ recording: false }).button, 'Batalkan transkrip lalu keluar');
-  assert.match(quitPrompt({ recording: false }).detail, /Riwayat/);
+  assert.equal(quitPrompt({ recording: true }).button, 'Stop recording and quit');
+  assert.equal(quitPrompt({ recording: false }).button, 'Cancel transcript and quit');
+  assert.match(quitPrompt({ recording: false }).detail, /History/);
 });

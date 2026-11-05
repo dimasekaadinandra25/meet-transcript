@@ -52,8 +52,8 @@
 
   function consentNotice() {
     const box = el('div', 'info');
-    box.append(el('div', null, 'Sebelum merekam, pastikan peserta meeting mengizinkan. Izin peserta menjadi tanggung jawabmu.'));
-    mkBtn('Mengerti', async () => {
+    box.append(el('div', null, 'Before recording, make sure everyone in the meeting agrees. Getting their permission is your responsibility.'));
+    mkBtn('Got it', async () => {
       await shim.storage.local.set({ consentShown: true });
       consentShown = true;
       redrawLive();
@@ -63,8 +63,8 @@
 
   function sourcePicker() {
     const select = el('select');
-    select.setAttribute('aria-label', 'Layar atau jendela untuk video');
-    select.append(Object.assign(document.createElement('option'), { value: chosenSource, textContent: 'Layar utama' }));
+    select.setAttribute('aria-label', 'Screen or window for video');
+    select.append(Object.assign(document.createElement('option'), { value: chosenSource, textContent: 'Main screen' }));
     select.addEventListener('focus', async () => {
       const sources = await desktop.capture.sources();
       select.replaceChildren(...sources.map(({ id, name }) =>
@@ -83,23 +83,23 @@
     if (rec.transcribing) {
       box.append(el('span', 'muted', busyText));
     } else if (rec.recording) {
-      mkBtn('Stop rekam', () => send({ type: 'stop-recording' }), box).classList.add('danger');
-      mkBtn(rec.muted ? 'Nyalakan mikrofon' : 'Bisukan mikrofon', () => send({ type: 'set-muted', on: !rec.muted }), box);
-      box.append(el('span', 'recording', rec.muted ? 'merekam, mikrofon dibisukan' : 'merekam'));
-      box.append(el('div', 'muted', 'Mute di aplikasi meeting tidak menghentikan rekaman mikrofon. Pakai tombol Bisukan di sini.'));
+      mkBtn('Stop recording', () => send({ type: 'stop-recording' }), box).classList.add('danger');
+      mkBtn(rec.muted ? 'Unmute microphone' : 'Mute microphone', () => send({ type: 'set-muted', on: !rec.muted }), box);
+      box.append(el('span', 'recording', rec.muted ? 'recording, microphone muted' : 'recording'));
+      box.append(el('div', 'muted', 'Muting in the meeting app does not stop the microphone recording. Use the Mute button here.'));
     } else {
       if (!consentShown) box.append(consentNotice());
-      mkBtn('Rekam audio', () => send({ type: 'start-recording', video: false }), box).classList.add('primary');
-      mkBtn('Rekam audio + video', () => send({ type: 'start-recording', video: true }), box);
+      mkBtn('Record audio', () => send({ type: 'start-recording', video: false }), box).classList.add('primary');
+      mkBtn('Record audio + video', () => send({ type: 'start-recording', video: true }), box);
       box.append(sourcePicker());
-      box.append(el('div', 'muted', 'Tanpa headset, suara peserta bisa bocor ke mikrofon dan muncul dobel sebagai "You".'));
+      box.append(el('div', 'muted', 'Without a headset, other people can leak into your microphone and appear twice as "You".'));
     }
     return box;
   }
 
   function titleEditor(meeting) {
     const input = Object.assign(document.createElement('input'), { value: meeting.title });
-    input.setAttribute('aria-label', 'Judul meeting');
+    input.setAttribute('aria-label', 'Meeting title');
     input.addEventListener('change', () => send({ type: 'rename-meeting', id: meeting.id, title: input.value }));
     return input;
   }
@@ -127,9 +127,9 @@
     recordControls,
     titleEditor,
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
-    aiLabel: (name) => `Salin & buka ${name}`,
-    emptyLiveText: 'Belum ada rekaman. Tekan Rekam audio saat meeting dimulai.',
-    emptySegmentsText: 'Transkrip muncul setelah rekaman dihentikan.',
-    backupWarning: 'File backup memuat API key dalam teks polos. Simpan di tempat yang aman dan jangan dibagikan.',
+    aiLabel: (name) => `Copy & open ${name}`,
+    emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
+    emptySegmentsText: 'The transcript appears after you stop recording.',
+    backupWarning: 'The backup file holds your API key in plain text. Keep it somewhere safe and do not share it.',
   };
 })();

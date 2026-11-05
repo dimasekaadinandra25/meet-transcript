@@ -170,7 +170,7 @@ test('STT berotasi, campuran tidak', async () => {
 test('track mikrofon sunyi sejak awal saat izin ditolak', async () => {
   deps.getUserMedia = async () => { throw Object.assign(new Error('x'), { name: 'NotAllowedError' }); };
   await createRecorder(deps).start(opts);
-  assert.match(warnings.at(-1), /mikrofon/i);
+  assert.match(warnings.at(-1), /microphone/i);
   assert.equal(fake.running().length, 3);
 });
 
@@ -184,7 +184,7 @@ test('mikrofon dimatikan: tanpa track mikrofon dan tanpa meminta izin', async ()
 test('headset dicabut: peringatan dan track lain tetap jalan', async () => {
   await rec.start(opts);
   fake.micTrack.emit('ended');
-  assert.match(warnings.at(-1), /mikrofon/i);
+  assert.match(warnings.at(-1), /microphone/i);
   assert.equal(fake.recorderFor(fake.parts().mix).state, 'recording');
   assert.equal(fake.running().length, 3);
 });
@@ -237,7 +237,7 @@ test('video gagal dimulai: peringatan dan audio tetap jalan', async () => {
 
 test('tanpa audio komputer rekaman gagal dimulai dengan jelas', async () => {
   deps.getDisplayMedia = async () => new FakeStream([fake.videoTrack]);
-  await assert.rejects(createRecorder(deps).start(opts), /audio komputer/i);
+  await assert.rejects(createRecorder(deps).start(opts), /computer audio/i);
   assert.equal(fake.videoTrack.stopped, true);
 });
 
@@ -256,7 +256,7 @@ test('prepare tidak dipanggil bila audio komputer tidak tersedia', async () => {
 
 test('start kedua saat merekam ditolak', async () => {
   await rec.start(opts);
-  await assert.rejects(rec.start(opts), /masih berjalan/i);
+  await assert.rejects(rec.start(opts), /still running/i);
   assert.equal(fake.running().length, 3);
 });
 

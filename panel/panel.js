@@ -5,8 +5,8 @@ let viewingId = null;
 let status = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0 };
 let recState = { recording: false, transcribing: false, saving: false, done: 0, total: 0, error: null };
 
-const busyLabel = () => (recState.saving ? 'Menyimpan rekaman…'
-  : recState.total ? `Mentranskrip… ${recState.done}/${recState.total}` : 'Mentranskrip…');
+const busyLabel = () => (recState.saving ? 'Saving recording…'
+  : recState.total ? `Transcribing… ${recState.done}/${recState.total}` : 'Transcribing…');
 
 const HAS_AUDIO = !!chrome.tabCapture;
 const Host = globalThis.PanelHost;
@@ -27,16 +27,16 @@ async function ensureOrigins(bases) {
   for (const b of bases) {
     let u;
     try { u = new URL(b); } catch { u = null; }
-    if (!u || !/^https?:$/.test(u.protocol) || !u.hostname) throw badUrl(`URL tidak valid: ${b}`);
+    if (!u || !/^https?:$/.test(u.protocol) || !u.hostname) throw badUrl(`Invalid URL: ${b}`);
     if (u.hostname.startsWith('[')) {
-      throw badUrl(`Alamat IPv6 tidak didukung Chrome: ${b}. Pakai 127.0.0.1 atau nama host.`);
+      throw badUrl(`Chrome does not support IPv6 addresses here: ${b}. Use 127.0.0.1 or a host name.`);
     }
     const p = `${u.protocol}//${u.hostname}/*`;
     if (p !== 'https://api.openai.com/*') patterns.push(p);
   }
   if (!patterns.length) return;
   if (!await chrome.permissions.request({ origins: [...new Set(patterns)] }).catch(() => false)) {
-    throw new Error(`Izin akses ${patterns.join(', ')} ditolak.`);
+    throw new Error(`Access to ${patterns.join(', ')} was denied.`);
   }
 }
 
@@ -50,7 +50,7 @@ function reportError(what, e) {
   box.textContent = `${what}: ${e?.message || e}\n${e?.stack ?? ''}`;
 }
 
-addEventListener('unhandledrejection', (ev) => reportError('Promise gagal', ev.reason));
+addEventListener('unhandledrejection', (ev) => reportError('Promise failed', ev.reason));
 addEventListener('error', (ev) => reportError('Error', ev.error ?? ev.message));
 
 function selectTab(name) {
@@ -83,7 +83,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (isShowing(msg.id)) render();
   } else if (msg.type === 'ai-inject') {
     if (msg.ok || !msg.id) return;
-    momErrors.set(msg.id, `Tempel ke AI gagal: ${msg.error} Prompt sudah ada di clipboard — paste manual di tab AI.`);
+    momErrors.set(msg.id, `Could not paste into the AI tab: ${msg.error} The prompt is on your clipboard, so paste it there yourself.`);
     if (isShowing(msg.id)) render();
   } else if (msg.type === 'rec-state') {
     const wasActive = recState.recording || recState.transcribing;
@@ -179,33 +179,33 @@ async function renderMeeting(id, live, epoch) {
     } else if (recState.transcribing) {
       bar.append(el('span', 'muted', busyLabel()));
     } else if (recState.recording) {
-      const stop = el('button', null, 'Stop rekam');
+      const stop = el('button', null, 'Stop recording');
       stop.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
       stop.classList.add('danger');
-      bar.append(stop, el('span', 'recording', 'merekam'));
+      bar.append(stop, el('span', 'recording', 'recording'));
     } else {
-      bar.append(el('span', 'muted', 'Mulai rekam dari ikon extension → Rekam.'));
+      bar.append(el('span', 'muted', 'Start recording from the extension icon → Record.'));
     }
     if (recState.error) bar.append(el('div', 'err', ' ' + recState.error));
     view.append(bar);
   }
   if (settingsCache.transcriptSource !== 'audio' && live && status.inCall && !status.captionsOn) {
     view.append(el('p', 'muted',
-      'Caption mati. Nyalakan CC di toolbar Meet supaya transkrip terisi.'));
+      'Captions are off. Turn on CC in the Meet toolbar to fill the transcript.'));
   }
   const quietSince = Math.max(status.lastSegmentAt || 0, status.captionsOnAt || 0);
   if (settingsCache.transcriptSource !== 'audio' && live && status.inCall && status.captionsOn && quietSince && Date.now() - quietSince > 30000) {
     view.append(el('p', 'muted',
-      'Caption nyala tapi tidak ada teks masuk 30 detik terakhir. Kalau ada yang bicara, kemungkinan DOM Meet berubah — perbaiki content/selectors.js.'));
+      'Captions are on, but no text arrived in the last 30 seconds. If someone is speaking, Meet may have changed its page: update content/selectors.js.'));
   }
   if (!meeting) {
     view.append(el('p', 'muted',
-      !live ? 'Meeting tidak ditemukan.'
-        : Host?.emptyLiveText ?? 'Tidak ada meeting Meet aktif. Rekaman dari tab lain (Discord dsb.) masuk ke Riwayat.'));
+      !live ? 'Meeting not found.'
+        : Host?.emptyLiveText ?? 'No active Meet meeting. Recordings from other tabs, such as Discord, go to History.'));
     return;
   }
   if (!live) {
-    const back = el('button', null, '← Riwayat');
+    const back = el('button', null, '← History');
     back.addEventListener('click', () => { viewingId = null; render(); });
     view.append(back);
   }
@@ -228,26 +228,26 @@ async function renderMeeting(id, live, epoch) {
   const copyTo = (text) => async () => {
     try {
       await navigator.clipboard.writeText(text());
-      flash(copy.head, 'Disalin ✓');
+      flash(copy.head, 'Copied ✓');
     } catch {
-      flash(copy.head, 'Gagal menyalin');
+      flash(copy.head, 'Copy failed');
     }
   };
-  copy.item('Copy transkrip', copyTo(() => M.formatTranscript(meeting.segments)));
-  if (meeting.segments.length) copy.item('Copy Prompt+Transkrip', copyTo(() => promptText(meeting)));
+  copy.item('Copy transcript', copyTo(() => M.formatTranscript(meeting.segments)));
+  if (meeting.segments.length) copy.item('Copy prompt + transcript', copyTo(() => promptText(meeting)));
   const mom = dropdown('mom', meeting.mom ? 'Regenerate MoM' : 'Generate MoM');
   mom.item(meeting.mom ? 'Regenerate MoM' : 'Generate MoM', async () => {
-    mom.head.textContent = 'Menghasilkan…';
+    mom.head.textContent = 'Generating…';
     momErrors.delete(meeting.id);
     const res = await chrome.runtime.sendMessage({ type: 'generate-mom', id: meeting.id })
       .catch(() => null);
-    if (!res?.ok) momErrors.set(meeting.id, res?.error ?? 'Gagal menghubungi service worker.');
+    if (!res?.ok) momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
     render();
   });
   if (meeting.segments.length) {
     for (const [name, target] of [['Gemini', 'gemini'], ['ChatGPT', 'chatgpt']]) {
-      mom.item(Host ? Host.aiLabel(name) : 'Tempel ke ' + name, async () => {
-        mom.head.textContent = `Membuka ${name}…`;
+      mom.item(Host ? Host.aiLabel(name) : 'Paste into ' + name, async () => {
+        mom.head.textContent = `Opening ${name}…`;
         const prompt = promptText(meeting);
         await navigator.clipboard.writeText(prompt).catch(() => {});
         chrome.runtime.sendMessage({ type: 'send-to-ai', target, text: prompt, id: meeting.id });
@@ -255,9 +255,9 @@ async function renderMeeting(id, live, epoch) {
       });
     }
   }
-  const dl = dropdown('unduh', 'Unduh');
-  dl.item('Unduh .txt', () => download(`${meeting.title}.txt`, M.formatTranscript(meeting.segments)));
-  dl.item('Unduh .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
+  const dl = dropdown('unduh', 'Download');
+  dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatTranscript(meeting.segments)));
+  dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
   if (!live && recState.transcribing && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
     actions.append(el('span', 'muted', busyLabel()));
   }
@@ -270,44 +270,44 @@ async function renderMeeting(id, live, epoch) {
       const tag = many ? ` — ${jam(r.baseTime)}` : '';
       const sfx = many ? `-${jam(r.baseTime).replace(/\D/g, '')}` : '';
       if (r.mixCount > 0) {
-        dl.item(`Unduh rekaman${tag}`, async () => {
+        dl.item(`Download recording${tag}`, async () => {
           const ok = await downloadMix(meeting, r, sfx).catch(() => false);
-          flash(dl.head, ok ? 'Diunduh ✓' : 'Rekaman tidak ditemukan', 3000);
+          flash(dl.head, ok ? 'Downloaded ✓' : 'Recording not found', 3000);
         });
       }
       if (r.count > 0) {
-        dl.item(`Unduh audio${tag}${r.count > 1 ? ` (${r.count} file)` : ''}`, async () => {
+        dl.item(`Download audio${tag}${r.count > 1 ? ` (${r.count} file)` : ''}`, async () => {
           const n = await downloadAudio(meeting, r, sfx).catch(() => 0);
-          flash(dl.head, n ? `Diunduh ✓${n > 1 ? ` (${n} file)` : ''}` : 'Audio tidak ditemukan', 3000);
+          flash(dl.head, n ? `Downloaded ✓${n > 1 ? ` (${n} file)` : ''}` : 'Audio not found', 3000);
         });
         if (r.count > 1) dl.list.append(el('span', 'muted',
-          'Beberapa file: izinkan "Download multiple files" kalau Chrome bertanya.'));
+          'Several files: allow "Download multiple files" if Chrome asks.'));
       }
       if (r.videoCount > 0) {
-        dl.item(`Unduh video${tag}`, async () => {
+        dl.item(`Download video${tag}`, async () => {
           const ok = await downloadVideo(meeting, r, sfx).catch(() => false);
-          flash(dl.head, ok ? 'Diunduh ✓' : 'Video tidak ditemukan', 3000);
+          flash(dl.head, ok ? 'Downloaded ✓' : 'Video not found', 3000);
         });
       }
     }
     const reable = recs.filter((r) => r.count > 0 || r.systemCount > 0 || r.micCount > 0);
     const transcribed = (r) => meeting.segments.some((s) => String(s.id ?? '').startsWith(`audio:${r.baseTime}:`));
-    const label = (r) => (transcribed(r) ? 'Transkrip ulang' : 'Generate transkrip');
+    const label = (r) => (transcribed(r) ? 'Retranscribe' : 'Generate transcript');
     if (reable.length) {
       const jalankan = async (r, setLabel) => {
-        setLabel('Mentranskrip…');
+        setLabel('Transcribing…');
         momErrors.delete(meeting.id);
         try {
           await ensureOrigins([globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl].filter(Boolean));
         } catch (e) {
-          momErrors.set(meeting.id, e.message + ' Transkrip tidak dijalankan — cek STT Base URL di Settings.');
+          momErrors.set(meeting.id, e.message + ' Transcription did not run. Check the STT Base URL in Settings.');
           render();
           return;
         }
         const res = await chrome.runtime.sendMessage(
           { type: 'regenerate-transcript', id: meeting.id, recId: r.recId }).catch(() => null);
         if (!res?.ok) {
-          momErrors.set(meeting.id, res?.error ?? 'Gagal menghubungi service worker.');
+          momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
           render();
         }
       };
@@ -317,21 +317,21 @@ async function renderMeeting(id, live, epoch) {
           return jalankan(reable[0], (t) => { reBtn.textContent = t; });
         });
       } else {
-        const re = dropdown('retranskrip', reable.some(transcribed) ? 'Transkrip audio' : 'Generate transkrip');
+        const re = dropdown('retranskrip', reable.some(transcribed) ? 'Transcribe audio' : 'Generate transcript');
         for (const r of reable) {
-          re.item(`${label(r)} — rekaman ${jam(r.baseTime)}`,
+          re.item(`${label(r)} — recording ${jam(r.baseTime)}`,
             () => jalankan(r, (t) => { re.head.textContent = t; }));
         }
       }
     }
   }
   if (!live) {
-    const remove = btn('Hapus', async () => {
-      if (!confirm(`Hapus "${meeting.title}" beserta rekamannya? Tindakan ini tidak bisa dibatalkan.`)) return;
+    const remove = btn('Delete', async () => {
+      if (!confirm(`Delete "${meeting.title}" and its recordings? This cannot be undone.`)) return;
       momErrors.delete(meeting.id);
       const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
       if (res?.ok) viewingId = null;
-      else momErrors.set(meeting.id, res?.error ?? 'Gagal menghubungi service worker.');
+      else momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
       render();
     });
     remove.classList.add('danger');
@@ -345,7 +345,7 @@ async function renderMeeting(id, live, epoch) {
     seg.append(head, el('div', null, s.text));
     list.append(seg);
   }
-  if (!meeting.segments.length) list.append(el('p', 'muted', Host?.emptySegmentsText ?? 'Belum ada caption masuk.'));
+  if (!meeting.segments.length) list.append(el('p', 'muted', Host?.emptySegmentsText ?? 'No captions yet.'));
   view.append(list);
   if (meeting.mom) {
     view.append(el('h3', null, 'MoM'));
@@ -361,7 +361,7 @@ async function renderHistory(epoch) {
   lastRenderedKey = null;
   view.replaceChildren();
   if (!items.length) {
-    view.append(el('p', 'muted', 'Belum ada riwayat.'));
+    view.append(el('p', 'muted', 'No history yet.'));
     return;
   }
   for (const m of items) {
@@ -369,7 +369,7 @@ async function renderHistory(epoch) {
     item.append(
       el('div', 'who', m.title),
       el('div', 'muted',
-        `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} segmen${m.mom ? ' — MoM ✓' : ''}`)
+        `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} segments${m.mom ? ' — MoM ✓' : ''}`)
     );
     item.addEventListener('click', () => { viewingId = m.id; render(); });
     view.append(item);
@@ -382,7 +382,7 @@ async function renderSettings(epoch) {
   lastRenderedKey = null;
   view.replaceChildren();
   view.append(el('h2', null, 'Settings'));
-  view.append(el('p', 'muted', 'Tahan Alt untuk melihat shortcut tiap tombol.'));
+  view.append(el('p', 'muted', 'Hold Alt to see the shortcut for each button.'));
   const rowOf = new WeakMap();
   const field = (label, input) => {
     const row = el('div');
@@ -399,21 +399,21 @@ async function renderSettings(epoch) {
     mkEl('input', { type: 'password', value: settings.apiKey ?? '' }));
   const model = field('Model',
     mkEl('input', { value: settings.model ?? DEFAULT_MODEL }));
-  const template = field('Template MoM ({{transcript}} = transkrip)',
+  const template = field('MoM template ({{transcript}} = transcript)',
     mkEl('textarea', { value: settings.momTemplate ?? M.DEFAULT_MOM_TEMPLATE }));
-  const source = field('Sumber transkrip',
+  const source = field('Transcript source',
     document.createElement('select'));
-  addOptions(source, [['caption', 'Caption Meet'], ['audio', 'Rekam audio']]);
+  addOptions(source, [['caption', 'Meet captions'], ['audio', 'Record audio']]);
   source.value = Host ? 'audio' : settings.transcriptSource ?? 'caption';
   const hideBox = mkEl('input', { type: 'checkbox', checked: settings.hideCaptions !== false });
   const hideLabel = el('label');
-  hideLabel.append(hideBox, 'Sembunyikan caption di layar Meet (transkrip tetap jalan)');
+  hideLabel.append(hideBox, 'Hide captions on the Meet screen (transcript keeps running)');
   hideBox.addEventListener('change', () => patchSettings({ hideCaptions: hideBox.checked }));
   const hideRow = el('div');
   hideRow.append(hideLabel);
   hideRow.hidden = !!Host;
   view.append(hideRow);
-  const captionLang = field('Bahasa caption Meet', document.createElement('select'));
+  const captionLang = field('Meet caption language', document.createElement('select'));
   addOptions(captionLang, [['id', 'Indonesia'], ['en', 'English']]);
   captionLang.value = settings.captionLang ?? 'id';
   show(captionLang, !Host);
@@ -422,26 +422,26 @@ async function renderSettings(epoch) {
   const micBox = mkEl('input', { type: 'checkbox', checked: !!settings.mic });
   micBox.addEventListener('change', () => patchSettings({ mic: micBox.checked }));
   const micLabel = el('label');
-  micLabel.append(micBox, 'Rekam mikrofon');
-  const micBtn = el('button', null, 'Izinkan mikrofon');
+  micLabel.append(micBox, 'Record microphone');
+  const micBtn = el('button', null, 'Allow microphone');
   micBtn.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-mic-permission' }).catch(() => {}));
   const micRow = el('div', 'actions');
   micRow.append(micBtn);
   micBtn.hidden = !!Host;
   micWrap.append(micLabel, micRow, el('div', 'muted',
-    'Tanpa headset, suara peserta dari speaker bisa ikut terekam lewat mic (dobel).'));
+    'Without a headset, voices from your speakers can leak into the mic and appear twice.'));
   micWrap.hidden = !HAS_AUDIO;
   view.append(micWrap);
   const ST = globalThis.MeetStt;
   const sttModeSel = field('Mode STT',
     document.createElement('select'));
-  addOptions(sttModeSel, [['whisper-local', 'Whisper lokal (server sendiri)'], ['api', 'STT API']]);
+  addOptions(sttModeSel, [['whisper-local', 'Local Whisper (your own server)'], ['api', 'STT API']]);
   sttModeSel.value = ST.sttMode(settings);
   const INFO = {
-    'whisper-local': 'Audio dikirim ke server whisper OpenAI-compatible milikmu sendiri '
-      + '(whisper.cpp, faster-whisper, dll) di URL di bawah. Audio tidak keluar dari '
-      + 'jaringanmu, tapi servernya harus jalan saat transkrip dibuat — kalau mati, '
-      + 'transkrip gagal dan audionya tetap tersimpan untuk dicoba lagi.',
+    'whisper-local': 'Audio goes to your own OpenAI-compatible whisper server '
+      + '(whisper.cpp, faster-whisper, and others) at the URL below. Audio stays on '
+      + 'your network, but the server must be running during transcription. If it is down, '
+      + 'transcription fails and the audio stays saved so you can try again.',
   };
   const sttInfo = el('div', 'info');
   view.append(sttInfo);
@@ -449,11 +449,11 @@ async function renderSettings(epoch) {
   const initialUrl = settings.sttBaseUrl || (savedMode === 'api' ? '' : ST.WHISPER_DEFAULT);
   const sttBaseUrl = field('STT Base URL',
     mkEl('input', { value: initialUrl }));
-  const sttApiKey = field('STT API key (kosong = tanpa auth)',
+  const sttApiKey = field('STT API key (empty = no auth)',
     mkEl('input', { type: 'password', value: settings.sttApiKey ?? '' }));
-  const sttModel = field('Model STT',
+  const sttModel = field('STT model',
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
-  const sttLanguage = field('Bahasa STT (mis. id, en — kosong = auto)',
+  const sttLanguage = field('STT language (such as id or en; empty = auto)',
     mkEl('input', { value: settings.sttLanguage ?? ST.DEFAULT_LANGUAGE }));
   function applyMode() {
     const audio = HAS_AUDIO;
@@ -493,22 +493,22 @@ async function renderSettings(epoch) {
         signal: AbortSignal.timeout(15000),
       });
     } catch (e) {
-      if (e?.name === 'TimeoutError') throw new Error(`STT ${host} tidak menjawab dalam 15 detik.`);
-      throw new Error(`Tidak bisa terhubung ke STT ${host}.`);
+      if (e?.name === 'TimeoutError') throw new Error(`STT ${host} did not answer within 15 seconds.`);
+      throw new Error(`Could not connect to STT ${host}.`);
     }
     if (res.status === 401 || res.status === 403) {
-      throw new Error(`STT ${host}: HTTP ${res.status} (STT API key salah/kosong?)`);
+      throw new Error(`STT ${host}: HTTP ${res.status} (wrong or empty STT API key?)`);
     }
     if (res.status === 404 || res.status === 405 || res.status === 501) {
-      return ` (STT ${host}: endpoint /models tak didukung server — HTTP ${res.status}, cek manual.)`;
+      return ` (STT ${host}: the server does not support /models, HTTP ${res.status}. Check it yourself.)`;
     }
     if (!res.ok) throw new Error(`STT ${host}: HTTP ${res.status}`);
     return '';
   }
-  const test = el('button', null, 'Tes koneksi');
+  const test = el('button', null, 'Test connection');
   test.addEventListener('click', async () => {
     test.disabled = true;
-    setNote('muted', 'Menguji…');
+    setNote('muted', 'Testing…');
     try {
       const base = normalizedBase();
       const sttBase = sttBaseForTest();
@@ -519,14 +519,14 @@ async function renderSettings(epoch) {
         baseUrl: base,
       });
       const sttNote = sttBase ? await probeStt(sttBase, sttApiKey.value.trim()) : '';
-      setNote('ok', `✓ Koneksi OK${sttBase ? ' (chat + STT)' : ''} — URL, API key, dan model valid.${sttNote}`);
+      setNote('ok', `✓ Connection OK${sttBase ? ' (chat + STT)' : ''}: URL, API key, and model are valid.${sttNote}`);
     } catch (e) {
-      setNote('err', '✗ Gagal: ' + (e?.message ?? e));
+      setNote('err', '✗ Failed: ' + (e?.message ?? e));
     } finally {
       test.disabled = false;
     }
   });
-  const save = el('button', null, 'Simpan');
+  const save = el('button', null, 'Save');
   save.addEventListener('click', async () => {
     if (save.disabled) return;
     save.disabled = true;
@@ -565,9 +565,9 @@ async function renderSettings(epoch) {
       },
     });
     const noPlaceholder = !template.value.includes('{{transcript}}');
-    if (warning) setNote('err', `Tersimpan, tapi ${warning} Request bisa gagal.`);
-    else if (noPlaceholder) setNote('err', 'Tersimpan, tapi Template MoM tidak memuat {{transcript}} — MoM akan dibuat tanpa transkrip.');
-    else setNote('ok', 'Tersimpan.');
+    if (warning) setNote('err', `Saved, but ${warning} Requests may fail.`);
+    else if (noPlaceholder) setNote('err', 'Saved, but the MoM template has no {{transcript}}, so MoM will be made without the transcript.');
+    else setNote('ok', 'Saved.');
   }
   const actions = el('div', 'actions');
   actions.append(test, save, note);
@@ -578,10 +578,10 @@ async function renderSettings(epoch) {
   const exportBtn = el('button', null, 'Export backup (.zip)');
   exportBtn.addEventListener('click', async () => {
     if (recState.recording || recState.transcribing || status.inCall) {
-      return setBnote('err', '✗ Rekaman/transkrip/meeting sedang berjalan — backup akan memuat data separuh. Tunggu selesai dulu.');
+      return setBnote('err', '✗ A recording, transcript, or meeting is running, so the backup would be incomplete. Wait until it finishes.');
     }
     exportBtn.disabled = true;
-    setBnote('muted', 'Menyusun zip…');
+    setBnote('muted', 'Building zip…');
     try {
       const zip = await globalThis.MeetBackup.exportBackup();
       download(`transcripables-backup-${new Date().toISOString().slice(0, 10)}.zip`, zip);
@@ -589,7 +589,7 @@ async function renderSettings(epoch) {
         ? `${Math.max(1, Math.round(zip.size / 1024))} KB`
         : `${(zip.size / 1048576).toFixed(1)} MB`}).`);
     } catch (e) {
-      setBnote('err', '✗ Export gagal: ' + (e?.message ?? e));
+      setBnote('err', '✗ Export failed: ' + (e?.message ?? e));
     } finally {
       exportBtn.disabled = false;
     }
@@ -601,21 +601,21 @@ async function renderSettings(epoch) {
     const file = importInput.files?.[0];
     if (!file) return;
     if (recState.recording || recState.transcribing || status.inCall) {
-      return setBnote('err', '✗ Rekaman/transkrip/meeting sedang berjalan — stop atau keluar dulu sebelum import.');
+      return setBnote('err', '✗ A recording, transcript, or meeting is running. Stop it or leave before importing.');
     }
-    if (!confirm('Import MENGGANTI seluruh data sekarang (riwayat, settings, rekaman tersimpan). Lanjut?')) return;
+    if (!confirm('Import REPLACES all current data (history, settings, saved recordings). Continue?')) return;
     importBtn.disabled = true;
-    setBnote('muted', 'Mengimpor…');
+    setBnote('muted', 'Importing…');
     try {
       const r = await globalThis.MeetBackup.importBackup(file);
       await loadSettings();
       audioMetaKey = null;
       alert(r.audioError
-        ? `Import selesai SEBAGIAN: ${r.meetings} meeting masuk, tapi rekaman audio/video gagal di-restore (${r.audioError}). Data lama sudah tergantikan.`
-        : `Import selesai: ${r.meetings} meeting${r.chunks ? `, ${r.chunks} potongan rekaman` : ''}.`);
+        ? `Import PARTLY finished: ${r.meetings} meetings restored, but audio and video could not be restored (${r.audioError}). The old data has been replaced.`
+        : `Import finished: ${r.meetings} meetings${r.chunks ? `, ${r.chunks} recording parts` : ''}.`);
       render();
     } catch (e) {
-      setBnote('err', '✗ Import gagal: ' + (e?.message ?? e));
+      setBnote('err', '✗ Import failed: ' + (e?.message ?? e));
     } finally {
       importBtn.disabled = false;
     }
@@ -625,11 +625,11 @@ async function renderSettings(epoch) {
   view.append(backupRow);
   if (Host) view.append(el('div', 'err', Host.backupWarning));
   view.append(el('div', 'muted',
-    'Backup berisi transkrip, MoM, dan Settings — bukan file rekaman. Audio & '
-    + 'video tidak ikut karena bisa ratusan MB per rekaman. Unduh sendiri dari '
-    + 'entri Riwayat → Unduh. Yang tersimpan hanya 5 rekaman terakhir; lebih '
-    + 'tua dari itu terhapus saat rekaman baru mulai. Import backup juga MENGHAPUS '
-    + 'rekaman yang tersimpan saat itu.'));
+    'Backups hold transcripts, MoM, and Settings, not recording files. Audio and '
+    + 'video are left out because they can reach hundreds of MB each. Download them from '
+    + 'the History entry → Download. Only the last 5 recordings are kept; older '
+    + 'ones are removed when a new recording starts. Importing a backup also DELETES '
+    + 'the recordings saved at that moment.'));
 }
 
 chrome.storage.onChanged.addListener((c, area) => {

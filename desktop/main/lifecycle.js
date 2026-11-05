@@ -13,22 +13,22 @@ function closeAction({ recording, transcribing, quitting }) {
 function quitPrompt({ recording }) {
   if (recording) {
     return {
-      button: 'Hentikan rekaman lalu keluar',
-      message: 'Rekaman masih berjalan.',
-      detail: 'Rekaman disimpan sebelum aplikasi keluar. Transkrip bisa dibuat nanti dari Riwayat.',
+      button: 'Stop recording and quit',
+      message: 'A recording is still running.',
+      detail: 'The recording is saved before the app quits. You can make the transcript later from History.',
     };
   }
   return {
-    button: 'Batalkan transkrip lalu keluar',
-    message: 'Transkrip masih dibuat.',
-    detail: 'Rekaman tetap tersimpan. Transkrip bisa dibuat lagi dari Riwayat.',
+    button: 'Cancel transcript and quit',
+    message: 'A transcript is still being made.',
+    detail: 'The recording stays saved. You can make the transcript again from History.',
   };
 }
 
 function trayLook({ recording, transcribing, muted }) {
-  if (!recording) return { image: 'tray-idle', tooltip: transcribing ? 'Transcripables: mentranskrip' : 'Transcripables' };
-  if (muted) return { image: 'tray-muted', tooltip: 'Transcripables: merekam, mikrofon dibisukan' };
-  return { image: 'tray-recording', tooltip: 'Transcripables: merekam' };
+  if (!recording) return { image: 'tray-idle', tooltip: transcribing ? 'Transcripables: transcribing' : 'Transcripables' };
+  if (muted) return { image: 'tray-muted', tooltip: 'Transcripables: recording, microphone muted' };
+  return { image: 'tray-recording', tooltip: 'Transcripables: recording' };
 }
 
 module.exports = { SHORTCUTS, closeAction, quitPrompt, trayLook };

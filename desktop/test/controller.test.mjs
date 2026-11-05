@@ -181,11 +181,11 @@ test('STT mati saat Stop: audio utuh, error terlihat, transkrip ulang berhasil',
   await runRecording();
   assert.match(recStates().at(-1).error, /Tidak bisa terhubung/);
   assert.equal(fakeStore.removed.length, 0);
-  assert.ok(meeting().segments.every((s) => s.text === '[transkrip gagal]'));
+  assert.ok(meeting().segments.every((s) => s.text === '[transcript failed]'));
   fakeOpenAI.fail = null;
   assert.equal((await ctl.handle(regenerate(id, NOW))).ok, true);
   assert.ok(meeting().segments.some((s) => s.speaker === 'Others' && s.text === 'teks system'));
-  assert.ok(!meeting().segments.some((s) => s.text === '[transkrip gagal]'));
+  assert.ok(!meeting().segments.some((s) => s.text === '[transcript failed]'));
 });
 
 test('transkrip ulang yang diblokir tidak mengubah baris lama', async () => {
@@ -207,7 +207,7 @@ test('transkrip ulang menolak rekaman yang sudah tidak ada', async () => {
   await runRecording();
   const res = await ctl.handle(regenerate(id, 123));
   assert.equal(res.ok, false);
-  assert.match(res.error, /tidak tersimpan/);
+  assert.match(res.error, /no longer saved/);
 });
 
 test('potongan mikrofon sunyi dilewati, juga saat transkrip ulang', async () => {

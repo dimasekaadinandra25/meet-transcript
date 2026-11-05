@@ -10,9 +10,9 @@ Language: [Indonesia](README.md) | English
 
 ---
 
-**Transcripables** is a Google Chrome extension that lives in the Google Meet side panel. It captures live captions during a meeting and summarizes them into Minutes of Meeting (MoM). Audio recordings are transcribed after recording stops (in *Rekam audio* mode) or whenever you press **Generate transkrip**.
+**Transcripables** is a Google Chrome extension that lives in the Google Meet side panel. It captures live captions during a meeting and summarizes them into Minutes of Meeting (MoM). Audio recordings are transcribed after recording stops (in *Record audio* mode) or whenever you press **Generate transcript**.
 
-Besides Google Meet, you can also record **Microsoft Teams web**, the **Webex web app**, **Slack huddles in the browser**, **Discord voice calls in the browser** (`discord.com/channels/…`), and **Zoom meetings in the web client** (`zoom.us/wc/…`). On those platforms the extension does not read captions: the recording is stored as an archive, a transcript is created through STT only when you press **Generate transkrip** in history (*Riwayat*), there are no speaker names, and recording stops when you press Stop or close the recorded tab.
+Besides Google Meet, you can also record **Microsoft Teams web**, the **Webex web app**, **Slack huddles in the browser**, **Discord voice calls in the browser** (`discord.com/channels/…`), and **Zoom meetings in the web client** (`zoom.us/wc/…`). On those platforms the extension does not read captions: the recording is stored as an archive, a transcript is created through STT only when you press **Generate transcript** in **History**, there are no speaker names, and recording stops when you press Stop or close the recorded tab.
 
 All meeting data is stored locally in your browser. There is no middle server, and you control the STT (speech-to-text) and LLM endpoints used, including a Whisper server on your own network. See [Security & Privacy](#-security--privacy) for exactly what data leaves your browser in each mode.
 
@@ -20,18 +20,18 @@ The extension's interface is in Indonesian, so UI labels below appear in their o
 
 ## ✨ Key Features
 
-* **Quick Action Popup:** Clicking the extension icon opens a compact popup with **Rekam** (record: audio / audio + video), **Mikrofon** (microphone on/off), **Bahasa caption** (caption language: Indonesia / English), **Tampilkan detail** (show details, opens the side panel), and **Riwayat meet** (meeting history), which opens the selected meeting directly on its detail page.
-* **Multiple Transcript Sources:** With **Sumber transkrip** (transcript source) set to *Rekam audio*, Google Meet's built-in captions (with speaker names) and tab audio recording (through STT) are combined into one meeting timeline, sorted by time.
-* **Optional Video Recording:** Record the Meet tab as one `.webm` file (720p, VP9, about 250 MB/hour) from the **Rekam audio + video meeting** right-click menu. In *Caption Meet* mode this recording is only an archive: the transcript still comes from captions, and its audio is not sent to STT unless you press **Generate transkrip**.
-* **Optional Microphone Recording:** By default, only other participants' voices (tab audio) are recorded. Turn on **Mikrofon** in the icon popup, or check **Rekam mikrofon** in Settings (both control the same setting), to mix your voice into audio and video recordings. Microphone permission is requested once through a small window. You can turn it on **during a recording**: the mic joins without interrupting the recording, and the earlier part stays without mic. You cannot turn it off mid-recording; stop the recording first.
+* **Quick Action Popup:** Clicking the extension icon opens a compact popup with **Record** (record: audio / audio + video), **Microphone** (microphone on/off), **Caption language** (caption language: Indonesia / English), **Show details** (show details, opens the side panel), and **History** (meeting history), which opens the selected meeting directly on its detail page.
+* **Multiple Transcript Sources:** With **Transcript source** (transcript source) set to *Record audio*, Google Meet's built-in captions (with speaker names) and tab audio recording (through STT) are combined into one meeting timeline, sorted by time.
+* **Optional Video Recording:** Record the Meet tab as one `.webm` file (720p, VP9, about 250 MB/hour) from the **Record meeting audio + video** right-click menu. In *Meet captions* mode this recording is only an archive: the transcript still comes from captions, and its audio is not sent to STT unless you press **Generate transcript**.
+* **Optional Microphone Recording:** By default, only other participants' voices (tab audio) are recorded. Turn on **Microphone** in the icon popup, or check **Record microphone** in Settings (both control the same setting), to mix your voice into audio and video recordings. Microphone permission is requested once through a small window. You can turn it on **during a recording**: the mic joins without interrupting the recording, and the earlier part stays without mic. You cannot turn it off mid-recording; stop the recording first.
 * **Your Own STT Endpoint:** Point it at a private Whisper server (whisper.cpp, faster-whisper) on your own network, or at any OpenAI-compatible STT API.
 * **Automatic MoM:** Generates context, discussion, participants, and action items using an OpenAI-compatible LLM endpoint (for example `gpt-4o-mini`). The template is customizable.
 * **No API Key Option:** Copy the prompt and transcript to your clipboard, or automatically send them to Google Gemini or ChatGPT in a new tab without an API integration.
 * **Local History:** Transcripts, MoM, and settings are stored in `chrome.storage.local`; audio chunks are stored in IndexedDB. Export history to `.txt` or `.md` at any time.
-* **Backup & Restore:** The **Export backup (.zip)** button in Settings saves text data (history, MoM, settings) to one ZIP file, **not** recording files: audio and video are excluded because they can reach hundreds of MB per recording, so download them yourself from a history entry with **Unduh** (download). **Import backup** restores that text data, including after uninstalling or moving to another computer, and **deletes recordings stored at that time**.
+* **Backup & Restore:** The **Export backup (.zip)** button in Settings saves text data (history, MoM, settings) to one ZIP file, **not** recording files: audio and video are excluded because they can reach hundreds of MB per recording, so download them yourself from a history entry with **Download** (download). **Import backup** restores that text data, including after uninstalling or moving to another computer, and **deletes recordings stored at that time**.
 * **Recurring Meeting Awareness:** Recurring meetings use the same link (room code), but each session remains a separate history entry. A gap of more than 30 minutes after a meeting ends counts as a new session; leaving and rejoining briefly stays in the same session.
-* **Smart Audio Recovery:** Audio chunks are saved to IndexedDB during recording. If STT is misconfigured, use **Transkrip ulang** (re-transcribe) without losing audio.
-* **Manual Audio Transcription:** Recordings that were not transcribed automatically (Meet in *Caption Meet* mode, Teams, Webex, Slack, Discord, Zoom) show a **Generate transkrip** button in history while their audio is still stored. Without stored audio, the button does not appear. Audio lines that nearly repeat a nearby caption are left out, so captions and their speaker names stay. If every line is a repeat, the panel says so and the transcript stays as it was.
+* **Smart Audio Recovery:** Audio chunks are saved to IndexedDB during recording. If STT is misconfigured, use **Retranscribe** (re-transcribe) without losing audio.
+* **Manual Audio Transcription:** Recordings that were not transcribed automatically (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, Zoom) show a **Generate transcript** button in history while their audio is still stored. Without stored audio, the button does not appear. Audio lines that nearly repeat a nearby caption are left out, so captions and their speaker names stay. If every line is a repeat, the panel says so and the transcript stays as it was.
 * **Automatic Lifecycle (Google Meet):** Recording stops automatically when a meeting ends (leaving the call, switching rooms, or closing the recorded tab). Closing another tab that joined the same room does not stop the recording.
 * **Hidden Captions (Default):** Captions are hidden from the Meet screen without turning CC off, so video tiles stay full size while the transcript keeps filling the panel. To see captions again, turn off **Sembunyikan caption di layar Meet** (hide captions on the Meet screen) in Settings.
 * **Caption Language from the Popup:** Meet's language selector sits inside the caption area, so it gets hidden too. Choosing **Indonesia** (default) or **English** in the popup applies it directly to Meet, once per call. Manual changes in Meet's UI are respected.
@@ -98,10 +98,10 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 
 | Action | Control | Shortcut |
 | --- | --- | --- |
-| Record audio | **Rekam audio** | `Alt+Shift+A` |
-| Record audio + video | **Rekam audio + video** | `Alt+Shift+V` |
-| Stop | **Stop rekam** | `Alt+Shift+S` |
-| Mute or unmute your microphone | **Bisukan mikrofon** | `Alt+Shift+M` |
+| Record audio | **Record audio** | `Alt+Shift+A` |
+| Record audio + video | **Record audio + video** | `Alt+Shift+V` |
+| Stop | **Stop recording** | `Alt+Shift+S` |
+| Mute or unmute your microphone | **Mute microphone** | `Alt+Shift+M` |
 
 * Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
 * Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute. It resets to on for each new recording.
@@ -120,12 +120,12 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 ## 📖 Quick Start
 
 1. **Start a meeting:** Join Google Meet. The extension tries to turn on Closed Captions (CC) automatically. Captions are **not shown on screen** (hidden by default), so check the **Live** tab in the panel to confirm the transcript is arriving. If it is empty, look at the CC button in Meet's toolbar: a highlighted icon means it is on; if not, click it once.
-2. **Open the panel:** Click the extension icon, then **Tampilkan detail** in the popup to open the side panel (Firefox: clicking the icon opens the sidebar directly). The **Live** tab starts filling automatically.
-3. **Record audio/video (optional):** Click the extension icon, then **Rekam**, then *Audio saja* (audio only) or *Audio + video*. You can also use the right-click menu or the `Alt+Shift+R` / `Alt+Shift+V` shortcuts.
-4. **Generate MoM:** After the meeting, open the **Riwayat** tab, choose the meeting, open the **Generate MoM** dropdown, then choose **Generate MoM** (or **Tempel ke Gemini** / **Tempel ke ChatGPT**, meaning paste into Gemini or ChatGPT, without an API key; you review the prompt and press send yourself). The **Copy** dropdown contains *Copy transkrip* / *Copy Prompt+Transkrip*; the **Unduh** dropdown contains *.txt*, *.md*, and audio/video recordings when available.
+2. **Open the panel:** Click the extension icon, then **Show details** in the popup to open the side panel (Firefox: clicking the icon opens the sidebar directly). The **Live** tab starts filling automatically.
+3. **Record audio/video (optional):** Click the extension icon, then **Record**, then *Audio only* (audio only) or *Audio + video*. You can also use the right-click menu or the `Alt+Shift+R` / `Alt+Shift+V` shortcuts.
+4. **Generate MoM:** After the meeting, open the **History** tab, choose the meeting, open the **Generate MoM** dropdown, then choose **Generate MoM** (or **Paste into Gemini** / **Paste into ChatGPT** without an API key; you review the prompt and press send yourself). The **Copy** dropdown contains *Copy transcript* / *Copy prompt + transcript*; the **Download** dropdown contains *.txt*, *.md*, and audio/video recordings when available.
 
 **Initial setup (Settings):**
-Before first use, fill in *Settings*: enter your LLM API key, choose a model, and adjust the MoM template (it must contain the `{{transcript}}` variable; saving warns you if it is missing). The **Mode STT** block is used for audio transcripts, both automatic (Meet in *Rekam audio* mode) and through **Generate transkrip** (Chrome/Chromium only; this block does not exist on Firefox). **Tes koneksi** (test connection) tests the LLM endpoint, plus the STT endpoint when **Sumber transkrip** is *Rekam audio*. Permission to access the STT address is requested when saving in *Rekam audio* mode, or when first pressing **Generate transkrip** in other modes.
+Before first use, fill in *Settings*: enter your LLM API key, choose a model, and adjust the MoM template (it must contain the `{{transcript}}` variable; saving warns you if it is missing). The **STT mode** block is used for audio transcripts, both automatic (Meet in *Record audio* mode) and through **Generate transcript** (Chrome/Chromium only; this block does not exist on Firefox). **Test connection** (test connection) tests the LLM endpoint, plus the STT endpoint when **Transcript source** is *Record audio*. Permission to access the STT address is requested when saving in *Record audio* mode, or when first pressing **Generate transcript** in other modes.
 
 ---
 
@@ -135,24 +135,24 @@ You can record tab audio and transcribe it through STT, either alone or together
 
 ### How to Record Audio
 
-1. Open **Settings** and configure **Mode STT**. Automatic transcription on Stop only runs for Google Meet with **Sumber transkrip** set to *Rekam audio*. Other recordings (Meet in *Caption Meet* mode, Teams, Webex, Slack, Discord, and Zoom) are stored as audio/video archives; open the entry in **Riwayat** and click **Generate transkrip** if you need a transcript of its audio (the button only appears while its audio is stored).
-2. During a call, start recording through one of three paths: the **extension icon popup** then *Rekam*, **right-click** on the page, or a keyboard shortcut. *Audio + video* also records the tab's picture (720p VP9, about 250 MB/hour, downloaded as one `.webm` file with **Unduh video** in history).
-3. On Google Meet, recording stops automatically when you leave the call. **On Teams, Webex, Slack, Discord, and Zoom it does not**: there is no session tracking there, so it only stops by itself if the recorded tab closes. Otherwise stop it yourself through the popup, panel, the `Alt+Shift+S` shortcut, or right-click then **Stop rekam** (Meet/Discord only). After stopping, **Menyimpan rekaman…** (saving recording, for archives) or **Mentranskrip…** (transcribing, for automatic transcripts) appears until processing finishes.
+1. Open **Settings** and configure **STT mode**. Automatic transcription on Stop only runs for Google Meet with **Transcript source** set to *Record audio*. Other recordings (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, and Zoom) are stored as audio/video archives; open the entry in **History** and click **Generate transcript** if you need a transcript of its audio (the button only appears while its audio is stored).
+2. During a call, start recording through one of three paths: the **extension icon popup** then *Record*, **right-click** on the page, or a keyboard shortcut. *Audio + video* also records the tab's picture (720p VP9, about 250 MB/hour, downloaded as one `.webm` file with **Download video** in history).
+3. On Google Meet, recording stops automatically when you leave the call. **On Teams, Webex, Slack, Discord, and Zoom it does not**: there is no session tracking there, so it only stops by itself if the recorded tab closes. Otherwise stop it yourself through the popup, panel, the `Alt+Shift+S` shortcut, or right-click then **Stop recording** (Meet/Discord only). After stopping, **Saving recording…** (for archives) or **Transcribing…** (for automatic transcripts) appears until processing finishes.
 
 **Important notes:**
 
-* Because of Chrome's security limits, `tabCapture` requires a per-tab permission granted only by invoking the extension: clicking the icon (popup), clicking a context menu item, or using a keyboard shortcut. Buttons in the side panel or injected into the page **do not** qualify, and Chrome rejects them with *"Extension has not been invoked for the current page"*. That is why the **Rekam** button lives in the popup, not the panel; the panel only has **Stop rekam**.
+* Because of Chrome's security limits, `tabCapture` requires a per-tab permission granted only by invoking the extension: clicking the icon (popup), clicking a context menu item, or using a keyboard shortcut. Buttons in the side panel or injected into the page **do not** qualify, and Chrome rejects them with *"Extension has not been invoked for the current page"*. That is why the **Record** button lives in the popup, not the panel; the panel only has **Stop recording**.
 * Every panel and popup button has an `Alt` shortcut while that page is focused, such as `Alt+1` to `Alt+3` for tabs. Hold `Alt` to see them, or hover a button. When a menu is open, its own keys come first.
 * Default shortcuts: `Alt+Shift+R` (audio), `Alt+Shift+V` (audio + video), `Alt+Shift+S` (stop). Change them at `chrome://extensions/shortcuts`. They are useful on Discord, which swallows the `contextmenu` event so the browser's right-click menu does not appear (`Shift` + right-click forces it to appear).
-* By default, only other participants' voices (*tab audio*) are recorded. Check **Rekam mikrofon** in *Settings* to include your voice, then click **Izinkan mikrofon** (allow microphone) once to grant permission. If you have not, a permission window appears automatically when recording starts; tab recording continues and the mic joins once approved. Without a headset, participants' voices from your speakers can also be picked up by the mic (doubled).
-* Every 10 minutes, an audio chunk is saved to IndexedDB to avoid data loss if the browser closes unexpectedly. Chunks can be downloaded at any time with **Unduh audio** as separate `.webm` files (Chrome may need the *"Download multiple files"* permission when there is more than one).
+* By default, only other participants' voices (*tab audio*) are recorded. Check **Record microphone** in *Settings* to include your voice, then click **Allow microphone** (allow microphone) once to grant permission. If you have not, a permission window appears automatically when recording starts; tab recording continues and the mic joins once approved. Without a headset, participants' voices from your speakers can also be picked up by the mic (doubled).
+* Every 10 minutes, an audio chunk is saved to IndexedDB to avoid data loss if the browser closes unexpectedly. Chunks can be downloaded at any time with **Download audio** as separate `.webm` files (Chrome may need the *"Download multiple files"* permission when there is more than one).
 * Only the **last 5 recordings** are kept. When a new recording starts, the oldest beyond those five is deleted, both audio and video.
 
 ### STT Mode Options (Speech-to-Text)
 
 | Mode (UI label) | Requirements | Audio is sent to | Description |
 | --- | --- | --- | --- |
-| **Whisper lokal (server sendiri)** | OpenAI-compatible Whisper server | The URL **you** enter | **[Default]** Pre-filled with `http://localhost:8080/v1` |
+| **Local Whisper (your own server)** | OpenAI-compatible Whisper server | The URL **you** enter | **[Default]** Pre-filled with `http://localhost:8080/v1` |
 | **STT API** | URL + API key (**required**) | 🌐 That endpoint | Fastest. Offers STT model and language options. |
 
 > [!WARNING]
@@ -167,7 +167,7 @@ This extension is designed to be *privacy-first*:
 * **Local storage:** Your API key is stored only in `chrome.storage.local` on your device and is never committed to the repository. The extension has no telemetry or analytics.
 * **Local Whisper:** Audio is sent to the URL **you** enter in *STT Base URL* (default `http://localhost:8080/v1`). The extension **does not** force that URL to actually be local, so make sure it really is your server. If an *STT API key* was ever entered, it is still sent as the `Authorization` header even though the field is hidden in this mode.
 * **Endpoint transparency:** MoM is generated through the endpoint you choose. Make sure your configured endpoint fits your company's or team's data security policy.
-* **Delete a meeting:** Open it in **Riwayat** and choose **Hapus** to permanently remove its transcript, MoM, and stored recordings. A meeting that is still running cannot be deleted.
+* **Delete a meeting:** Open it in **History** and choose **Delete** to permanently remove its transcript, MoM, and stored recordings. A meeting that is still running cannot be deleted.
 * **Copy Prompt / Paste into Gemini / Paste into ChatGPT:** All three copy the **entire transcript** to the clipboard, and the Gemini/ChatGPT buttons paste it into `gemini.google.com` / `chatgpt.com` without sending it. Once you press send, the whole meeting's content goes into your Google/OpenAI account. Do not use them for meetings whose content must not leave.
 * **Backup files:** The ZIP created by **Export backup** contains **your API key in plain text** along with all transcripts. Store the file safely and do not share it.
 
@@ -178,10 +178,10 @@ This extension is designed to be *privacy-first*:
 * **Transcript does not appear even though Meet's CC button is on:** (Captions themselves do not show on screen because they are hidden by default; turn off **Sembunyikan caption di layar Meet** in Settings to confirm visually.) Google may have changed Meet's DOM structure. The extension shows a warning when captions are on but no text is read for 30 seconds. (Developers: update the selectors in `content/selectors.js`.)
 * **Live tab points to an old meeting, or recording does not stop by itself:** Google Meet is a SPA: switching rooms and leaving a call only change the URL in the same document. Session tracking is handled by `content/session.js` (pure logic, tested in `test/session.test.mjs`). Meet rooms are recognized as `meet.google.com/<code>`, `/meet/<code>`, and `/_meet/<code>`.
 * **Record button refuses with "Buka halaman ruang … dulu" (open the room page first):** The tab URL was not recognized as a meeting page. The message shows the tab URL; send that URL so its shape can be added (see the URL list under *Key Features*).
-* **Audio transcript is empty or contains `[transkrip gagal]` (transcription failed):** The panel shows a summary of the cause, for example *"3/14 potongan gagal ditranskrip: HTTP 404 …"* (3 of 14 chunks failed). Check the endpoint URL or STT model in your settings, and make sure the address really is an STT server, not another service on the same port. After fixing it, click **Transkrip ulang** (or **Generate transkrip** for recordings never transcribed) on that meeting's history entry; the original audio is still stored.
+* **Audio transcript is empty or contains `[transkrip gagal]` (transcription failed):** The panel shows a summary of the cause, for example *"3/14 potongan gagal ditranskrip: HTTP 404 …"* (3 of 14 chunks failed). Check the endpoint URL or STT model in your settings, and make sure the address really is an STT server, not another service on the same port. After fixing it, click **Retranscribe** (or **Generate transcript** for recordings never transcribed) on that meeting's history entry; the original audio is still stored.
 * **Captions still show after the extension is reloaded:** Content scripts in already open tabs become orphaned when the extension reloads, and they intentionally remove their own caption-hiding style (otherwise captions stay locked hidden and out of reach of Settings). Reload the Meet tab.
 * **Caption language does not change:** The extension tries at most 3 times per call, then stops. If Google changes the language selector's structure, fix `langCombobox()`/`langOption()` in `content/selectors.js`.
-* **"Belum ada suara masuk" (no sound yet) warning:** Without **Rekam mikrofon**, the system only captures other participants' voices. If nobody else is talking, there is no audio to process.
+* **"Belum ada suara masuk" (no sound yet) warning:** Without **Record microphone**, the system only captures other participants' voices. If nobody else is talking, there is no audio to process.
 * **Stop button disappears, or recording seems to stop by itself:** Already fixed. MV3 service workers die after about 30 idle seconds, and recording state used to live only in memory. Outside Meet no content script keeps it alive, so the UI returned to "not recording" while the recording kept going. State is now requested from the offscreen document whenever the service worker wakes. If the button still does not appear, `Alt+Shift+S` always works.
 * **Error logs:** If an error occurs in the side panel, its message and stack trace can be selected and copied directly from the panel.
 
@@ -195,7 +195,7 @@ This project has no complex *build step* (no `npm install`) and uses optimized v
 
 * `background/`: Service worker, state management, storage, and lifecycle.
 * `content/`: Meet DOM injection logic (`selectors.js`, `session.js`, `captions.js`, `captionhide.js`, `captionlang.js`). **All** Meet DOM selectors live in `selectors.js`, including language label patterns.
-* `panel/`: User interface (*Live*, *Riwayat*, *Settings*).
+* `panel/`: User interface (*Live*, *History*, *Settings*).
 * `popup/`: Toolbar icon popup (Rekam, Bahasa caption, Riwayat), the only UI surface allowed to start `tabCapture`.
 * `offscreen/`: Tab audio/video recording and STT orchestration (the MV3 service worker can die during long uploads).
 * `lib/`: Core utilities (`openai.js`, `stt.js`, `audiostore.js`/IndexedDB, `merge.js`, `ui.js`, the DOM helper shared by panel and popup).

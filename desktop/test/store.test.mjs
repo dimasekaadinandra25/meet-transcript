@@ -36,7 +36,7 @@ test('API key terenkripsi di disk dan terbaca polos', async () => {
 
 test('menolak menyimpan key bila enkripsi tidak tersedia', async () => {
   const plain = createStore({ dir, cipher: noCipher });
-  await assert.rejects(plain.set({ settings: { apiKey: 'x' } }), /enkripsi/i);
+  await assert.rejects(plain.set({ settings: { apiKey: 'x' } }), /encryption/i);
   assert.equal(readAll().includes('"x"'), false);
 });
 

@@ -38,7 +38,7 @@ test('mergeSttChunks offset antar chunk + baseTime', () => {
 test('mergeSttChunks chunk error → penanda, segmen kosong dilewati', () => {
   const out = mergeSttChunks([{ error: 'gagal' }, { segments: [{ start: 0, text: '' }, { start: 1, text: 'ok' }] }], 600000, 0);
   assert.deepEqual(out, [
-    { t: 0, speaker: '', text: '[transkrip gagal]' },
+    { t: 0, speaker: '', text: '[transcript failed]' },
     { t: 601000, speaker: '', text: 'ok' },
   ]);
 });
@@ -122,7 +122,7 @@ test('parseSttResponse: body {error} jadi penanda gagal, bukan segmen kosong', (
   assert.deepEqual(parseSttResponse('{"error":{"message":"model tidak ada"}}'),
     { error: 'model tidak ada' });
   const merged = mergeSttChunks([parseSttResponse('{"error":{"message":"x"}}')], 1000, 0);
-  assert.deepEqual(merged.map((s) => s.text), ['[transkrip gagal]']);
+  assert.deepEqual(merged.map((s) => s.text), ['[transcript failed]']);
 });
 
 test('mergeSttChunks memakai indeks asli potongan saat ada yang bolong', () => {

@@ -40,7 +40,7 @@ function startChunkRecorder() {
     const blob = new Blob(data, { type: MIME });
     chunkBlobs.push(blob);
     trackSave(globalThis.MeetAudioStore.appendChunk(blob, recId),
-      'Satu potongan audio gagal disimpan untuk transkrip ulang: ');
+      'An audio part could not be saved for retranscribing: ');
   };
   recorder.start();
 }
@@ -60,11 +60,11 @@ function watchSilence(source) {
     if (Math.max(...buf.map(Math.abs)) > 0.01) return stopSilenceWatch();
     if (++quiet < 15) return;
     stopSilenceWatch();
-    warn('Belum ada suara masuk 15 detik. ' + (micStream
-      ? 'Tab dan mikrofon sama-sama sunyi — cek mic dan apakah ada yang bicara.'
-      : 'Yang direkam hanya audio tab (peserta lain) — suara mikrofonmu sendiri TIDAK '
-        + 'ikut terekam (centang "Rekam mikrofon" di Settings). Kalau tak ada peserta '
-        + 'lain yang bersuara, rekaman akan kosong dan transkripnya juga.'));
+    warn('No sound for 15 seconds. ' + (micStream
+      ? 'The tab and microphone are both silent. Check your mic and whether anyone is speaking.'
+      : 'Only tab audio (other people) is being recorded. Your own microphone is NOT '
+        + 'included (tick "Record microphone" in Settings). If nobody else '
+        + 'speaks, the recording and its transcript will be empty.'));
   }, 1000);
 }
 
@@ -104,7 +104,7 @@ function startVideoRecorder() {
   videoRecorder.ondataavailable = (e) => {
     if (!e.data.size) return;
     trackSave(globalThis.MeetAudioStore.appendVideoPart(e.data, recId),
-      'Satu potongan video gagal disimpan — file video bisa rusak mulai menit itu: ');
+      'A video part could not be saved, so the video may be damaged from that minute: ');
   };
   videoRecorder.start(60000);
 }
@@ -152,7 +152,7 @@ async function start(msg) {
       startVideoRecorder();
     } catch (e) {
       videoRecorder = null;
-      warn('Rekaman video gagal dimulai (' + e.message + ') — rekaman audio & transkrip jalan terus.');
+      warn('Video recording could not start (' + e.message + '). Audio and transcript keep running.');
     }
   }
   rotateTimer = setInterval(rotateChunk, msg.chunkMs);
@@ -178,10 +178,10 @@ async function transcribeChunks(blobs, c, replace) {
       }
     }
     const errs = results.filter((r) => r?.error).map((r) => r.error);
-    const errSummary = errs.length ? `${errs.length}/${blobs.length} potongan gagal ditranskrip: ${errs[0]}` : null;
+    const errSummary = errs.length ? `${errs.length}/${blobs.length} parts failed to transcribe: ${errs[0]}` : null;
     if (replace && !results.some((r) => r && !r.error && r.segments?.length)) {
-      throw new Error('Transkrip tidak menghasilkan teks — transkrip yang ada tidak diubah.'
-        + (errs.length ? ` Error STT: ${errs[0]}` : ' Cek endpoint/model STT di Settings.'));
+      throw new Error('Transcription returned no text, so the existing transcript was not changed.'
+        + (errs.length ? ` STT error: ${errs[0]}` : ' Check the STT endpoint and model in Settings.'));
     }
     const segments = globalThis.MeetStt.mergeSttChunks(results, c.chunkMs, c.baseTime, c.indices);
     toSW({ type: 'audio-transcript', meetingId: c.meetingId, segments, baseTime: c.baseTime,
@@ -209,12 +209,12 @@ async function stopAndTranscribe() {
     const pending = recorder;
     if (!await stopAndWait(pending)) {
       if (pending) pending.onstop = null;
-      warn('Potongan terakhir gagal difinalisasi — bagian akhir rekaman mungkin hilang.');
+      warn('The last part could not be finished, so the end of the recording may be lost.');
     }
     const vPending = videoRecorder;
     if (!await stopAndWait(vPending)) {
       vPending.ondataavailable = null;
-      warn('Potongan video terakhir gagal difinalisasi — ujung video mungkin hilang.');
+      warn('The last video part could not be finished, so the end of the video may be lost.');
     }
     await Promise.all(pendingSaves);
     pendingSaves = [];
@@ -237,9 +237,9 @@ async function retranscribe(msg) {
   busy = true;
   try {
     const saved = await globalThis.MeetAudioStore.loadAudio(msg.recId);
-    if (!saved) throw new Error('Audio rekaman tidak tersimpan lagi — hanya 5 rekaman terakhir yang disimpan.');
+    if (!saved) throw new Error('The recording audio is no longer saved. Only the last 5 recordings are kept.');
     if (saved.meetingId !== msg.meetingId) {
-      throw new Error('Audio tersimpan milik meeting lain.');
+      throw new Error('The saved audio belongs to another meeting.');
     }
     await transcribeChunks(
       saved.blobs,
@@ -260,15 +260,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   } else if (msg.op === 'stop') {
     if (busy || !recorder) {
       sendResponse({ ok: false, busy,
-        error: busy ? 'Transkrip masih berjalan — perintah stop diabaikan.'
-          : 'Tidak ada rekaman aktif — perintah stop diabaikan.' });
+        error: busy ? 'A transcript is still running, so the stop command was ignored.'
+          : 'No active recording, so the stop command was ignored.' });
       return false;
     }
     sendResponse({ ok: true });
     stopAndTranscribe().catch((e) => toSW({ type: 'audio-error', meetingId: cfg?.meetingId, error: e.message }));
   } else if (msg.op === 'retranscribe') {
     if (busy || recorder) {
-      sendResponse({ ok: false, error: 'Rekaman/transkrip masih berjalan.' });
+      sendResponse({ ok: false, error: 'A recording or transcript is still running.' });
       return false;
     }
     sendResponse({ ok: true });

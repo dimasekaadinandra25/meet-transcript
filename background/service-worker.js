@@ -70,7 +70,7 @@ async function ensureOffscreen() {
   await chrome.offscreen.createDocument({
     url: 'offscreen/offscreen.html',
     reasons: ['USER_MEDIA'],
-    justification: 'Merekam audio/video tab Meet untuk transkrip dan rekaman.',
+    justification: 'Record Meet tab audio and video for transcripts and recordings.',
   });
 }
 
@@ -84,7 +84,7 @@ const recRestored = (async () => {
     tabId: res.tabId ?? null, autoStt: res.autoStt };
   updateBadge();
   broadcastRec();
-})().catch((e) => console.warn('[rec] pulih state gagal', e.message));
+})().catch((e) => console.warn('[rec] could not restore state', e.message));
 
 const DISCORD_RE = /^\/channels\/(@me|\d+)\/(\d+)/;
 const ZOOM_RE = /^\/wc\/(?:join\/)?(\d+)(?:\/(?:join|start))?/;
@@ -140,13 +140,13 @@ function meetingIdFromUrl(url) {
 
 async function startFromTab(tab, video) {
   if (recBusy() || await hasOffscreen()) {
-    recError('Rekaman masih berjalan.');
+    recError('A recording is still running.');
     return;
   }
   const meetingId = meetingIdFromUrl(tab?.url);
   if (!meetingId) {
-    recError('Buka halaman ruang Meet / Teams / Webex, huddle Slack, channel Discord, atau Zoom web'
-      + ' (zoom.us/wc/...)-nya dulu — rekaman mengambil audio tab ini. URL tab: ' + (tab?.url ?? '(tidak terbaca)'));
+    recError('Open a Meet, Teams, or Webex room, a Slack huddle, a Discord channel, or Zoom web'
+      + ' (zoom.us/wc/...) first, because recording takes audio from this tab. Tab URL: ' + (tab?.url ?? '(unreadable)'));
     return;
   }
   try {
@@ -160,9 +160,9 @@ async function startFromTab(tab, video) {
 if (chrome.tabCapture) {
   const RECORDABLE = ['https://meet.google.com/*', 'https://discord.com/channels/*'];
   const MENU = [
-    ['rec-start', 'Rekam audio meeting'],
-    ['rec-start-video', 'Rekam audio + video meeting'],
-    ['rec-stop', 'Stop rekam'],
+    ['rec-start', 'Record meeting audio'],
+    ['rec-start-video', 'Record meeting audio + video'],
+    ['rec-stop', 'Stop recording'],
   ];
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
@@ -208,12 +208,12 @@ chrome.windows?.onRemoved.addListener((id) => { if (id === micWin) micWin = null
 let startPromise = null;
 
 async function startRecording({ streamId, meetingId, title, video, tabId }) {
-  if (recBusy()) throw new Error('Rekaman masih berjalan.');
+  if (recBusy()) throw new Error('A recording is still running.');
   const baseTime = Date.now();
   rec = { recording: true, transcribing: false, meetingId, tabId };
   updateBadge();
   startPromise = (async () => {
-    if (await hasOffscreen()) throw new Error('Rekaman masih berjalan.');
+    if (await hasOffscreen()) throw new Error('A recording is still running.');
     await startRecordingInner({ streamId, meetingId, title, baseTime, video, tabId });
   })();
   try {
@@ -238,14 +238,14 @@ async function startRecordingInner({ streamId, meetingId, title, baseTime, video
     target: 'offscreen', op: 'start', streamId, meetingId, ...stt,
     chunkMs: 600000, baseTime, video: !!video, transcribe, tabId,
   }).catch((e) => ({ ok: false, error: e.message }));
-  if (!res?.ok) throw new Error(res?.error || 'Offscreen tidak merespons — rekaman tidak dimulai.');
+  if (!res?.ok) throw new Error(res?.error || 'The recorder did not respond, so recording did not start.');
   enqueueWrite(() => ensureMeeting({ meetingId, title, startedAt: baseTime }));
 }
 
 async function regenerateTranscript(meetingId, recId) {
-  if (recBusy()) throw new Error('Rekaman/transkrip masih berjalan.');
+  if (recBusy()) throw new Error('A recording or transcript is still running.');
   if (!Number.isFinite(Number(recId))) {
-    throw new Error('Rekaman yang mau ditranskrip ulang tidak disebut (recId kosong).');
+    throw new Error('No recording was named for retranscribing (empty recId).');
   }
   rec = { recording: false, transcribing: true, meetingId };
   updateBadge();
@@ -254,17 +254,17 @@ async function regenerateTranscript(meetingId, recId) {
     const target = (await globalThis.MeetAudioStore.listRecordings())
       .find((r) => r.recId === Number(recId));
     if (!target) {
-      throw new Error('Rekaman itu sudah tidak tersimpan — hanya 5 rekaman terakhir yang disimpan.');
+      throw new Error('That recording is no longer saved. Only the last 5 recordings are kept.');
     }
     if (target.meetingId !== meetingId) {
-      throw new Error('Rekaman itu milik meeting lain — hanya rekaman meeting ini yang bisa ditranskrip ulang.');
+      throw new Error('That recording belongs to another meeting, so it cannot be retranscribed here.');
     }
     const stt = await sttConfig();
     await ensureOffscreen();
     const res = await chrome.runtime.sendMessage({
       target: 'offscreen', op: 'retranscribe', meetingId, recId: target.recId, ...stt,
     });
-    if (!res?.ok) throw new Error(res?.error || 'Offscreen tidak merespons — transkrip ulang tidak dimulai.');
+    if (!res?.ok) throw new Error(res?.error || 'The recorder did not respond, so retranscribing did not start.');
   } catch (e) {
     resetRec();
     broadcastRec();
@@ -287,7 +287,7 @@ async function stopRecording() {
     return;
   }
   resetRec();
-  broadcastRec({ error: res?.error ?? 'Offscreen tidak merespons — rekaman dihentikan tanpa transkrip.' });
+  broadcastRec({ error: res?.error ?? 'The recorder did not respond, so recording stopped without a transcript.' });
 }
 
 async function storeMeeting(meetingId, meeting, data) {
@@ -350,7 +350,7 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
   notifyPanel({ type: 'meeting-updated', id: meetingId });
   const tag = `audio:${baseTime ?? 0}:`;
   if (segments.length && !meeting.segments.some((s) => String(s.id ?? '').startsWith(tag))) {
-    broadcastRec({ error: 'Transkrip audio sama dengan caption, jadi tidak ada baris baru.' });
+    broadcastRec({ error: 'The audio transcript matches the captions, so no new lines were added.' });
   }
 }
 
@@ -383,11 +383,11 @@ async function endMeeting(meetingId) {
 
 async function generateMom(id) {
   const { settings = {} } = await chrome.storage.local.get('settings');
-  if (!settings.apiKey) throw new Error('API key belum diisi di tab Settings.');
+  if (!settings.apiKey) throw new Error('Add an API key in the Settings tab first.');
   const key = meetingKey(id);
   const data = await chrome.storage.local.get(key);
   const meeting = data[key];
-  if (!meeting || !meeting.segments.length) throw new Error('Transkrip kosong.');
+  if (!meeting || !meeting.segments.length) throw new Error('The transcript is empty.');
   const transcript = globalThis.MeetMerge.formatTranscript(meeting.segments);
   const prompt = globalThis.MeetMerge.fillTemplate(
     settings.momTemplate || globalThis.MeetMerge.DEFAULT_MOM_TEMPLATE, transcript);
@@ -399,7 +399,7 @@ async function generateMom(id) {
     enqueueWrite(async () => {
       try {
         const fresh = (await chrome.storage.local.get(key))[key];
-        if (!fresh) throw new Error('Meeting tidak ditemukan.');
+        if (!fresh) throw new Error('Meeting not found.');
         fresh.mom = mom;
         await chrome.storage.local.set({ [key]: fresh });
         resolve();
@@ -429,7 +429,7 @@ const enqueueWrite = (fn) => {
 
 async function removeMeeting(id) {
   const recordingHere = rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`);
-  if (recordingHere || (active.inCall && active.id === id)) throw new Error('Meeting masih berjalan. Hentikan dulu sebelum menghapus.');
+  if (recordingHere || (active.inCall && active.id === id)) throw new Error('This meeting is still running. Stop it before deleting.');
   await globalThis.MeetAudioStore.removeRecordings(id);
   const { meetings = [] } = await chrome.storage.local.get('meetings');
   await chrome.storage.local.set({ meetings: meetings.filter((m) => m !== id) });
@@ -492,7 +492,7 @@ function injectPrompt(text, editorSelector) {
   const timer = setInterval(() => {
     const editor = document.querySelector(editorSelector);
     if (!editor) {
-      if (Date.now() > deadline) { clearInterval(timer); report(false, 'Editor tidak muncul dalam 60 detik.'); }
+      if (Date.now() > deadline) { clearInterval(timer); report(false, 'The editor did not appear within 60 seconds.'); }
       return;
     }
     clearInterval(timer);
@@ -530,7 +530,7 @@ function sendToAi(text, target, meetingId) {
       chrome.tabs.onRemoved.removeListener(gone);
       if (aiPending?.tabId === tab.id) aiPending = null;
     };
-    const giveUp = setTimeout(() => finish(false, 'Halaman AI tidak selesai dimuat dalam 90 detik.'), 90000);
+    const giveUp = setTimeout(() => finish(false, 'The AI page did not finish loading within 90 seconds.'), 90000);
     const onUpdated = (id, info, t) => {
       if (id !== tab.id || info.status !== 'complete') return;
       if (!t.url?.startsWith(ai.origin)) return;
@@ -575,7 +575,7 @@ const HANDLERS = {
   'stop-recording': () => { stopRecording(); },
   'start-active-tab-recording': (msg) => {
     chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
-      if (!tab) return recError('Tab aktif tidak terbaca.');
+      if (!tab) return recError('Could not read the active tab.');
       return startFromTab(tab, !!msg.video);
     }).catch((e) => recError(e.message));
   },
@@ -592,7 +592,7 @@ const HANDLERS = {
     resetRec();
     broadcastRec({ error: msg.segments.length
       ? msg.error ?? null
-      : 'Transkrip kosong — STT tidak menghasilkan teks. Cek endpoint/model STT di Settings.' });
+      : 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.' });
     enqueueWrite(() => saveAudioTranscript(msg));
     closeOffscreen();
   },
@@ -619,9 +619,9 @@ const HANDLERS = {
   'mic-denied': (msg) => {
     if (msg.name === 'NotAllowedError') {
       askMicPermission();
-      broadcastRec({ error: 'Mikrofon belum diizinkan — izinkan di jendela yang muncul; rekaman tab tetap jalan.' });
+      broadcastRec({ error: 'The microphone is not allowed yet. Allow it in the window that opens. Tab recording keeps running.' });
     } else {
-      broadcastRec({ error: `Mikrofon tidak bisa dipakai (${msg.error}) — rekaman tab tetap jalan tanpa mic.` });
+      broadcastRec({ error: `The microphone could not be used (${msg.error}). Tab recording keeps running without it.` });
     }
   },
   'mic-permission': (msg) => {
@@ -631,7 +631,7 @@ const HANDLERS = {
         toOffscreen('mic-join');
         broadcastRec({ error: null });
       } else {
-        broadcastRec({ error: 'Izin mikrofon ditolak — rekaman jalan tanpa suara mikrofon.' });
+        broadcastRec({ error: 'Microphone permission denied. Recording continues without your microphone.' });
       }
     });
   },

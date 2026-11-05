@@ -71,8 +71,8 @@ function setupTray() {
   tray = new Tray(assetPath('tray-idle'));
   tray.setToolTip('Transcripables');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Tampilkan', click: showWindow },
-    { label: 'Keluar', click: () => app.quit() },
+    { label: 'Show', click: showWindow },
+    { label: 'Quit', click: () => app.quit() },
   ]));
   tray.on('click', showWindow);
 }
@@ -83,7 +83,7 @@ function registerShortcuts() {
     .map(([accelerator]) => accelerator);
   if (!failed.length) return;
   mainWindow.webContents.once('did-finish-load', () => {
-    mainWindow.webContents.send('main:warn', `Shortcut ${failed.join(', ')} tidak bisa didaftarkan karena dipakai aplikasi lain.`);
+    mainWindow.webContents.send('main:warn', `Shortcut ${failed.join(', ')} could not be registered because another app is using it.`);
   });
 }
 
@@ -99,7 +99,7 @@ function handleClose(event) {
   const { button, message, detail } = quitPrompt(recState);
   const choice = dialog.showMessageBoxSync(mainWindow, {
     type: 'warning',
-    buttons: [button, 'Batal'],
+    buttons: [button, 'Cancel'],
     defaultId: 1,
     cancelId: 1,
     message,
@@ -111,7 +111,7 @@ function handleClose(event) {
 
 function handleFromApp(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => {
-    if (!isAppUrl(event.senderFrame?.url)) throw new Error('Pengirim tidak dikenal.');
+    if (!isAppUrl(event.senderFrame?.url)) throw new Error('Unknown sender.');
     return handler(...args);
   });
 }

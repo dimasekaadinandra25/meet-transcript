@@ -67,7 +67,7 @@ const RIWAYAT_MAX = 8;
 async function fillRiwayat(d) {
   const { meetings: ids = [] } = await chrome.storage.local.get('meetings');
   if (!ids.length) {
-    d.list.replaceChildren(el('div', 'muted', 'Belum ada riwayat.'));
+    d.list.replaceChildren(el('div', 'muted', 'No history yet.'));
     return;
   }
   const top = ids.slice(0, RIWAYAT_MAX);
@@ -78,7 +78,7 @@ async function fillRiwayat(d) {
     if (!m) continue;
     d.item(m.title || id, () => openPanel('history', id));
   }
-  if (ids.length > top.length) d.item(`Lihat semua (${ids.length})`, () => openPanel('history'));
+  if (ids.length > top.length) d.item(`See all (${ids.length})`, () => openPanel('history'));
 }
 
 function row(label, iconEl, fn) {
@@ -90,36 +90,36 @@ function row(label, iconEl, fn) {
 function render() {
   view.replaceChildren();
   if (rec.transcribing) {
-    view.append(el('div', 'muted state', rec.saving ? 'Menyimpan rekaman…' : 'Mentranskrip…'));
+    view.append(el('div', 'muted state', rec.saving ? 'Saving recording…' : 'Transcribing…'));
   } else if (rec.recording) {
-    row('Stop rekam', ICON.stop(), () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
-    view.append(el('div', 'recording state', 'Merekam'));
+    row('Stop recording', ICON.stop(), () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
+    view.append(el('div', 'recording state', 'Recording'));
   } else {
-    const d = mkDropdown(view, 'rec', 'Rekam', { cls: 'inline' });
+    const d = mkDropdown(view, 'rec', 'Record', { cls: 'inline' });
     d.head.prepend(ICON.rekam());
     const start = (video) => chrome.runtime.sendMessage({ type: 'start-active-tab-recording', video });
-    d.item('Audio saja', () => start(false));
+    d.item('Audio only', () => start(false));
     d.item('Audio + video', () => start(true));
   }
-  row(micOn ? 'Mikrofon  ✓' : 'Mikrofon', ICON.mic(), () => {
+  row(micOn ? 'Microphone  ✓' : 'Microphone', ICON.mic(), () => {
     if (micOn && rec.recording) {
-      rec = { ...rec, error: 'Mikrofon tak bisa dimatikan di tengah rekaman — stop rekam dulu.' };
+      rec = { ...rec, error: 'The microphone cannot be turned off during a recording. Stop recording first.' };
       render();
       return;
     }
     setMic(!micOn);
   });
-  const l = mkDropdown(view, 'bahasa', 'Bahasa caption', { cls: 'inline' });
+  const l = mkDropdown(view, 'bahasa', 'Caption language', { cls: 'inline' });
   l.head.prepend(ICON.bahasa());
   for (const [code, label] of BAHASA) {
     l.item(code === captionLang ? label + '  ✓' : label, () => setCaptionLang(code));
   }
-  row('Tampilkan detail', ICON.detail(), () => openPanel());
+  row('Show details', ICON.detail(), () => openPanel());
   if (rec.error) view.append(el('div', 'err', rec.error));
   view.append(el('div', 'sep'));
-  const h = mkDropdown(view, 'riwayat', 'Riwayat meet', { cls: 'inline' });
+  const h = mkDropdown(view, 'riwayat', 'History', { cls: 'inline' });
   h.head.prepend(ICON.riwayat());
-  h.list.append(el('div', 'muted', 'Memuat…'));
+  h.list.append(el('div', 'muted', 'Loading…'));
   const menu = h.head.parentElement;
   let filled = false;
   const fill = () => {

@@ -65,5 +65,5 @@ test('chat: body 200 tanpa content dan tanpa error tetap "Respons kosong"', asyn
     () => new Response('{"choices":[]}', { status: 200 }),
     () => assert.rejects(
       () => generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'https://x.test/v1' }),
-      /Respons kosong/));
+      /Empty response/));
 });

@@ -17,11 +17,11 @@
     for (const [name, track] of Object.entries({ system, mic })) {
       const failed = track.results.find((r) => r?.error);
       if (failed && !hasText(track)) {
-        return `Track ${LABEL[name]} gagal ditranskrip, jadi transkrip yang ada tidak diubah. Error STT: ${failed.error}`;
+        return `The ${LABEL[name]} track could not be transcribed, so the existing transcript was not changed. STT error: ${failed.error}`;
       }
     }
     if (!hasText(system) && !hasText(mic)) {
-      return 'Transkrip tidak menghasilkan teks, jadi transkrip yang ada tidak diubah. Cek endpoint/model STT di Settings.';
+      return 'Transcription returned no text, so the existing transcript was not changed. Check the STT endpoint and model in Settings.';
     }
     return null;
   }
