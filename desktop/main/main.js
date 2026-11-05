@@ -3,6 +3,7 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
+const { loadLib, callChat, callTest, callStt, probe } = require('./net');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
@@ -48,6 +49,14 @@ function serveStore() {
   handleFromApp('store:clear', store.clear);
 }
 
+function serveNet() {
+  loadLib(sharedRoot());
+  handleFromApp('net:chat', callChat);
+  handleFromApp('net:test', callTest);
+  handleFromApp('net:stt', callStt);
+  handleFromApp('net:probe', probe);
+}
+
 function limitPermissions() {
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
     callback(permission === 'media' && isAppUrl(details.requestingUrl));
@@ -82,6 +91,7 @@ app.whenReady().then(() => {
   handleAssets();
   limitPermissions();
   serveStore();
+  serveNet();
   mainWindow = createWindow();
 });
 
