@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, callChat, callTest, callStt, probe } = require('./net');
+const { createRecordingFolder } = require('./recordings');
 const { SHORTCUTS, closeAction, quitPrompt, trayLook, zoomStep } = require('./lifecycle');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
@@ -140,6 +141,12 @@ function serveNet() {
   handleFromApp('net:probe', probe);
 }
 
+function serveRecordings() {
+  const folder = createRecordingFolder(process.env.TRANSCRIPABLES_RECORDINGS_DIR ?? join(app.getPath('documents'), 'Transcripables'));
+  handleFromApp('recordings:write', folder.write);
+  handleFromApp('recordings:open', async () => shell.openPath(await folder.ensure()));
+}
+
 function serveCapture() {
   let chosenSource = null;
   const listSources = () => desktopCapturer.getSources({
@@ -205,6 +212,7 @@ app.whenReady().then(() => {
   serveStore();
   serveNet();
   serveCapture();
+  serveRecordings();
   handleFromApp('rec:state', applyRecState);
   handleFromApp('window:reveal', revealWindow);
   handleFromApp('app:quit', () => app.exit(0));

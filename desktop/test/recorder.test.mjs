@@ -314,3 +314,36 @@ test('perangkat 96 kHz juga diperiksa tanpa celah waktu', async () => {
   const windowMs = (fake.analysers[0].fftSize / 96000) * 1000;
   assert.ok(windowMs >= sampleMs, `window ${windowMs} ms, sampling every ${sampleMs} ms`);
 });
+
+const sampleFor = (ms) => {
+  const sampleMs = fake.intervals.map((i) => i.ms).find((value) => value < 1000);
+  for (let i = 0; i < ms / sampleMs; i++) fake.fire(sampleMs);
+};
+
+test('komputer tanpa suara selama semenit memberi satu peringatan', async () => {
+  await rec.start(opts);
+  fake.level = 0;
+  sampleFor(59000);
+  assert.ok(!warnings.some((w) => /No computer audio/.test(w)));
+  sampleFor(120000);
+  assert.equal(warnings.filter((w) => /No computer audio/.test(w)).length, 1);
+});
+
+test('komputer yang pernah bersuara tidak diperingatkan saat hening', async () => {
+  await rec.start(opts);
+  fake.level = 0.5;
+  sampleFor(1000);
+  fake.level = 0;
+  sampleFor(120000);
+  assert.ok(!warnings.some((w) => /No computer audio/.test(w)));
+});
+
+test('level suara dikirim tiap pemeriksaan', async () => {
+  const levels = [];
+  rec = createRecorder({ ...deps, onLevels: (l) => levels.push(l) });
+  await rec.start(opts);
+  fake.level = 0.25;
+  sampleFor(500);
+  assert.equal(levels.at(-1).system, 0.25);
+  assert.equal(levels.at(-1).mic, 0.25);
+});

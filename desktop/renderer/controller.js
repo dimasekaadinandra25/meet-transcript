@@ -5,7 +5,7 @@
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
 
   function createController(deps) {
-    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, now } = deps;
+    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, saveFile, now } = deps;
     let rec = { ...IDLE };
     let activeId = null;
     let starting = null;
@@ -50,6 +50,25 @@
       notify({ type: 'status', id, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0 });
     }
 
+    function warn(error) {
+      broadcast({ error });
+      onWarning();
+    }
+
+    async function checkStt(settings) {
+      const { baseUrl, apiKey } = stt.sttEndpoint(settings);
+      if (!baseUrl) {
+        warn('Speech-to-text is not set up, so this recording will have no transcript. Add it in Settings.');
+        return;
+      }
+      const answer = await probeStt(`${baseUrl.replace(/\/+$/, '')}/models`, apiKey);
+      if (!answer.ok) {
+        warn(`Speech-to-text at ${baseUrl} could not be reached. Recording continues, and you can make the transcript later from History.`);
+      } else if (answer.value?.status === 401 || answer.value?.status === 403) {
+        warn('Speech-to-text rejected the API key. Recording continues, and you can make the transcript later from History.');
+      }
+    }
+
     async function startRecording({ video }) {
       if (busy()) return { ok: false, error: 'A recording is still running.' };
       const baseTime = now();
@@ -78,6 +97,7 @@
       }
       setActive(meetingId);
       broadcast({ error: null });
+      readSettings().then(checkStt).catch((e) => console.error(e));
       return { ok: true };
     }
 
@@ -127,11 +147,26 @@
       return failures.length ? `${failures.length}/${total} parts failed to transcribe: ${failures[0].error}` : null;
     }
 
+    async function saveToFolder(meetingId, baseTime) {
+      if ((await readSettings()).autoSave === false) return;
+      const { title } = await readMeeting(meetingId);
+      const files = [[audioStore.loadMix, ''], [audioStore.loadVideo, '-video']];
+      for (const [load, suffix] of files) {
+        const saved = await load(baseTime);
+        for (const [i, blob] of (saved?.blobs ?? []).entries()) {
+          await saveFile(`${title} ${baseTime}${suffix}.webm`, blob, i === 0);
+        }
+      }
+    }
+
     async function finishRecording(meetingId, baseTime) {
       const { peaks } = await recorder.stop();
       await updateMeeting(meetingId, (meeting) => {
         meeting.endedAt = now();
         meeting.audioPeaks = { ...meeting.audioPeaks, [baseTime]: peaks.mic };
+      });
+      await saveToFolder(meetingId, baseTime).catch((e) => {
+        warn(`The recording could not be saved to your folder (${e.message}). It is still available in History.`);
       });
     }
 
@@ -251,11 +286,6 @@
           await updateMeeting(id, (m) => { m.endedAt = merge.lastActivityAt(m); });
         }
       }
-    }
-
-    function warn(error) {
-      broadcast({ error });
-      onWarning();
     }
 
     return { handle, recover, warn };

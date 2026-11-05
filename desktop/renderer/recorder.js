@@ -3,6 +3,8 @@
   const PEAK_SAMPLE_MS = 500;
   const PEAK_WINDOW_SAMPLES = 32768;
   const START_TIMEOUT_MS = 15000;
+  const SOUND_LEVEL = 0.01;
+  const NO_SOUND_WARNING_MS = 60000;
   const FINALIZE_TIMEOUT_MS = 5000;
   const VIDEO_BITRATE = 500000;
   const VIDEO_AUDIO_BITRATE = 48000;
@@ -60,12 +62,28 @@
       }
     }
 
+    function watchForNoSound(s, level) {
+      if (s.heardSound) return;
+      if (level >= SOUND_LEVEL) {
+        s.heardSound = true;
+        return;
+      }
+      s.quietMs += s.sampleMs;
+      if (s.quietMs < NO_SOUND_WARNING_MS) return;
+      s.heardSound = true;
+      warn('No computer audio for 1 minute. If the meeting has started, check your speaker or headset output.');
+    }
+
     function samplePeaks(s) {
+      const levels = {};
       for (const track of s.tracks) {
         track.analyser.getFloatTimeDomainData(track.buffer);
         const peak = track.buffer.reduce((loudest, v) => Math.max(loudest, Math.abs(v)), 0);
         s.peaks[track.name][track.chunk] = Math.max(s.peaks[track.name][track.chunk] ?? 0, peak);
+        levels[track.name] = peak;
       }
+      watchForNoSound(s, levels.system);
+      deps.onLevels?.(levels);
     }
 
     function addTrack(s, name, source, append) {
@@ -143,7 +161,8 @@
       if (video) startVideo(s, mix);
       s.timers.push(deps.setInterval(() => rotate(s), chunkMs));
       const fullWindowMs = (PEAK_WINDOW_SAMPLES / s.ctx.sampleRate) * 1000;
-      s.timers.push(deps.setInterval(() => samplePeaks(s), Math.min(PEAK_SAMPLE_MS, Math.floor(fullWindowMs))));
+      s.sampleMs = Math.min(PEAK_SAMPLE_MS, Math.floor(fullWindowMs));
+      s.timers.push(deps.setInterval(() => samplePeaks(s), s.sampleMs));
     }
 
     async function release(s) {
@@ -156,7 +175,7 @@
 
     async function start(options) {
       if (session) throw new Error('A recording is still running.');
-      const s = { recId: options.baseTime, tracks: [], timers: [], saves: [], peaks: { system: [], mic: [] } };
+      const s = { recId: options.baseTime, tracks: [], timers: [], saves: [], peaks: { system: [], mic: [] }, heardSound: false, quietMs: 0 };
       session = s;
       try {
         await begin(s, options);

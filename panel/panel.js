@@ -361,7 +361,7 @@ async function renderMeeting(id, live, epoch) {
   }
   if (!live) {
     const remove = btn('Delete', async () => {
-      if (!confirm(`Delete "${meeting.title}" and its recordings? This cannot be undone.`)) return;
+      if (!confirm(`Delete "${meeting.title}" and its recordings? This cannot be undone.${Host?.deleteNote ?? ''}`)) return;
       momErrors.delete(meeting.id);
       const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
       if (res?.ok) viewingId = null;
@@ -583,6 +583,7 @@ async function renderSettings(epoch) {
     const cur = (await chrome.storage.local.get('settings')).settings ?? {};
     await chrome.storage.local.set({
       settings: {
+        ...cur,
         apiKey: apiKey.value.trim(),
         baseUrl: base,
         model: model.value.trim() || DEFAULT_MODEL,
@@ -606,6 +607,7 @@ async function renderSettings(epoch) {
   const actions = el('div', 'actions');
   actions.append(test, save, note);
   view.append(actions);
+  for (const row of Host?.settingsRows(settings) ?? []) view.append(row);
   view.append(el('h3', null, 'Backup'));
   const bnote = el('span', 'muted', '');
   const setBnote = (cls, text) => { bnote.className = cls; bnote.textContent = ' ' + text; };

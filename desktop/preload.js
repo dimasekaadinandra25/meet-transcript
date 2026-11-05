@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('desktop', {
   revealWindow: () => ipcRenderer.invoke('window:reveal'),
   quitNow: () => ipcRenderer.invoke('app:quit'),
   onWarn: (listener) => ipcRenderer.on('main:warn', (_event, message) => listener(message)),
+  recordings: {
+    write: (name, bytes, first) => ipcRenderer.invoke('recordings:write', name, bytes, first),
+    open: () => ipcRenderer.invoke('recordings:open'),
+  },
   capture: {
     sources: () => ipcRenderer.invoke('capture:sources'),
     use: (id) => ipcRenderer.invoke('capture:use', id),

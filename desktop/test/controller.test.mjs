@@ -21,6 +21,9 @@ let fakeOpenAI;
 let fakeStore;
 let states;
 let warned;
+let probes;
+let probeAnswer;
+let saved;
 let failWrites;
 let ctl;
 
@@ -40,6 +43,9 @@ beforeEach(() => {
   openedUrls = [];
   states = [];
   warned = 0;
+  probes = [];
+  probeAnswer = { ok: true, value: { ok: true, status: 200 } };
+  saved = [];
   failWrites = false;
   fakeRecorder = {
     starts: 0,
@@ -87,6 +93,8 @@ beforeEach(() => {
     async listRecordings() { return this.began.map((m) => ({ ...m, recId: m.baseTime })); },
     loadSystem: loaded('system'),
     loadMic: loaded('mic'),
+    loadMix: async (recId) => ({ meetingId: id, baseTime: recId, blobs: [blob('mix-0'), blob('mix-1')], indices: [0, 1] }),
+    loadVideo: async () => fakeStore.video ?? null,
   };
   ctl = createController({
     recorder: fakeRecorder,
@@ -107,6 +115,11 @@ beforeEach(() => {
     openExternal: (url) => openedUrls.push(url),
     onState: (s) => states.push(s),
     onWarning: () => { warned++; },
+    probeStt: async (url, key) => { probes.push({ url, key }); return probeAnswer; },
+    saveFile: async (name, blob, first) => {
+      if (fakeStore.failSave) throw new Error(fakeStore.failSave);
+      saved.push({ name, blob, first });
+    },
     now: () => NOW,
   });
 });
@@ -385,4 +398,67 @@ test('mic yang sengaja dimatikan tetap mati', async () => {
   data.settings.mic = false;
   await ctl.handle(START);
   assert.equal(fakeRecorder.options.mic, false);
+});
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('STT tidak bisa dihubungi: peringatan setelah rekaman mulai, rekaman tetap jalan', async () => {
+  probeAnswer = { ok: false, error: 'connection refused' };
+  const res = await ctl.handle(START);
+  await settle();
+  assert.deepEqual(res, { ok: true });
+  assert.equal(probes[0].url, 'http://stt/v1/models');
+  assert.match(recStates().at(-1).error, /could not be reached/);
+  assert.equal(recStates().at(-1).recording, true);
+  assert.equal(warned, 1);
+});
+
+test('STT menolak key: peringatan menyebut key', async () => {
+  probeAnswer = { ok: true, value: { ok: false, status: 401 } };
+  await ctl.handle(START);
+  await settle();
+  assert.match(recStates().at(-1).error, /API key/);
+});
+
+test('STT server yang menjawab 404 tetap dianggap ada', async () => {
+  probeAnswer = { ok: true, value: { ok: false, status: 404 } };
+  await ctl.handle(START);
+  await settle();
+  assert.equal(warned, 0);
+});
+
+test('Stop menyimpan rekaman ke folder berurutan', async () => {
+  await ctl.handle(START);
+  await ctl.handle(STOP);
+  assert.deepEqual(saved.map((s) => [s.blob.track, s.first]), [['mix-0', true], ['mix-1', false]]);
+  assert.match(saved[0].name, new RegExp(`${NOW}\\.webm$`));
+});
+
+test('video ikut tersimpan sebagai file sendiri', async () => {
+  fakeStore.video = { meetingId: id, baseTime: NOW, blobs: [blob('v-0')], indices: [0] };
+  await ctl.handle(START);
+  await ctl.handle(STOP);
+  assert.ok(saved.some((s) => s.blob.track === 'v-0' && /-video\.webm$/.test(s.name)));
+});
+
+test('simpan otomatis bisa dimatikan', async () => {
+  data.settings.autoSave = false;
+  await ctl.handle(START);
+  await ctl.handle(STOP);
+  assert.deepEqual(saved, []);
+});
+
+test('gagal menyimpan ke folder: transkrip tetap jalan dan pengguna diberi tahu', async () => {
+  fakeStore.failSave = 'disk full';
+  await ctl.handle(START);
+  await ctl.handle(STOP);
+  assert.equal(warned, 1);
+  assert.ok(messages.some((m) => m.type === 'rec-state' && /disk full/.test(m.error ?? '')));
+  assert.ok(meeting().segments.length > 0);
+});
+
+test('keluar saat merekam tetap menyimpan ke folder', async () => {
+  await ctl.handle(START);
+  await ctl.handle({ type: 'stop-recording', transcribe: false });
+  assert.equal(saved.length, 2);
 });

@@ -14,6 +14,7 @@
     getDisplayMedia: (constraints) => navigator.mediaDevices.getDisplayMedia(constraints),
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
     warn: (message) => controller.warn(message),
+    onLevels: (levels) => showLevels(levels),
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (id) => clearInterval(id),
   });
@@ -30,6 +31,8 @@
     openExternal: (url) => desktop.openExternal(url),
     onState: (state) => desktop.recState?.(state),
     onWarning: () => desktop.revealWindow(),
+    probeStt: (url, key) => desktop.net.probe(url, key),
+    saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     now: () => Date.now(),
   });
   controller.recover().catch((e) => console.error(e));
@@ -78,6 +81,31 @@
     return select;
   }
 
+  const meters = { system: null, mic: null };
+
+  function levelRow(name, label) {
+    const row = el('div', 'level');
+    const meter = Object.assign(document.createElement('meter'), { min: 0, max: 1, value: 0 });
+    meter.setAttribute('aria-label', `${label} level`);
+    meters[name] = meter;
+    row.append(el('span', 'muted', label), meter);
+    return row;
+  }
+
+  function levelBars() {
+    const box = el('div', 'levels');
+    box.append(levelRow('system', 'Computer'), levelRow('mic', 'Microphone'));
+    return box;
+  }
+
+  function showLevels(levels) {
+    for (const [name, meter] of Object.entries(meters)) {
+      if (!meter) continue;
+      meter.parentElement.hidden = levels[name] === undefined;
+      meter.value = Math.sqrt(levels[name] ?? 0);
+    }
+  }
+
   function recordControls(rec, busyText) {
     const box = el('div', 'actions');
     if (rec.transcribing) {
@@ -86,6 +114,7 @@
       mkBtn('Stop recording', () => send({ type: 'stop-recording' }), box).classList.add('danger');
       mkBtn(rec.muted ? 'Unmute microphone' : 'Mute microphone', () => send({ type: 'set-muted', on: !rec.muted }), box);
       box.append(el('span', 'recording', rec.muted ? 'recording, microphone muted' : 'recording'));
+      box.append(levelBars());
       box.append(el('div', 'muted', 'Muting in the meeting app does not stop the microphone recording. Use the Mute button here.'));
     } else {
       if (!consentShown) box.append(consentNotice());
@@ -106,6 +135,24 @@
       send({ type: 'rename-meeting', id: meeting.id, title: input.value });
     });
     return input;
+  }
+
+  function settingToggle(key, label, on) {
+    const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on });
+    box.addEventListener('change', () => globalThis.MeetUi.patchSettings({ [key]: box.checked }));
+    const row = el('label');
+    row.append(box, label);
+    return row;
+  }
+
+  function settingsRows(settings) {
+    const open = el('div', 'actions');
+    mkBtn('Open recordings folder', () => desktop.recordings.open(), open);
+    return [
+      el('h3', null, 'Recordings'),
+      settingToggle('autoSave', 'Save each recording to Documents/Transcripables', settings.autoSave !== false),
+      open,
+    ];
   }
 
   const COMMANDS = {
@@ -130,10 +177,12 @@
     runCommand,
     recordControls,
     titleEditor,
+    settingsRows,
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
     aiLabel: (name) => `Copy & open ${name}`,
     emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
     emptySegmentsText: 'The transcript appears after you stop recording.',
+    deleteNote: ' Copies in your Documents/Transcripables folder stay.',
     backupWarning: 'The backup file holds your API key in plain text. Keep it somewhere safe and do not share it.',
   };
 })();
