@@ -121,7 +121,7 @@
       return failures.length ? `${failures.length}/${total} potongan gagal ditranskrip: ${failures[0].error}` : null;
     }
 
-    async function stopRecording() {
+    async function stopRecording({ transcribe: runStt = true } = {}) {
       if (starting) await starting.catch(() => {});
       if (!rec.recording) return;
       const { meetingId, baseTime } = rec;
@@ -134,7 +134,7 @@
           meeting.endedAt = now();
           meeting.audioPeaks = { ...meeting.audioPeaks, [baseTime]: peaks.mic };
         });
-        const error = await transcribe(meetingId, baseTime, false);
+        const error = runStt ? await transcribe(meetingId, baseTime, false) : null;
         rec = { ...IDLE };
         broadcast({ error });
       } catch (e) {

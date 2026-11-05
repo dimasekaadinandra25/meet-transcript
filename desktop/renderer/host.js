@@ -35,6 +35,30 @@
 
   const send = (msg) => shim.runtime.sendMessage(msg);
   let chosenSource = '';
+  let consentShown = true;
+
+  async function redrawLive() {
+    const { rec, ...status } = await send({ type: 'get-active' });
+    shim.runtime.emit({ type: 'status', ...status });
+  }
+
+  shim.storage.local.get('consentShown').then((data) => {
+    if (data.consentShown) return;
+    consentShown = false;
+    redrawLive();
+  });
+  desktop.onWarn((message) => controller.warn(message));
+
+  function consentNotice() {
+    const box = el('div', 'error');
+    box.append(el('div', null, 'Sebelum merekam, pastikan peserta meeting mengizinkan. Izin peserta menjadi tanggung jawabmu.'));
+    mkBtn('Mengerti', async () => {
+      await shim.storage.local.set({ consentShown: true });
+      consentShown = true;
+      redrawLive();
+    }, box);
+    return box;
+  }
 
   function sourcePicker() {
     const select = el('select');
@@ -63,6 +87,7 @@
       box.append(el('span', 'muted', rec.muted ? '● merekam, mikrofon dibisukan' : '● merekam'));
       box.append(el('div', 'muted', 'Mute di aplikasi meeting tidak menghentikan rekaman mikrofon. Pakai tombol Bisukan di sini.'));
     } else {
+      if (!consentShown) box.append(consentNotice());
       mkBtn('Rekam audio', () => send({ type: 'start-recording', video: false }), box);
       mkBtn('Rekam audio + video', () => send({ type: 'start-recording', video: true }), box);
       box.append(sourcePicker());
@@ -78,7 +103,26 @@
     return input;
   }
 
+  const COMMANDS = {
+    'rec-start': () => send({ type: 'start-recording', video: false }),
+    'rec-start-video': () => send({ type: 'start-recording', video: true }),
+    'rec-stop': () => send({ type: 'stop-recording' }),
+    'mute-toggle': async () => {
+      const { rec } = await send({ type: 'get-active' });
+      await send({ type: 'set-muted', on: !rec.muted });
+    },
+    'quit-after-stop': async () => {
+      await send({ type: 'stop-recording', transcribe: false });
+      await desktop.quitNow();
+    },
+  };
+
+  async function runCommand(command) {
+    await COMMANDS[command]();
+  }
+
   globalThis.PanelHost = {
+    runCommand,
     recordControls,
     titleEditor,
     fetch: (url, init) => globalThis.bridgeFetch(url, init),

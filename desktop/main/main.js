@@ -1,9 +1,13 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session, shell } = require('electron');
+const {
+  app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, net,
+  powerSaveBlocker, protocol, safeStorage, session, shell,
+} = require('electron');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, callChat, callTest, callStt, probe } = require('./net');
+const { SHORTCUTS, closeAction, trayLook } = require('./lifecycle');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
@@ -27,6 +31,76 @@ function handleAssets() {
 }
 
 let mainWindow;
+let tray;
+let quitting = false;
+let sleepBlocker;
+let recState = { recording: false, muted: false };
+
+const assetPath = (name) => join(APP_ROOT, 'assets', `${name}.png`);
+
+function runCommand(command) {
+  mainWindow?.webContents.executeJavaScript(`globalThis.PanelHost.runCommand(${JSON.stringify(command)})`, true)
+    .catch((e) => console.error(e));
+}
+
+function showWindow() {
+  mainWindow?.show();
+  mainWindow?.focus();
+}
+
+function applyRecState(state) {
+  recState = state;
+  const look = trayLook(state);
+  tray?.setImage(assetPath(look.image));
+  tray?.setToolTip(look.tooltip);
+  mainWindow?.setTitle(state.recording ? `● ${look.tooltip}` : 'Transcripables');
+  if (state.recording && sleepBlocker == null) {
+    sleepBlocker = powerSaveBlocker.start('prevent-app-suspension');
+  } else if (!state.recording && sleepBlocker != null) {
+    powerSaveBlocker.stop(sleepBlocker);
+    sleepBlocker = undefined;
+  }
+}
+
+function setupTray() {
+  tray = new Tray(assetPath('tray-idle'));
+  tray.setToolTip('Transcripables');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Tampilkan', click: showWindow },
+    { label: 'Keluar', click: () => app.quit() },
+  ]));
+  tray.on('click', showWindow);
+}
+
+function registerShortcuts() {
+  const failed = Object.entries(SHORTCUTS)
+    .filter(([accelerator, command]) => !globalShortcut.register(accelerator, () => runCommand(command)))
+    .map(([accelerator]) => accelerator);
+  if (!failed.length) return;
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.send('main:warn', `Shortcut ${failed.join(', ')} tidak bisa didaftarkan karena dipakai aplikasi lain.`);
+  });
+}
+
+function handleClose(event) {
+  const action = closeAction({ recording: recState.recording, quitting });
+  if (action === 'close') return;
+  event.preventDefault();
+  if (action === 'hide') {
+    mainWindow.hide();
+    return;
+  }
+  const choice = dialog.showMessageBoxSync(mainWindow, {
+    type: 'warning',
+    buttons: ['Hentikan rekaman lalu keluar', 'Batal'],
+    defaultId: 1,
+    cancelId: 1,
+    message: 'Rekaman masih berjalan.',
+    detail: 'Rekaman disimpan sebelum aplikasi keluar. Transkrip bisa dibuat nanti dari Riwayat.',
+  });
+  if (choice === 0) runCommand('quit-after-stop');
+  else quitting = false;
+}
 
 function handleFromApp(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => {
@@ -97,6 +171,8 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+  win.on('close', handleClose);
+  win.on('page-title-updated', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => {
     if (!isAppUrl(url)) event.preventDefault();
@@ -105,17 +181,26 @@ function createWindow() {
   return win;
 }
 
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', showWindow);
+app.on('before-quit', () => { quitting = true; });
+app.on('will-quit', () => globalShortcut.unregisterAll());
+
 app.whenReady().then(() => {
   handleAssets();
   limitPermissions();
   serveStore();
   serveNet();
   serveCapture();
+  handleFromApp('rec:state', applyRecState);
+  handleFromApp('app:quit', () => app.exit(0));
   handleFromApp('shell:open', (url) => {
     if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);
     return undefined;
   });
   mainWindow = createWindow();
+  setupTray();
+  registerShortcuts();
 });
 
 app.on('window-all-closed', () => app.quit());

@@ -262,6 +262,22 @@ test('send-to-ai membuka situs di browser default tanpa injeksi', async () => {
   assert.deepEqual(openedUrls, ['https://gemini.google.com/app', 'https://chatgpt.com/']);
 });
 
+test('stop saat keluar aplikasi menyimpan rekaman tanpa menunggu STT', async () => {
+  await ctl.handle(START);
+  await ctl.handle({ type: 'stop-recording', transcribe: false });
+  assert.equal(fakeRecorder.stops, 1);
+  assert.equal(fakeOpenAI.transcribeCalls.length, 0);
+  assert.ok(meeting().endedAt);
+  assert.equal((await ctl.handle({ type: 'get-active' })).rec.transcribing, false);
+});
+
+test('peringatan recorder tampil tanpa mengubah state', async () => {
+  await ctl.handle(START);
+  ctl.warn('Mikrofon terputus.');
+  assert.equal(recStates().at(-1).error, 'Mikrofon terputus.');
+  assert.equal(recStates().at(-1).recording, true);
+});
+
 test('pesan tidak dikenal diabaikan', async () => {
   assert.equal(await ctl.handle({ type: 'constructor' }), undefined);
   assert.equal(await ctl.handle({ type: 'panel-tab-consumed' }), undefined);
