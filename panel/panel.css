@@ -223,6 +223,26 @@ select option { color: var(--text); background: var(--bg); }
 textarea { min-height: 160px; }
 input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; accent-color: var(--accent); }
 
+[data-shortcut] { position: relative; }
+.show-keys [data-shortcut]::before {
+  content: attr(data-shortcut);
+  position: absolute;
+  top: -5px;
+  right: -3px;
+  z-index: 1;
+  min-width: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 5px;
+  color: var(--on-accent);
+  background: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
+}
+.show-keys .menu-list > [data-shortcut]::before { top: 50%; right: 6px; transform: translateY(-50%); }
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 @media (prefers-reduced-motion: reduce) {

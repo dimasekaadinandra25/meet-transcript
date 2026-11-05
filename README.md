@@ -101,6 +101,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Stop | **Stop rekam** | `Alt+Shift+S` |
 | Bisukan atau nyalakan mikrofon | **Bisukan mikrofon** | `Alt+Shift+M` |
 
+* Setiap tombol juga punya shortcut `Alt` yang berfungsi saat jendela aktif. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol.
 * Mute di Zoom atau Teams **tidak** menghentikan rekaman mikrofon aplikasi ini. Pakai mute milik aplikasi. Mikrofon kembali menyala di setiap rekaman baru.
 * Menutup jendela saat merekam atau mentranskrip membuat proses tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan statusnya. Peringatan, misalnya mikrofon terputus, memunculkan jendela lagi.
 * Semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain.
@@ -139,6 +140,7 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 **Catatan Penting:**
 
 * Karena batasan keamanan Chrome, `tabCapture` menuntut izin per-*tab* yang hanya diberikan oleh *invocation* ekstensi: klik ikon (popup), klik *context menu*, atau pintasan keyboard. Tombol di *side panel* maupun tombol yang disuntik ke halaman **tidak** memenuhi syarat itu — Chrome menolaknya dengan *"Extension has not been invoked for the current page"*. Karena itulah tombol **Rekam** hidup di popup, bukan di panel; panel hanya memegang **Stop rekam**.
+* Setiap tombol panel dan popup punya shortcut `Alt` saat halamannya aktif, misalnya `Alt+1` sampai `Alt+3` untuk tab. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol. Saat menu terbuka, tombol di menu itu didahulukan.
 * Pintasan bawaan: `Alt+Shift+R` (audio), `Alt+Shift+V` (audio + video), `Alt+Shift+S` (stop). Dapat diubah di `chrome://extensions/shortcuts`. Berguna di Discord, yang menelan *event* `contextmenu` sehingga menu klik kanan bawaan peramban tidak muncul (`Shift`+klik kanan memaksanya muncul).
 * Bawaan: hanya suara peserta lain (*tab audio*) yang direkam. Centang **Rekam mikrofon** di *Settings* agar suara Anda ikut, lalu klik **Izinkan mikrofon** sekali untuk memberi izin (kalau belum, jendela izin muncul otomatis saat rekaman dimulai; rekaman *tab* tetap jalan dan mic bergabung begitu disetujui). Tanpa headset, suara peserta dari speaker bisa ikut terekam lewat mic (dobel).
 * Setiap 10 menit, potongan audio disimpan ke IndexedDB untuk mencegah kehilangan data jika peramban tertutup mendadak. Potongan tersebut dapat diunduh kapan saja melalui tombol **Unduh audio** sebagai fail `.webm` terpisah (membutuhkan izin *"Download multiple files"* pada Chrome bila lebih dari satu potongan).

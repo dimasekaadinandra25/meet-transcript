@@ -103,6 +103,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Stop | **Stop rekam** | `Alt+Shift+S` |
 | Mute or unmute your microphone | **Bisukan mikrofon** | `Alt+Shift+M` |
 
+* Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
 * Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute. It resets to on for each new recording.
 * Closing the window while recording or transcribing keeps working in the system tray. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
 * Everything on your computer's speakers gets recorded, including notifications and other apps.
@@ -141,6 +142,7 @@ You can record tab audio and transcribe it through STT, either alone or together
 **Important notes:**
 
 * Because of Chrome's security limits, `tabCapture` requires a per-tab permission granted only by invoking the extension: clicking the icon (popup), clicking a context menu item, or using a keyboard shortcut. Buttons in the side panel or injected into the page **do not** qualify, and Chrome rejects them with *"Extension has not been invoked for the current page"*. That is why the **Rekam** button lives in the popup, not the panel; the panel only has **Stop rekam**.
+* Every panel and popup button has an `Alt` shortcut while that page is focused, such as `Alt+1` to `Alt+3` for tabs. Hold `Alt` to see them, or hover a button. When a menu is open, its own keys come first.
 * Default shortcuts: `Alt+Shift+R` (audio), `Alt+Shift+V` (audio + video), `Alt+Shift+S` (stop). Change them at `chrome://extensions/shortcuts`. They are useful on Discord, which swallows the `contextmenu` event so the browser's right-click menu does not appear (`Shift` + right-click forces it to appear).
 * By default, only other participants' voices (*tab audio*) are recorded. Check **Rekam mikrofon** in *Settings* to include your voice, then click **Izinkan mikrofon** (allow microphone) once to grant permission. If you have not, a permission window appears automatically when recording starts; tab recording continues and the mic joins once approved. Without a headset, participants' voices from your speakers can also be picked up by the mic (doubled).
 * Every 10 minutes, an audio chunk is saved to IndexedDB to avoid data loss if the browser closes unexpectedly. Chunks can be downloaded at any time with **Unduh audio** as separate `.webm` files (Chrome may need the *"Download multiple files"* permission when there is more than one).

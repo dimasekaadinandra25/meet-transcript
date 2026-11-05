@@ -382,6 +382,7 @@ async function renderSettings(epoch) {
   lastRenderedKey = null;
   view.replaceChildren();
   view.append(el('h2', null, 'Settings'));
+  view.append(el('p', 'muted', 'Tahan Alt untuk melihat shortcut tiap tombol.'));
   const rowOf = new WeakMap();
   const field = (label, input) => {
     const row = el('div');

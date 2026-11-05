@@ -206,6 +206,7 @@ app.whenReady().then(() => {
     if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);
     return undefined;
   });
+  Menu.setApplicationMenu(null);
   mainWindow = createWindow();
   setupTray();
   registerShortcuts();
