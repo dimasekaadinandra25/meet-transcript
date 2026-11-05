@@ -28,7 +28,7 @@ async function ensureOrigins(bases) {
     let u;
     try { u = new URL(b); } catch { u = null; }
     if (!u || !/^https?:$/.test(u.protocol) || !u.hostname) throw badUrl(`Invalid URL: ${b}`);
-    if (u.hostname.startsWith('[')) {
+    if (u.hostname.startsWith('[') && !Host) {
       throw badUrl(`Chrome does not support IPv6 addresses here: ${b}. Use 127.0.0.1 or a host name.`);
     }
     const p = `${u.protocol}//${u.hostname}/*`;
@@ -146,7 +146,13 @@ let audioMeta = null;
 let audioMetaKey = null;
 const momErrors = new Map();
 
+view.addEventListener('focusout', (e) => {
+  if (e.target.matches?.('[data-title-editor]')) render();
+});
+
 async function render() {
+  const editing = document.activeElement;
+  if (editing?.matches?.('[data-title-editor]') && editing.value !== editing.defaultValue) return;
   const epoch = ++renderEpoch;
   if (tab === 'live') return renderMeeting(status.id, true, epoch);
   if (tab === 'history') return viewingId ? renderMeeting(viewingId, false, epoch) : renderHistory(epoch);
@@ -210,7 +216,8 @@ async function renderMeeting(id, live, epoch) {
     view.append(back);
   }
   view.append(Host ? Host.titleEditor(meeting) : el('h2', null, meeting.title));
-  view.append(el('p', 'muted', new Date(meeting.startedAt).toLocaleString()));
+  const startedText = new Date(meeting.startedAt).toLocaleString();
+  if (meeting.title !== startedText) view.append(el('p', 'muted', startedText));
   if (momErrors.has(meeting.id)) view.append(el('div', 'error', momErrors.get(meeting.id)));
   if (!live && recState.error && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
     view.append(el('div', 'err', recState.error));
@@ -419,7 +426,7 @@ async function renderSettings(epoch) {
   show(captionLang, !Host);
   captionLang.addEventListener('change', () => patchSettings({ captionLang: captionLang.value }));
   const micWrap = el('div');
-  const micBox = mkEl('input', { type: 'checkbox', checked: !!settings.mic });
+  const micBox = mkEl('input', { type: 'checkbox', checked: Host ? settings.mic !== false : !!settings.mic });
   micBox.addEventListener('change', () => patchSettings({ mic: micBox.checked }));
   const micLabel = el('label');
   micLabel.append(micBox, 'Record microphone');

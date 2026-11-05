@@ -1,6 +1,8 @@
 (() => {
   const MIX_PART_MS = 60000;
-  const PEAK_SAMPLE_MS = 1000;
+  const PEAK_SAMPLE_MS = 500;
+  const PEAK_WINDOW_SAMPLES = 32768;
+  const START_TIMEOUT_MS = 15000;
   const FINALIZE_TIMEOUT_MS = 5000;
   const VIDEO_BITRATE = 500000;
   const VIDEO_AUDIO_BITRATE = 48000;
@@ -16,6 +18,27 @@
     const videoMime = pick('video/webm;codecs=vp9,opus', 'video/webm');
     let session = null;
     let muted = false;
+
+    function withinStartTime(getStream, message) {
+      return new Promise((resolve, reject) => {
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          reject(new Error(message));
+        }, START_TIMEOUT_MS);
+        getStream().then((stream) => {
+          if (timedOut) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          clearTimeout(timer);
+          resolve(stream);
+        }, (e) => {
+          clearTimeout(timer);
+          reject(e);
+        });
+      });
+    }
 
     const keepSave = (s, save, failText) => s.saves.push(save.catch((e) => warn(failText + e.message)));
 
@@ -40,7 +63,7 @@
     function samplePeaks(s) {
       for (const track of s.tracks) {
         track.analyser.getFloatTimeDomainData(track.buffer);
-        const peak = Math.max(...track.buffer.map(Math.abs));
+        const peak = track.buffer.reduce((loudest, v) => Math.max(loudest, Math.abs(v)), 0);
         s.peaks[track.name][track.chunk] = Math.max(s.peaks[track.name][track.chunk] ?? 0, peak);
       }
     }
@@ -49,6 +72,7 @@
       const destination = s.ctx.createMediaStreamDestination();
       source.connect(destination);
       const analyser = s.ctx.createAnalyser();
+      analyser.fftSize = PEAK_WINDOW_SAMPLES;
       source.connect(analyser);
       const track = { name, stream: destination.stream, append, analyser, chunk: 0,
         buffer: new Float32Array(analyser.fftSize) };
@@ -58,7 +82,7 @@
 
     async function connectMic(s, gain) {
       try {
-        s.micStream = await deps.getUserMedia({ audio: true });
+        s.micStream = await withinStartTime(() => deps.getUserMedia({ audio: true }), 'no answer within 15 seconds');
         s.ctx.createMediaStreamSource(s.micStream).connect(gain);
         s.micStream.getAudioTracks()[0]?.addEventListener('ended', () =>
           warn('Microphone disconnected. Computer audio keeps recording.'));
@@ -92,7 +116,8 @@
     }
 
     async function begin(s, { mic, video, chunkMs, prepare }) {
-      s.display = await deps.getDisplayMedia(DISPLAY_CONSTRAINTS);
+      s.display = await withinStartTime(() => deps.getDisplayMedia(DISPLAY_CONSTRAINTS),
+        'Computer audio did not start within 15 seconds. Try again, or restart the app.');
       const systemAudio = s.display.getAudioTracks();
       if (!systemAudio.length) throw new Error('Computer audio is not available.');
       await prepare?.();

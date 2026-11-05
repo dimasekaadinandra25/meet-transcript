@@ -1,4 +1,4 @@
-const { el, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
+const { el, mkBtn, mkDropdown, patchSettings, meetingKey, clearShortcut } = globalThis.MeetUi;
 const view = document.getElementById('view');
 
 let rec = { recording: false, transcribing: false, error: null };
@@ -76,7 +76,7 @@ async function fillRiwayat(d) {
   for (const id of top) {
     const m = data[meetingKey(id)];
     if (!m) continue;
-    d.item(m.title || id, () => openPanel('history', id));
+    clearShortcut(d.item(m.title || id, () => openPanel('history', id)));
   }
   if (ids.length > top.length) d.item(`See all (${ids.length})`, () => openPanel('history'));
 }

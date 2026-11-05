@@ -35,3 +35,11 @@ test('shortcut tidak memakai tombol milik menu Chrome', () => {
     assert.ok(!['D', 'E', 'F'].includes(shortcutFor(label)), label);
   }
 });
+
+test('judul meeting bisa dilepas dari shortcut', () => {
+  const removed = [];
+  const button = { dataset: { shortcut: 'C' }, removeAttribute: (name) => removed.push(name) };
+  globalThis.MeetUi.clearShortcut(button);
+  assert.equal(button.dataset.shortcut, undefined);
+  assert.deepEqual(removed.sort(), ['aria-keyshortcuts', 'title']);
+});

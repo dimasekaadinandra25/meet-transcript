@@ -58,7 +58,7 @@
       publishState();
       const begin = async () => {
         const settings = await readSettings();
-        await recorder.start({ baseTime, mic: !!settings.mic, video: !!video, chunkMs: CHUNK_MS,
+        await recorder.start({ baseTime, mic: settings.mic !== false, video: !!video, chunkMs: CHUNK_MS,
           prepare: () => audioStore.beginAudio({ meetingId, chunkMs: CHUNK_MS, baseTime }) });
         await addMeeting({ id: meetingId, title: new Date(baseTime).toLocaleString(), startedAt: baseTime,
           endedAt: null, segments: [], mom: null, source: 'audio' }).catch(async (e) => {

@@ -115,6 +115,21 @@ test('giliran bicara panjang: baris audio di akhir caption tetap dianggap duplik
   assert.deepEqual(out.map((s) => s.id), ['cap-1']);
 });
 
+test('balasan pendek dari potongan beberapa caption bukan duplikat', () => {
+  const caption = [
+    { id: 'cap-1', speaker: 'Ani', text: 'ya nanti kita lihat dulu', t: 1000 },
+    { id: 'cap-2', speaker: 'Budi', text: 'oke bisa, saya cek', t: 3000 },
+  ];
+  const out = replaceAudioSegments(caption, [audio(4000, 'ya bisa, nanti saya cek')], { baseTime: 7 });
+  assert.equal(out.length, 3);
+});
+
+test('salah eja kecil dari STT tetap dianggap duplikat', () => {
+  const caption = [{ id: 'cap-1', speaker: 'Ani', text: 'semuanya bersiap untuk memulai rapat', t: 1000 }];
+  const out = replaceAudioSegments(caption, [audio(2000, 'semuanya bersiap untk memulai rapatt')], { baseTime: 7 });
+  assert.deepEqual(out.map((s) => s.id), ['cap-1']);
+});
+
 test('replaceAudioSegments dengan hasil kosong TIDAK menghapus transkrip lama', () => {
   const opt = { baseTime: 100, replace: true };
   const first = replaceAudioSegments([{ id: 'cap-1', text: 'x', speaker: 'Ani', t: 0 }],

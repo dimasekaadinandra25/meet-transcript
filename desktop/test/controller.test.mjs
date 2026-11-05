@@ -374,3 +374,15 @@ test('rekaman gagal dihapus: transkrip tetap ada dan error dilaporkan', async ()
   assert.ok(meeting());
   assert.deepEqual(data.meetings, [id]);
 });
+
+test('settings tanpa nilai mic merekam dengan mikrofon', async () => {
+  delete data.settings.mic;
+  await ctl.handle(START);
+  assert.equal(fakeRecorder.options.mic, true);
+});
+
+test('mic yang sengaja dimatikan tetap mati', async () => {
+  data.settings.mic = false;
+  await ctl.handle(START);
+  assert.equal(fakeRecorder.options.mic, false);
+});

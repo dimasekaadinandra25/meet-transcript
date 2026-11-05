@@ -98,9 +98,13 @@
   }
 
   function titleEditor(meeting) {
-    const input = Object.assign(document.createElement('input'), { value: meeting.title });
+    const input = Object.assign(document.createElement('input'), { value: meeting.title, defaultValue: meeting.title });
+    input.dataset.titleEditor = '';
     input.setAttribute('aria-label', 'Meeting title');
-    input.addEventListener('change', () => send({ type: 'rename-meeting', id: meeting.id, title: input.value }));
+    input.addEventListener('change', () => {
+      input.defaultValue = input.value;
+      send({ type: 'rename-meeting', id: meeting.id, title: input.value });
+    });
     return input;
   }
 

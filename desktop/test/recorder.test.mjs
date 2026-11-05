@@ -37,6 +37,7 @@ function makeFake() {
     gains: [],
     intervals: [],
     tracks: [],
+    analysers: [],
     level: 0,
     closed: false,
     store: { calls: { appendSystemChunk: [], appendMicChunk: [], appendMixPart: [], appendVideoPart: [] }, failures: {} },
@@ -63,7 +64,7 @@ function makeFake() {
     createMediaStreamSource(stream) { return node({ stream }); }
     createGain() { const g = node({ gain: { value: 1 } }); f.gains.push(g); return g; }
     createMediaStreamDestination() { return node({ stream: new FakeStream([track('audio')]) }); }
-    createAnalyser() { return node({ fftSize: 2048, getFloatTimeDomainData: (b) => b.fill(f.level) }); }
+    createAnalyser() { const a = node({ fftSize: 2048, getFloatTimeDomainData: (b) => b.fill(f.level) }); f.analysers.push(a); return a; }
   };
   f.MediaRecorder = class {
     static isTypeSupported() { return true; }
@@ -263,11 +264,45 @@ test('start kedua saat merekam ditolak', async () => {
 test('puncak suara dicatat per potongan STT', async () => {
   await rec.start(opts);
   fake.level = 0.5;
-  fake.fire(1000);
+  fake.fire(500);
   fake.fire(600000);
   fake.level = 0.1;
-  fake.fire(1000);
+  fake.fire(500);
   const { peaks } = await rec.stop();
   assert.equal(peaks.system[0], 0.5);
   assert.ok(Math.abs(peaks.mic[1] - 0.1) < 1e-6);
+});
+
+test('pemeriksaan suara tidak menyisakan celah waktu', async () => {
+  await rec.start(opts);
+  const sampleMs = fake.intervals.map((i) => i.ms).find((ms) => ms < 1000);
+  const windowMs = (fake.analysers[0].fftSize / 48000) * 1000;
+  assert.ok(sampleMs, 'sampling interval');
+  assert.ok(windowMs >= sampleMs, `window ${windowMs} ms, sampling every ${sampleMs} ms`);
+});
+
+test('audio komputer yang macet menggagalkan mulai rekam dengan pesan jelas', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  deps.getDisplayMedia = () => new Promise(() => {});
+  const started = createRecorder(deps).start(opts);
+  await flush();
+  t.mock.timers.tick(15000);
+  await assert.rejects(started, /did not start within 15 seconds/);
+});
+
+test('mikrofon yang macet tidak menahan rekaman, stream yang telat dihentikan', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let answer;
+  deps.getUserMedia = () => new Promise((resolve) => { answer = resolve; });
+  const started = rec.start(opts);
+  await flush();
+  await flush();
+  t.mock.timers.tick(15000);
+  await started;
+  assert.match(warnings.at(-1), /microphone/i);
+  assert.equal(fake.running().length, 3);
+  let stopped = 0;
+  answer({ getTracks: () => [{ stop() { stopped++; } }] });
+  await flush();
+  assert.equal(stopped, 1);
 });
