@@ -109,8 +109,9 @@ Terbukti:
 - Track mikrofon terpisah dan tidak punya jeda sunyi digital. Detektor menemukan 56
   dari 60 bunyi; empat sisanya tetap memuat nada, tapi di bawah ambang deteksi.
 - Selisih waktu kedua track stabil 0,02 sampai 0,03 detik dari menit 2,5 sampai
-  menit 29,5. Beberapa pasangan lain menyimpang karena suara lain di komputer dan
-  ruangan, bukan karena drift.
+  menit 29,5. Beberapa pasangan menyimpang sampai -1,85 dan 0,40 detik. Dugaannya suara
+  lain terdeteksi sebagai bunyi uji, karena selisih sesudahnya kembali stabil, tapi
+  ini belum dibuktikan.
 - Track audio tetap hidup setelah track video dihentikan.
 - Aplikasi berjalan lagi setelah dibuka ulang, tanpa dialog izin.
 
@@ -129,8 +130,8 @@ Temuan:
 - `ffmpeg` melaporkan satu `Error parsing Opus packet header` per file, tapi file tetap
   terbaca sepanjang rekaman. Posisinya belum dipastikan, dan pemutaran file diuji di
   Task 11.
-- Saat loopback aktif, `getDisplayMedia` butuh user gesture. Mulai rekam dari shortcut
-  dan tray harus menyediakannya.
+- Prototipe memulai `getDisplayMedia` dengan user gesture. Mulai rekam tanpa gesture
+  belum diuji, jadi shortcut dan tray perlu diverifikasi di Task 10.
 
 Keputusan: gerbang Windows dibuka dengan dua hal yang belum terbukti di atas.
 Bila gagal di Task 11, keputusan kembali ke user sebelum rilis.
