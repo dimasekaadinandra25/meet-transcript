@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../lib/openai.js'); // classic script: set globalThis.MeetOpenAI
+await import('../lib/openai.js');
 const { extractContent, errorFromBody, generateMoM } = globalThis.MeetOpenAI;
 
 test('JSON tunggal biasa', () => {
@@ -38,8 +38,6 @@ test('SSE dengan baris tak lengkap dilewati, tidak throw', () => {
   assert.equal(extractContent(raw), 'ab');
 });
 
-// Sebagian proxy membalas HTTP 200 dengan body error. Tanpa ini pesan server
-// yang sebenarnya dibuang dan yang tersisa cuma "Respons kosong dari server."
 test('errorFromBody mengambil pesan error dari body 200', () => {
   assert.equal(errorFromBody('{"error":{"message":"model tidak ada"}}'), 'model tidak ada');
   assert.equal(errorFromBody('{"error":"kuota habis"}'), 'kuota habis');
@@ -48,8 +46,6 @@ test('errorFromBody mengambil pesan error dari body 200', () => {
   assert.equal(errorFromBody(''), null);
 });
 
-// Menguji PENYAMBUNGANNYA, bukan cuma errorFromBody: bug-nya ada di chat(),
-// yang membuang pesan server dan melaporkan "Respons kosong dari server."
 async function denganFetch(balasan, fn) {
   const asli = globalThis.fetch;
   globalThis.fetch = async () => balasan();

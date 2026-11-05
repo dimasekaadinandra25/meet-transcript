@@ -1,18 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Label asli dari DOM Meet (dump 2026-10-01, UI Inggris). Daftar inilah yang
-// membuat pencocokan tidak sepele: "Javanese (Indonesia)" mengandung kata
-// Indonesia, dan English punya lima varian.
 const LABELS = ['English', 'English (Australia)', 'English (India)',
   'English (Philippines)', 'English (UK)', 'Indonesian (Indonesia)', 'Javanese (Indonesia)'];
 
-// langOption() membaca DOM; di sini document dipalsukan seperlunya supaya
-// aturan "label terpendek menang" ikut teruji, bukan cuma regexnya.
 globalThis.document = {
   querySelectorAll: () => LABELS.map((t) => ({ textContent: `  ${t}  ` })),
 };
-await import('../content/selectors.js'); // classic script: set globalThis.MeetSelectors
+await import('../content/selectors.js');
 const { langOption, LANG_PATTERN } = globalThis.MeetSelectors;
 
 const pick = (lang) => langOption(LANG_PATTERN[lang])?.textContent.trim();

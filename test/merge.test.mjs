@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../lib/merge.js'); // classic script: side effect set globalThis.MeetMerge
+await import('../lib/merge.js');
 const { upsertSegment, replaceAudioSegments, formatTranscript, formatMarkdown, fillTemplate,
   DEFAULT_MOM_TEMPLATE } = globalThis.MeetMerge;
 
@@ -39,8 +39,6 @@ test('transkrip ulang (replace) MENGGANTI grup rekaman yang sama, bukan menumpuk
   assert.deepEqual(second.map((s) => s.text), ['halo', 'hai']);
 });
 
-// Bug yang paling mahal: rekaman KEDUA di ruang Meet yang sama dulu menghapus
-// transkrip rekaman pertama, dan audionya sudah ikut hilang (beginAudio clear).
 test('rekaman BARU di ruang yang sama menambah, tidak menghapus rekaman sebelumnya', () => {
   const first = replaceAudioSegments([], [audio(0, 'sesi satu')], { baseTime: 100 });
   const second = replaceAudioSegments(first, [audio(9000, 'sesi dua')], { baseTime: 9000 });
@@ -48,8 +46,6 @@ test('rekaman BARU di ruang yang sama menambah, tidak menghapus rekaman sebelumn
   assert.deepEqual(second.map((s) => s.id), ['audio:100:0', 'audio:9000:0']);
 });
 
-// Id lama tanpa cap baseTime hanya boleh dibuang kalau audio yang sedang
-// ditranskrip ulang MEMANG rekaman legacy itu sendiri (loadAudio yang tahu).
 test('id lama tanpa cap dibuang hanya saat transkrip ulang rekaman legacy', () => {
   const lama = [{ id: 'audio:0', speaker: '', text: 'lama', t: 0 }];
   const tambah = replaceAudioSegments(lama, [audio(1000, 'baru')], { baseTime: 500 });
@@ -59,9 +55,6 @@ test('id lama tanpa cap dibuang hanya saat transkrip ulang rekaman legacy', () =
   assert.deepEqual(ulangLegacy.map((s) => s.text), ['baru'], 'transkrip ulang legacy mengganti');
 });
 
-// Regresi mahal: rekam sebelum upgrade (id lama) → upgrade → rekam lagi di ruang
-// sama → transkrip ulang rekaman KEDUA tidak boleh menyentuh rekaman pertama,
-// yang audionya sudah lama dibuang beginAudio dan tak bisa dipulihkan.
 test('transkrip ulang rekaman bercap TIDAK menghapus rekaman legacy milik lain', () => {
   const lama = [{ id: 'audio:0', speaker: '', text: 'rekaman lama', t: 0 }];
   const dua = replaceAudioSegments(lama, [audio(9000, 'rekaman baru')], { baseTime: 9000 });
@@ -79,8 +72,6 @@ test('replaceAudioSegments mempertahankan segmen dari caption', () => {
   assert.equal(out[1].text, 'b');
 });
 
-// Caption disimpan lebih dulu di array, baris audio di-concat di belakangnya —
-// tanpa urut ulang, transkrip gabungan melompat mundur di tengah.
 test('replaceAudioSegments mengurutkan gabungan caption+audio per waktu', () => {
   const caption = [
     { id: 'cap-1', speaker: 'Ani', text: 'pembuka', t: 1000 },
@@ -89,12 +80,9 @@ test('replaceAudioSegments mengurutkan gabungan caption+audio per waktu', () => 
   const out = replaceAudioSegments(caption, [audio(3000, 'tengah'), audio(12000, 'setelah')], { baseTime: 7 });
   assert.deepEqual(out.map((s) => s.text), ['pembuka', 'tengah', 'penutup', 'setelah']);
   assert.deepEqual(out.map((s) => s.t), [1000, 3000, 9000, 12000]);
-  // id audio tetap berurut sesuai hasil STT, bukan sesuai posisi akhir.
   assert.deepEqual(out.filter((s) => s.id.startsWith('audio:')).map((s) => s.id), ['audio:7:0', 'audio:7:1']);
 });
 
-// Transkrip ulang dengan model STT yang balas 200 + teks kosong menghasilkan
-// nol segmen; transkrip lama yang sudah bagus tidak boleh ikut hilang.
 test('replaceAudioSegments dengan hasil kosong TIDAK menghapus transkrip lama', () => {
   const opt = { baseTime: 100, replace: true };
   const first = replaceAudioSegments([{ id: 'cap-1', text: 'x', speaker: 'Ani', t: 0 }],
@@ -151,8 +139,6 @@ test('DEFAULT_MOM_TEMPLATE mengandung placeholder', () => {
   assert.ok(DEFAULT_MOM_TEMPLATE.includes('{{transcript}}'));
 });
 
-// ---- lastActivityAt + isStaleMeeting: split sesi ruang recurring ----
-
 const { lastActivityAt, isStaleMeeting, SESSION_GAP_MS, CRASH_GAP_MS } = globalThis.MeetMerge;
 const MIN = 60000;
 const mk = (over = {}) => ({ id: 'abc-defg-hij', title: 't', startedAt: 0, endedAt: null, segments: [], mom: null, ...over });
@@ -194,7 +180,7 @@ test('ownerOfRecording pilih record termuda yang mulai <= baseTime rekaman', () 
   const a = mk({ id: 'x@1', startedAt: 1000 });
   const b = mk({ id: 'x@2', startedAt: 5000 });
   const c = mk({ id: 'x', startedAt: 9000 });
-  assert.equal(ownerOfRecording([a, b, c], 7000), b);   // rekaman mulai 7000 → milik b
-  assert.equal(ownerOfRecording([a, b, c], 500), null); // lebih tua dari semua record
-  assert.equal(ownerOfRecording([null, a], 2000), a);   // record hilang di-skip
+  assert.equal(ownerOfRecording([a, b, c], 7000), b);
+  assert.equal(ownerOfRecording([a, b, c], 500), null);
+  assert.equal(ownerOfRecording([null, a], 2000), a);
 });

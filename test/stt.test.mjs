@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../lib/stt.js'); // classic script: set globalThis.MeetStt
+await import('../lib/stt.js');
 const { parseSttResponse, mergeSttChunks } = globalThis.MeetStt;
 
 test('parseSttResponse verbose_json', () => {
@@ -54,16 +54,10 @@ test('sttMode: sttMode tersimpan menang atas tebakan apa pun', () => {
   assert.equal(sttMode({ sttMode: 'api', apiKey: '' }), 'api');
 });
 
-// Mode 'browser' sudah dihapus. Settings lama yang masih menyimpannya harus
-// jatuh ke aturan penurunan, bukan bocor keluar sebagai mode yang tak dikenal
-// offscreen (transkrip diam-diam dikirim entah ke mana / gagal tanpa pesan).
 test('sttMode migrasi: sttMode browser tersimpan → diturunkan ulang', () => {
   assert.equal(sttMode({ sttMode: 'browser' }), 'whisper-local');
   assert.equal(sttMode({ sttMode: 'browser', sttBaseUrl: 'http://localhost:8080/v1' }), 'whisper-local');
   assert.equal(sttMode({ sttMode: 'browser', sttBaseUrl: 'https://api.openai.com/v1' }), 'api');
-  // Mode browser = audio tak pernah keluar mesin. Tanpa STT URL yang dipilih
-  // user, TIDAK boleh jatuh ke endpoint+key chat (audio meeting terkirim ke
-  // api.openai.com diam-diam); jatuh ke whisper lokal yang gagal terang-terangan.
   assert.equal(sttMode({ sttMode: 'browser', apiKey: 'k' }), 'whisper-local');
   assert.equal(sttMode({ sttMode: 'browser', baseUrl: 'https://api.openai.com/v1' }), 'whisper-local');
 });
@@ -85,8 +79,6 @@ test('sttMode migrasi: sttBaseUrl remote / rusak → api', () => {
 });
 
 test('sttMode migrasi: mode chat lama (endpoint chat terisi) → api, bukan whisper', () => {
-  // Settings lama tanpa sttBaseUrl memakai endpoint chat. 'api' punya fallback
-  // yang sama, jadi user lama tidak tiba-tiba diarahkan ke localhost.
   assert.equal(sttMode({ apiKey: 'k' }), 'api');
   assert.equal(sttMode({ baseUrl: 'https://x/v1' }), 'api');
 });
@@ -117,19 +109,15 @@ test('sttEndpoint api: STT fields kosong → jatuh ke endpoint chat (perilaku la
 
 test('sttEndpoint: bahasa default Indonesia, tapi string kosong tersimpan = auto', () => {
   assert.equal(sttEndpoint({ sttMode: 'api' }).language, 'id');
-  // ?? bukan ||: user yang sengaja mengosongkan field minta auto-detect.
   assert.equal(sttEndpoint({ sttMode: 'api', sttLanguage: '' }).language, '');
   assert.equal(sttEndpoint({ sttMode: 'api', sttLanguage: 'en' }).language, 'en');
 });
 
-// Sebagian server mengirim {text:"…",segments:[]}. Mendahulukan array kosong
-// membuang teks yang sebenarnya ada, dan potongan itu jadi lubang senyap.
 test('parseSttResponse: segments kosong jatuh ke {text}, bukan dibuang', () => {
   assert.deepEqual(parseSttResponse('{"text":"halo dunia","segments":[]}'),
     { segments: [{ start: 0, text: 'halo dunia' }] });
 });
 
-// Sebagian proxy OpenAI-compatible membalas HTTP 200 dengan body error.
 test('parseSttResponse: body {error} jadi penanda gagal, bukan segmen kosong', () => {
   assert.deepEqual(parseSttResponse('{"error":{"message":"model tidak ada"}}'),
     { error: 'model tidak ada' });
@@ -137,36 +125,27 @@ test('parseSttResponse: body {error} jadi penanda gagal, bukan segmen kosong', (
   assert.deepEqual(merged.map((s) => s.text), ['[transkrip gagal]']);
 });
 
-// Potongan yang gagal tersimpan meninggalkan nomor bolong. Tanpa indeks asli,
-// semua potongan sesudahnya ditimestamp satu slot (10 menit) terlalu awal.
 test('mergeSttChunks memakai indeks asli potongan saat ada yang bolong', () => {
   const r = [{ segments: [{ start: 0, text: 'satu' }] }, { segments: [{ start: 0, text: 'tiga' }] }];
   assert.deepEqual(mergeSttChunks(r, 600000, 0, [0, 2]).map((s) => s.t), [0, 1200000]);
-  // tanpa indices, perilaku lama (berurutan) dipertahankan
   assert.deepEqual(mergeSttChunks(r, 600000, 0).map((s) => s.t), [0, 600000]);
 });
 
-// {text:""} bukan hasil — kalau ia menang atas body error, potongan yang gagal
-// jadi lubang senyap alih-alih penanda "[transkrip gagal]".
 test('parseSttResponse: text kosong tidak menang atas body error', () => {
   assert.deepEqual(parseSttResponse('{"text":"   ","error":{"message":"model mati"}}'),
     { error: 'model mati' });
   assert.deepEqual(parseSttResponse('{"text":""}'), { segments: [] });
 });
 
-// Segmen yang sah menang atas field error/warning yang menempel di body yang sama.
 test('parseSttResponse: segmen sah menang atas field error yang menempel', () => {
   assert.deepEqual(parseSttResponse('{"segments":[{"start":0,"text":"halo"}],"error":{"message":"warn"}}'),
     { segments: [{ start: 0, text: 'halo' }] });
 });
 
-// Bentuk error tanpa `message` tidak boleh jadi "[object Object]".
 test('parseSttResponse: error tanpa message tetap terbaca', () => {
   assert.deepEqual(parseSttResponse('{"error":{"code":500}}'), { error: '{"code":500}' });
 });
 
-// indices yang panjangnya tidak sama = pemanggil salah pasang. Memakainya
-// per-elemen menabrakkan dua potongan ke timestamp yang sama, diam-diam.
 test('mergeSttChunks mengabaikan indices yang panjangnya tidak sepadan', () => {
   const r = [{ segments: [{ start: 0, text: 'a' }] }, { segments: [{ start: 0, text: 'b' }] },
     { segments: [{ start: 0, text: 'c' }] }];

@@ -1,20 +1,12 @@
-// popup/popup.js — satu-satunya tempat tombol "Rekam" benar-benar bisa jalan.
-// Klik ikon toolbar ADALAH invocation action, dan hanya invocation (action,
-// context menu, shortcut, omnibox) yang memberi izin activeTab untuk tab
-// aktif — syarat tabCapture.getMediaStreamId. Tombol di side panel tidak
-// pernah dapat: Chrome menolaknya dengan "Extension has not been invoked for
-// the current page". Itu sebabnya start ada di sini dan Stop di dua tempat.
-const { el, mkBtn, mkDropdown } = globalThis.MeetUi;
+const { el, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
 const view = document.getElementById('view');
 
 let rec = { recording: false, transcribing: false, error: null };
-// Dibaca saat load, bukan di dalam handler klik: sidePanel.open() butuh user
-// gesture, dan menunggu tabs.query di tengah handler sudah menghabiskannya.
+
 let tabId = null;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-// Ikon digambar inline, bukan <img>: file ikon terpisah berarti satu request
-// per baris dan warnanya tak bisa ikut teks.
+
 function icon(paths, cls) {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
@@ -26,16 +18,13 @@ function icon(paths, cls) {
   }
   return svg;
 }
-// Bahasa caption Meet. Indonesia duluan = default: settings.captionLang yang
-// kosong (instalasi baru) dibaca sebagai 'id'.
+
 const BAHASA = [['id', 'Indonesia'], ['en', 'English']];
 let captionLang = 'id';
-// settings.mic — dicampur ke rekaman tab, bukan ke speaker. Dicerminkan di
-// sini supaya centangnya benar sejak render pertama.
+
 let micOn = false;
 
 const ICON = {
-  // Titik rekam — satu-satunya ikon berisi warna, sewarna badge merekam.
   rekam: () => icon(['M12 6a6 6 0 110 12 6 6 0 010-12z'], 'solid'),
   stop: () => icon(['M7.5 7.5h9v9h-9z'], 'solid'),
   detail: () => icon(['M4 5h16v14H4z', 'M14 5v14']),
@@ -52,30 +41,19 @@ const ICON = {
   ]),
 };
 
-// Digabung ke settings TERSIMPAN, bukan ke salinan di memori: panel bisa sedang
-// membuka Settings dengan editan yang belum disimpan, dan menulis ulang seluruh
-// objek dari popup akan membuangnya.
 async function setCaptionLang(code) {
   captionLang = code;
-  render(); // centang pindah sekarang, tak menunggu storage
-  const cur = (await chrome.storage.local.get('settings')).settings ?? {};
-  await chrome.storage.local.set({ settings: { ...cur, captionLang: code } });
+  render();
+  await patchSettings({ captionLang: code });
 }
 
-// Digabung ke settings tersimpan, alasannya sama dengan setCaptionLang.
 async function setMic(on) {
   micOn = on;
-  render(); // centang pindah sekarang, tak menunggu storage
-  const cur = (await chrome.storage.local.get('settings')).settings ?? {};
-  await chrome.storage.local.set({ settings: { ...cur, mic: on } });
-  // Rekaman yang sedang jalan ikut kena: semua recorder di offscreen membaca
-  // campuran dari mixNode, jadi mic bisa bergabung tanpa menyentuh recorder.
-  // SW yang meneruskan — ia yang tahu ada dokumen offscreen atau tidak.
+  render();
+  await patchSettings({ mic: on });
   if (on) chrome.runtime.sendMessage({ type: 'enable-mic' }).catch(() => {});
 }
 
-// Panel dibuka dari gesture klik ini. Tujuannya dititipkan ke service worker
-// lebih dulu — panel membacanya lewat get-active sebelum render pertama.
 function openPanel(panelTab, meetingId) {
   if (panelTab) {
     chrome.runtime.sendMessage({ type: 'open-panel-tab', tab: panelTab, id: meetingId }).catch(() => {});
@@ -84,13 +62,8 @@ function openPanel(panelTab, meetingId) {
   window.close();
 }
 
-// Judul meeting terbaru di dropdown Riwayat. 8, bukan semua: satu record berisi
-// SELURUH segmen transkripnya, jadi membaca daftar panjang berarti menarik
-// berpuluh MB ke popup yang cuma butuh judulnya. Sisanya lewat "Lihat semua".
 const RIWAYAT_MAX = 8;
 
-// Dimuat hanya saat dropdown-nya dibuka, bukan saat popup terbuka: mayoritas
-// popup dibuka untuk menekan Rekam, dan pembacaan itu tak gratis.
 async function fillRiwayat(d) {
   const { meetings: ids = [] } = await chrome.storage.local.get('meetings');
   if (!ids.length) {
@@ -98,11 +71,11 @@ async function fillRiwayat(d) {
     return;
   }
   const top = ids.slice(0, RIWAYAT_MAX);
-  const data = await chrome.storage.local.get(top.map((id) => 'meeting:' + id));
+  const data = await chrome.storage.local.get(top.map(meetingKey));
   d.list.replaceChildren();
   for (const id of top) {
-    const m = data['meeting:' + id];
-    if (!m) continue; // record terhapus tapi masih tercatat di daftar
+    const m = data[meetingKey(id)];
+    if (!m) continue;
     d.item(m.title || id, () => openPanel('history', id));
   }
   if (ids.length > top.length) d.item(`Lihat semua (${ids.length})`, () => openPanel('history'));
@@ -117,30 +90,18 @@ function row(label, iconEl, fn) {
 function render() {
   view.replaceChildren();
   if (rec.transcribing) {
-    // saving = Stop menyimpan arsip tanpa STT (lihat autoTranscribe di SW).
     view.append(el('div', 'muted state', rec.saving ? 'Menyimpan rekaman…' : 'Mentranskrip…'));
   } else if (rec.recording) {
     row('Stop rekam', ICON.stop(), () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
-    // Bukan "tab ini": rekaman bersifat global, popup bisa dibuka dari tab lain.
     view.append(el('div', 'muted state', '● Merekam'));
   } else {
-    // caret '' → glyph datang dari CSS (› tertutup, ⌄ terbuka), menempel di
-    // tepi kanan baris.
     const d = mkDropdown(view, 'rec', 'Rekam', { cls: 'inline', caret: '' });
     d.head.prepend(ICON.rekam());
     const start = (video) => chrome.runtime.sendMessage({ type: 'start-active-tab-recording', video });
     d.item('Audio saja', () => start(false));
     d.item('Audio + video', () => start(true));
   }
-  // Baris sendiri, BUKAN item di dalam dropdown "Rekam": dua item di situ
-  // adalah aksi yang memulai rekaman (salah klik = rekaman jalan), dan saat
-  // merekam dropdown itu tidak dirender sama sekali — padahal justru di situ
-  // toggle ini harus terjangkau. Centang di label, seperti Bahasa caption.
   row(micOn ? 'Mikrofon  ✓' : 'Mikrofon', ICON.mic(), () => {
-    // Mematikan di tengah rekaman tidak mungkin: cfg.mic di offscreen adalah
-    // snapshot saat start, dan tak ada jalur melepas mic dari campuran. Ditolak
-    // dengan alasan — kalau dibiarkan, centangnya padam sementara mic-nya
-    // terus terekam.
     if (micOn && rec.recording) {
       rec = { ...rec, error: 'Mikrofon tak bisa dimatikan di tengah rekaman — stop rekam dulu.' };
       render();
@@ -151,25 +112,15 @@ function render() {
   const l = mkDropdown(view, 'bahasa', 'Bahasa caption', { cls: 'inline', caret: '' });
   l.head.prepend(ICON.bahasa());
   for (const [code, label] of BAHASA) {
-    // Centang di label, bukan ikon terpisah: baris menu ini sudah punya
-    // indentasi tetap, dan ikon kedua membuat dua kolom kosong untuk yang lain.
     l.item(code === captionLang ? label + '  ✓' : label, () => setCaptionLang(code));
   }
   row('Tampilkan detail', ICON.detail(), () => openPanel());
-  // Popup TIDAK ditutup setelah start: pesan gagal (URL tab tak dikenali,
-  // rekaman lain masih jalan) harus punya tempat untuk muncul.
   if (rec.error) view.append(el('div', 'err', rec.error));
   view.append(el('div', 'sep'));
   const h = mkDropdown(view, 'riwayat', 'Riwayat meet', { cls: 'inline', caret: '' });
   h.head.prepend(ICON.riwayat());
   h.list.append(el('div', 'muted', 'Memuat…'));
-  // Render ulang (mis. rekaman berhenti) membangun dropdown baru; `openMenu` di
-  // lib/ui.js membuatnya terbuka lagi, jadi isinya harus diisi ulang juga —
-  // karena itu pengisian digantung ke state `open`, bukan ke sekali toggle.
   const menu = h.head.parentElement;
-  // `filled` mencegah pembacaan ganda: menyetel .open di mkDropdown MEMICU
-  // toggle, dan panggilan sinkron di bawah menangani kasus menu yang memang
-  // sudah terbuka — tanpa penjaga ini keduanya membaca storage masing-masing.
   let filled = false;
   const fill = () => {
     if (!menu.open || filled) return;
@@ -182,15 +133,12 @@ function render() {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type !== 'rec-state') return;
-  // 'error' in msg, bukan msg.error ?? null: broadcast progres tidak membawa
-  // field error sama sekali, dan menganggapnya null menghapus pesan yang baru
-  // terbit.
   rec = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving,
     error: 'error' in msg ? msg.error : rec.error };
   render();
 });
 
-render(); // gambar dulu, status menyusul — popup tak boleh kosong sekejap
+render();
 chrome.tabs.query({ active: true, currentWindow: true })
   .then(([t]) => { tabId = t?.id ?? null; })
   .catch(() => {});
@@ -204,4 +152,4 @@ chrome.runtime.sendMessage({ type: 'get-active' }).then((d) => {
   rec = { ...rec, recording: d.rec.recording, transcribing: d.rec.transcribing,
     saving: d.rec.transcribing && d.rec.autoStt === false };
   render();
-}).catch(() => {}); // service worker baru bangun & belum punya listener
+}).catch(() => {});

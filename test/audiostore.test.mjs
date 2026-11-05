@@ -1,11 +1,7 @@
-// Dua helper murni di lib/audiostore.js: parsing bentuk key, dan pemilihan
-// rekaman yang dipangkas. Sisa file itu I/O IndexedDB yang tak ada di Node,
-// dan repo ini nol dependency — jadi yang diuji adalah bagian murninya, yang
-// juga satu-satunya tempat bentuk key diparse.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../lib/audiostore.js'); // classic script: set globalThis.MeetAudioStore
+await import('../lib/audiostore.js');
 const { groupRecordings, pruneTargets, KEEP_RECORDINGS } = globalThis.MeetAudioStore;
 
 const metaOf = (over = {}) => ({ meetingId: 'abc-defg-hij', chunkMs: 600000,
@@ -19,7 +15,7 @@ test('layout baru: chunk & vchunk dikelompokkan ke rekamannya', () => {
   const keys = ['meta:1000', 'chunk:1000:0', 'chunk:1000:1', 'vchunk:1000:0',
     'meta:2000', 'chunk:2000:0'];
   const recs = groupRecordings(keys, metas);
-  assert.deepEqual(recs.map((r) => r.recId), [2000, 1000]); // terbaru dulu
+  assert.deepEqual(recs.map((r) => r.recId), [2000, 1000]);
   assert.equal(recs[1].meetingId, 'abc-defg-hij');
   assert.deepEqual(recs[1].chunkKeys.map((c) => c.key), ['chunk:1000:0', 'chunk:1000:1']);
   assert.deepEqual(recs[1].videoKeys.map((c) => c.key), ['vchunk:1000:0']);
@@ -30,8 +26,6 @@ test('layout baru: chunk & vchunk dikelompokkan ke rekamannya', () => {
 });
 
 test('urutan numerik, bukan leksikografis', () => {
-  // Timestamp transkrip ulang dihitung dari indeks potongan. Kalau 'chunk:10'
-  // jatuh sebelum 'chunk:2', seluruh transkrip bergeser 10 menit per slot.
   const metas = new Map([['meta:1000', metaOf({ count: 11 })]]);
   const keys = ['meta:1000', ...Array.from({ length: 11 }, (_, i) => `chunk:1000:${i}`)];
   const recs = groupRecordings(keys.slice().reverse(), metas);
@@ -40,8 +34,6 @@ test('urutan numerik, bukan leksikografis', () => {
 });
 
 test('indeks bolong tetap mengembalikan indeks ASLI', () => {
-  // Potongan yang gagal ditulis melewati indeksnya. Penomoran ulang rapat
-  // membuat potongan sesudahnya ditimestamp 10 menit terlalu awal.
   const metas = new Map([['meta:1000', metaOf({ count: 4 })]]);
   const recs = groupRecordings(
     ['meta:1000', 'chunk:1000:0', 'chunk:1000:2', 'chunk:1000:3'], metas);
@@ -53,16 +45,14 @@ test('bentuk key lama dibaca sebagai SATU rekaman, flag oldKeys', () => {
   const recs = groupRecordings(
     ['meta', 'chunk:0', 'chunk:1', 'vchunk:0'], metas);
   assert.equal(recs.length, 1);
-  assert.equal(recs[0].recId, 1500); // dari meta.baseTime
+  assert.equal(recs[0].recId, 1500);
   assert.equal(recs[0].oldKeys, true);
-  assert.equal(recs[0].legacy, false); // 'blobs' tidak ada → bukan layout ≤0.3
+  assert.equal(recs[0].legacy, false);
   assert.deepEqual(recs[0].chunkKeys.map((c) => c.index), [0, 1]);
   assert.deepEqual(recs[0].videoKeys.map((c) => c.index), [0]);
 });
 
 test("layout 'blobs' ≤0.3 menyalakan legacy, bukan oldKeys saja", () => {
-  // legacy dibawa sampai replaceAudioSegments: hanya rekaman inilah yang boleh
-  // menghapus baris transkrip ber-id tanpa cap baseTime.
   const metas = new Map([['meta', metaOf({ baseTime: 900 })]]);
   const recs = groupRecordings(['meta', 'blobs'], metas);
   assert.equal(recs[0].legacy, true);
@@ -71,8 +61,6 @@ test("layout 'blobs' ≤0.3 menyalakan legacy, bukan oldKeys saja", () => {
 });
 
 test('meta legacy tanpa baseTime → recId 0, bukan NaN', () => {
-  // Layout ≤0.3 bisa tak punya baseTime. NaN membuat rekaman ini hilang dari
-  // semua daftar DAN tak pernah terpangkas — bocor selamanya.
   const metas = new Map([['meta', { meetingId: 'abc-defg-hij', count: 1 }]]);
   const recs = groupRecordings(['meta', 'chunk:0'], metas);
   assert.equal(recs[0].recId, 0);
@@ -80,8 +68,6 @@ test('meta legacy tanpa baseTime → recId 0, bukan NaN', () => {
 });
 
 test('chunk tanpa meta diabaikan, tidak jadi rekaman hantu', () => {
-  // Meta terpangkas tapi delete chunk-nya gagal. Rekaman hantu ber-meetingId
-  // undefined akan muncul di menu panel sebagai baris yang selalu gagal.
   const metas = new Map([['meta:2000', metaOf({ baseTime: 2000 })]]);
   const recs = groupRecordings(['meta:2000', 'chunk:2000:0', 'chunk:1000:0'], metas);
   assert.deepEqual(recs.map((r) => r.recId), [2000]);

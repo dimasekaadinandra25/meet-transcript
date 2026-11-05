@@ -1,13 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../content/session.js'); // classic script: set globalThis.MeetSession
+await import('../content/session.js');
 const { step, meetingIdFrom, INITIAL } = globalThis.MeetSession;
 
 const A = 'abc-defg-hij';
 const B = 'xyz-mnop-qrs';
 
-// Jalankan beberapa tick berurutan, kumpulkan aksinya.
 function run(ticks, state = INITIAL) {
   const acts = [];
   let s = state;
@@ -24,7 +23,6 @@ test('meetingIdFrom hanya menerima pola kode Meet', () => {
   assert.equal(meetingIdFrom('/abc-defg-hij'), A);
   assert.equal(meetingIdFrom('/landing'), null);
   assert.equal(meetingIdFrom('/'), null);
-  // /meet/<kode> = ruang yang sama dengan /<kode>; id harus identik dengan SW.
   assert.equal(meetingIdFrom('/meet/abc-defg-hij'), A);
   assert.equal(meetingIdFrom('/meet/landing'), null);
   assert.equal(meetingIdFrom('/_meet/abc-defg-hij'), A);
@@ -42,15 +40,12 @@ test('pindah ruang menutup sesi lama dan membuka yang baru di tick yang sama', (
   assert.deepEqual(acts[1], { open: true, close: true, report: true, curId: B });
 });
 
-// Properti terpenting: setelah pindah, tak ada satu pun tick yang masih
-// melaporkan ruang lama — itulah jalur yang dulu menulis caption ruang baru ke
-// record ruang lama.
 test('setelah pindah ruang, tak ada tick yang melapor dengan id ruang lama', () => {
   const { acts } = run([inCall(A), inCall(B), inCall(B), out(B)]);
   const dilapor = acts.filter((a) => a.report).map((a) => a.curId);
   assert.deepEqual(dilapor, [A, B, B, B]);
   assert.equal(acts.filter((a) => a.close).length, 1);
-  assert.equal(acts.filter((a) => a.open).length, 2); // A lalu B
+  assert.equal(acts.filter((a) => a.open).length, 2);
 });
 
 test('keluar call menutup sesi setelah dua tick, bukan satu', () => {
@@ -67,8 +62,6 @@ test('kedipan satu tick tidak menghentikan sesi yang masih berjalan', () => {
   assert.equal(acts[4].close, true);
 });
 
-// Meet sempat melewati pathname lain saat transisi SPA. Menutup di tick pertama
-// akan menghentikan rekaman audio yang sebenarnya masih berjalan.
 test('pathname bukan kode ruang selama satu tick tidak menutup sesi', () => {
   const { acts } = run([inCall(A), out(null), inCall(A)]);
   assert.equal(acts[1].close, false);
@@ -84,8 +77,6 @@ test('pathname bukan kode ruang dua tick berturut menutup sesi dan mereset', () 
     INITIAL);
 });
 
-// Lobby: belum pernah in-call, jadi tak ada yang "ditinggalkan" — sesinya harus
-// tetap melapor supaya panel tahu tab ini ada di ruang tersebut.
 test('duduk di lobby tanpa pernah join tidak menutup sesi', () => {
   const { acts } = run([out(A), out(A), out(A), out(A)]);
   assert.equal(acts.every((a) => !a.close && a.report), true);
@@ -109,9 +100,6 @@ test('selector inCall() rusak (tak pernah true) → sesi tidak pernah ditutup se
   assert.equal(acts.every((a) => !a.close && a.report), true);
 });
 
-// Masuk ruang B dari ruang A membawa state lama; kalau sawInCall/goneTicks tidak
-// ikut di-reset, sesi B ditutup ~4 detik setelah tiba padahal user baru sampai
-// di lobby-nya. Dua mutasi itu lolos seluruh test sebelumnya.
 test('sesi ruang baru mulai dari nol, tidak mewarisi hitungan ruang sebelumnya', () => {
   const { acts } = run([inCall(A), out(A), inCall(B), out(B), out(B), out(B)]);
   assert.equal(acts[2].open, true);
@@ -120,23 +108,17 @@ test('sesi ruang baru mulai dari nol, tidak mewarisi hitungan ruang sebelumnya',
   assert.equal(acts[4].close, true, 'B ditutup karena keluar call B, bukan warisan A');
 });
 
-// Tiba di lobby ruang B setelah sempat in-call di ruang A. Kalau sawInCall
-// terbawa, B dianggap "sudah ditinggalkan" dan sesinya ditutup ~4 detik setelah
-// tiba — rekaman audio ikut dihentikan padahal user belum join.
 test('pindah ruang saat tidak in-call tidak mewarisi sawInCall ruang lama', () => {
   const { acts } = run([inCall(A), out(B), out(B), out(B)]);
   assert.equal(acts[1].close, true, 'ruang A memang ditutup');
   assert.equal(acts.slice(2).every((a) => !a.close && a.report && a.curId === B), true);
 });
 
-// goneTicks ruang lama yang terbawa membuat debounce ruang baru cuma satu tick.
 test('hitungan keluar ruang lama tidak terbawa ke ruang baru', () => {
   const { acts } = run([inCall(A), out(A), out(B), out(null)]);
   assert.equal(acts[3].close, false, 'satu tick di luar ruang B belum boleh menutup');
 });
 
-// Tanpa pernah join sekalipun, meninggalkan halaman ruang tetap mengakhiri sesi
-// — kalau tidak, tab yang balik ke landing terus melapor ruang yang ditinggalkan.
 test('meninggalkan halaman ruang dari lobby menutup sesi setelah dua tick', () => {
   const { acts } = run([out(A), out(null), out(null)]);
   assert.equal(acts[1].close, false);
@@ -150,8 +132,6 @@ test('pindah ruang saat masih di lobby ruang lama tidak menutup apa pun dua kali
   assert.equal(acts.slice(2).every((a) => !a.close && a.report), true);
 });
 
-// Invarian struktural: tiap close harus punya open yang mendahuluinya, dan
-// report benar persis saat sesi terbuka. Di-brute-force, bukan dieja satu-satu.
 test('open/close berpasangan dan report konsisten di semua sekuens', () => {
   const pilihan = [null, A, B].flatMap((id) => [{ id, inCall: false }, { id, inCall: true }]);
   const rec = (s, terbuka, sisa) => {
@@ -165,5 +145,5 @@ test('open/close berpasangan dan report konsisten di semua sekuens', () => {
       rec(n, kini, sisa - 1);
     }
   };
-  rec(INITIAL, false, 5); // 6^5 = 7776 sekuens
+  rec(INITIAL, false, 5);
 });

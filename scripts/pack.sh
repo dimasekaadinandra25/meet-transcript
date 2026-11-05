@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# Bikin ZIP rilis bersih (cuma file ekstensi, tanpa docs/test/.git) ke dist/.
-# Versi diambil dari manifest.json — naikkan di situ DAN manifest.firefox.json
-# sebelum rilis (pack menolak jalan kalau keduanya beda).
-#
-#   ./scripts/pack.sh            # dist/meet-transcript-vX.Y.Z.zip (Chrome/Chromium)
-#   ./scripts/pack.sh --firefox  # dist/meet-transcript-firefox-vX.Y.Z.zip (digate web-ext lint)
-#                                # → upload manual sebagai versi baru di AMO Developer Hub
-#   ./scripts/pack.sh --release  # ZIP Chrome + gh release (publish!)
-#
-# Release GitHub hanya membawa ZIP Chrome. Firefox didistribusikan lewat halaman
-# AMO; --firefox cuma membangun ZIP lokal untuk diunggah ke sana:
-# https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,42 +12,32 @@ case "${1:-}" in
   *) echo "pack: argumen tak dikenal: $1" >&2; exit 1 ;;
 esac
 
-# File yang browser butuh. Tambah di sini kalau ada folder runtime baru.
-ITEMS=(manifest.json README.md LICENSE background panel popup content offscreen lib icons)
+ITEMS=(manifest.json README.md README.en.md LICENSE background panel popup content offscreen lib icons)
 
-# Gagal cepat kalau ada item yang hilang (salah ketik / folder pindah).
 for it in "${ITEMS[@]}" manifest.firefox.json; do
   [ -e "$it" ] || { echo "pack: '$it' tidak ada — perbaiki ITEMS di pack.sh" >&2; exit 1; }
 done
 
 VER="$(node -p "require('./manifest.json').version")"
-NAME="meet-transcript"
+NAME="transcripables"
 
-# Versi satu sumber kebenaran di manifest.json; manifest.firefox.json wajib sinkron.
 FVER="$(node -p "require('./manifest.firefox.json').version")"
 [ "$VER" = "$FVER" ] || { echo "pack: versi tidak sinkron — manifest.json $VER, manifest.firefox.json $FVER" >&2; exit 1; }
 
 mkdir -p "$ROOT/dist"
 
-# stage <chrome|firefox> — isi $STAGE_DIR. Global, bukan echo/capture: subshell
-# $(...) tidak mewarisi errexit (bash 3.2 macOS), jadi cp yang gagal di dalam
-# capture tertelan dan zip cacat lolos. Dipanggil polos begini, set -e bekerja.
 stage() {
   local flavor="$1"
   STAGE_DIR="$(mktemp -d)/$NAME"
   mkdir -p "$STAGE_DIR"
   for it in "${ITEMS[@]}"; do cp -R "$it" "$STAGE_DIR/"; done
   if [ "$flavor" = firefox ]; then
-    # Firefox caption-only: tak ada tabCapture/offscreen, manifest diganti.
     rm -rf "$STAGE_DIR/offscreen"
     cp manifest.firefox.json "$STAGE_DIR/manifest.json"
   fi
   find "$STAGE_DIR" -name '.DS_Store' -delete
 }
 
-# zip_stage <stagedir> <zippath> — zip lalu hapus staging.
-# Isi di-zip dari DALAM folder: manifest.json wajib di root zip — AMO dan
-# Chrome Web Store menolak zip yang isinya satu folder pembungkus.
 zip_stage() {
   local dir="$1" out="$2"
   rm -f "$out"
@@ -70,8 +48,6 @@ zip_stage() {
 
 build_chrome() { stage chrome; zip_stage "$STAGE_DIR" "$ROOT/dist/${NAME}-v${VER}.zip"; }
 
-# Lint dulu, baru zip: zip Firefox yang gagal lint tidak boleh pernah lahir —
-# AMO menjalankan validator yang sama dan menolaknya.
 build_firefox() {
   stage firefox
   npx --yes web-ext lint --source-dir "$STAGE_DIR" \
@@ -84,11 +60,10 @@ case "$MODE" in
   firefox) build_firefox ;;
   release)
     build_chrome
-    # Tag v$VER dibuat di commit HEAD sekarang — pastikan sudah di-push & bersih.
     gh release create "v$VER" \
       "$ROOT/dist/${NAME}-v${VER}.zip" \
       --title "v$VER" \
-      --notes "Ekstensi Meet Transcript untuk tim.
+      --notes "Ekstensi Transcripables untuk tim.
 
 **Chrome / Edge / Brave / Opera (Load unpacked):**
 1. Download \`${NAME}-v${VER}.zip\` di bawah (Assets).

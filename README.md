@@ -1,14 +1,16 @@
-# 🎙️ Meet Transcript
+# 🎙️ Transcripables
 
 <p align="center">
-  <img src="icons/icon128.png" width="112" alt="Meet Transcript">
+  <img src="icons/icon128.png" width="112" alt="Transcripables">
 </p>
+
+Bahasa: Indonesia | [English](README.en.md)
 
 **Ekstensi Chrome untuk Transkripsi Google Meet, Rekaman Meeting Web (Teams, Webex, Slack, Discord, Zoom) & Pembuatan Notulen (MoM) Otomatis**
 
 ---
 
-**Meet Transcript** adalah ekstensi Google Chrome yang terintegrasi langsung pada *side panel* Google Meet. Ekstensi ini menangkap transkrip caption secara *real-time* selama rapat berlangsung dan secara otomatis merangkumnya menjadi *Minutes of Meeting* (MoM). Rekaman audio ditranskrip setelah perekaman dihentikan (mode *Rekam audio*) atau kapan pun Anda menekan **Generate transkrip**.
+**Transcripables** adalah ekstensi Google Chrome yang terintegrasi langsung pada *side panel* Google Meet. Ekstensi ini menangkap transkrip caption secara *real-time* selama rapat berlangsung dan secara otomatis merangkumnya menjadi *Minutes of Meeting* (MoM). Rekaman audio ditranskrip setelah perekaman dihentikan (mode *Rekam audio*) atau kapan pun Anda menekan **Generate transkrip**.
 
 Selain Google Meet, **Microsoft Teams web**, **Webex web app**, **huddle Slack di peramban**, **panggilan suara Discord di peramban** (`discord.com/channels/…`), dan **meeting Zoom di web client** (`zoom.us/wc/…`) juga dapat direkam. Di platform-platform itu ekstensi tidak membaca *caption*: rekamannya disimpan sebagai arsip, dan transkripnya dibuat lewat STT hanya bila Anda menekan **Generate transkrip** di Riwayat — tanpa nama pembicara, dan perekaman dihentikan manual.
 
@@ -47,19 +49,19 @@ Ekstensi ini berjalan pada **Chrome 116+** — termasuk browser Chromium lain (E
 
 ### Metode 1: Melalui Rilis ZIP (Direkomendasikan)
 
-1. Buka halaman **[Releases](../../releases)** dan unduh aset `meet-transcript-vX.Y.Z.zip` terbaru. *(Paket ini bersih — hanya fail ekstensi, tanpa docs/test, di bawah 1 MB.)*
+1. Buka halaman **[Releases](../../releases)** dan unduh aset `transcripables-vX.Y.Z.zip` terbaru. *(Paket ini bersih — hanya fail ekstensi, tanpa docs/test, di bawah 1 MB.)*
 2. Ekstrak fail ZIP ke direktori permanen di komputer Anda (hindari folder *Downloads*).
 3. Buka URL `chrome://extensions` di Google Chrome (Edge: `edge://extensions`, Brave: `brave://extensions`, Opera: `opera://extensions`).
 4. Aktifkan **Developer mode** (sakelar di sudut kanan atas).
-5. Klik **Load unpacked**, lalu pilih folder **`meet-transcript`** di dalam hasil ekstraksi — folder yang isinya langsung `manifest.json`, bukan folder pembungkusnya.
-6. Sematkan (*pin*) ikon Meet Transcript di *toolbar* Anda.
+5. Klik **Load unpacked**, lalu pilih folder **`transcripables`** di dalam hasil ekstraksi — folder yang isinya langsung `manifest.json`, bukan folder pembungkusnya.
+6. Sematkan (*pin*) ikon Transcripables di *toolbar* Anda.
 
 > **Untuk Update:** Unduh ZIP versi terbaru, timpa (*replace*) fail di folder lama, lalu klik ikon **Reload** (🔄) pada kartu ekstensi di halaman konfigurasi.
 
 ### Metode 2: Melalui Git Clone (Untuk Developer)
 
 ```bash
-git clone https://github.com/zenmz/meet-transcript.git
+git clone https://github.com/dimasekaadinandra25/transcripables.git
 ```
 
 Buka `chrome://extensions` → **Load unpacked** → pilih folder hasil *clone*. Untuk memperbarui ekstensi, jalankan perintah `git pull`, lalu klik **Reload**.
@@ -69,7 +71,7 @@ Buka `chrome://extensions` → **Load unpacked** → pilih folder hasil *clone*.
 
 ### Firefox
 
-Pasang langsung dari Add-ons resmi Mozilla: **[Meet Transcript di Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/)** → klik **Add to Firefox**. Update berjalan otomatis. Setelah terpasang, klik ikon Meet Transcript di *toolbar* untuk membuka/menutup *sidebar*.
+Pasang langsung dari Add-ons resmi Mozilla: **[Transcripables di Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/)** (listing mungkin masih bernama Meet Transcript) → klik **Add to Firefox**. Update berjalan otomatis. Setelah terpasang, klik ikon Transcripables di *toolbar* untuk membuka/menutup *sidebar*.
 
 > [!NOTE]
 > Versi Firefox **caption-only**: fitur Perekaman Audio & Mode STT di bawah tidak tersedia (Firefox tidak punya API `tabCapture`). Transkrip dari *caption*, Riwayat, MoM, dan Kirim ke Gemini/ChatGPT berfungsi penuh.
@@ -179,10 +181,10 @@ Membutuhkan `node` (skrip membaca versi dari `manifest.json`) dan `gh` CLI yang 
 ./scripts/pack.sh --release
 ```
 
-*(Skrip membangun ZIP Chrome lalu memublikasikannya ke GitHub Releases — ZIP hanya untuk Chrome/Chromium. Rilis Firefox terpisah dan tanpa ZIP di GitHub: jalankan `./scripts/pack.sh --firefox` untuk membangun `dist/meet-transcript-firefox-vX.Y.Z.zip` (diperiksa `web-ext lint` dulu), lalu upload sebagai versi baru di [AMO Developer Hub](https://addons.mozilla.org/developers/) — pengguna Firefox mendapat update otomatis dari [halaman add-on](https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/).)*
+*(Skrip membangun ZIP Chrome lalu memublikasikannya ke GitHub Releases — ZIP hanya untuk Chrome/Chromium. Rilis Firefox terpisah dan tanpa ZIP di GitHub: jalankan `./scripts/pack.sh --firefox` untuk membangun `dist/transcripables-firefox-vX.Y.Z.zip` (diperiksa `web-ext lint` dulu), lalu upload sebagai versi baru di [AMO Developer Hub](https://addons.mozilla.org/developers/) — pengguna Firefox mendapat update otomatis dari [halaman add-on](https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/).)*
 
 ---
 
 ## 📄 Lisensi
 
-[MIT](LICENSE) © zenmz
+[MIT](LICENSE) © zenmz. Berdasarkan Meet Transcript karya zenmz.
