@@ -85,7 +85,7 @@
     } else if (rec.recording) {
       mkBtn('Stop rekam', () => send({ type: 'stop-recording' }), box).classList.add('danger');
       mkBtn(rec.muted ? 'Nyalakan mikrofon' : 'Bisukan mikrofon', () => send({ type: 'set-muted', on: !rec.muted }), box);
-      box.append(el('span', 'recording', rec.muted ? '● merekam, mikrofon dibisukan' : '● merekam'));
+      box.append(el('span', 'recording', rec.muted ? 'merekam, mikrofon dibisukan' : 'merekam'));
       box.append(el('div', 'muted', 'Mute di aplikasi meeting tidak menghentikan rekaman mikrofon. Pakai tombol Bisukan di sini.'));
     } else {
       if (!consentShown) box.append(consentNotice());

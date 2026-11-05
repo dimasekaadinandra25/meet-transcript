@@ -163,7 +163,7 @@ Ekstensi ini dirancang dengan pendekatan *privacy-first*:
 * **Penyimpanan Lokal:** API Key Anda disimpan secara eksklusif di `chrome.storage.local` perangkat Anda dan tidak pernah dikomit ke repositori. Tidak ada telemetri maupun analitik di dalam ekstensi ini.
 * **Whisper Lokal:** audio dikirim ke URL yang **Anda sendiri** isi di *STT Base URL* (default `http://localhost:8080/v1`). Ekstensi **tidak** memaksa URL itu benar-benar lokal — pastikan isinya memang server Anda. Bila *STT API key* pernah diisi, nilainya tetap ikut sebagai header `Authorization` walaupun field-nya tersembunyi di mode ini.
 * **Transparansi Endpoint:** MoM dihasilkan melalui *endpoint* pilihan Anda. Pastikan *endpoint* yang Anda konfigurasikan sesuai dengan kebijakan keamanan data perusahaan atau tim Anda.
-* **Hapus meeting:** Buka rapat di **Riwayat** lalu pilih **Hapus meeting** untuk menghapus transkrip, MoM, dan rekaman tersimpannya secara permanen. Rapat yang masih berjalan tidak bisa dihapus.
+* **Hapus meeting:** Buka rapat di **Riwayat** lalu pilih **Hapus** untuk menghapus transkrip, MoM, dan rekaman tersimpannya secara permanen. Rapat yang masih berjalan tidak bisa dihapus.
 * **Copy Prompt / Tempel ke Gemini / Tempel ke ChatGPT:** ketiganya menyalin **seluruh transkrip** ke clipboard, dan tombol Gemini/ChatGPT menempelkannya ke `gemini.google.com` / `chatgpt.com` tanpa mengirimnya. Setelah Anda menekan kirim, seluruh isi rapat masuk ke akun Google/OpenAI Anda. Jangan gunakan untuk rapat yang isinya tidak boleh keluar.
 * **Fail Backup:** ZIP hasil **Export backup** memuat **API key Anda dalam teks polos** beserta seluruh transkrip. Simpan failnya di tempat yang aman dan jangan dibagikan.
 

@@ -93,9 +93,9 @@ function render() {
     view.append(el('div', 'muted state', rec.saving ? 'Menyimpan rekaman…' : 'Mentranskrip…'));
   } else if (rec.recording) {
     row('Stop rekam', ICON.stop(), () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
-    view.append(el('div', 'recording state', '● Merekam'));
+    view.append(el('div', 'recording state', 'Merekam'));
   } else {
-    const d = mkDropdown(view, 'rec', 'Rekam', { cls: 'inline', caret: '' });
+    const d = mkDropdown(view, 'rec', 'Rekam', { cls: 'inline' });
     d.head.prepend(ICON.rekam());
     const start = (video) => chrome.runtime.sendMessage({ type: 'start-active-tab-recording', video });
     d.item('Audio saja', () => start(false));
@@ -109,7 +109,7 @@ function render() {
     }
     setMic(!micOn);
   });
-  const l = mkDropdown(view, 'bahasa', 'Bahasa caption', { cls: 'inline', caret: '' });
+  const l = mkDropdown(view, 'bahasa', 'Bahasa caption', { cls: 'inline' });
   l.head.prepend(ICON.bahasa());
   for (const [code, label] of BAHASA) {
     l.item(code === captionLang ? label + '  ✓' : label, () => setCaptionLang(code));
@@ -117,7 +117,7 @@ function render() {
   row('Tampilkan detail', ICON.detail(), () => openPanel());
   if (rec.error) view.append(el('div', 'err', rec.error));
   view.append(el('div', 'sep'));
-  const h = mkDropdown(view, 'riwayat', 'Riwayat meet', { cls: 'inline', caret: '' });
+  const h = mkDropdown(view, 'riwayat', 'Riwayat meet', { cls: 'inline' });
   h.head.prepend(ICON.riwayat());
   h.list.append(el('div', 'muted', 'Memuat…'));
   const menu = h.head.parentElement;

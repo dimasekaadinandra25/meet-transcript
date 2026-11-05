@@ -17,7 +17,7 @@
   --on-accent: #ffffff;
   --ok: #0f6b3a;
   --danger: #9b1c14;
-  --danger-tint: rgba(155, 28, 20, .1);
+  --danger-tint: rgba(255, 233, 230, .8);
   --info-tint: rgba(67, 56, 202, .1);
   --blur: blur(18px) saturate(160%);
   --radius: 12px;
@@ -103,7 +103,8 @@ h3 { font-size: 13px; margin: 14px 0 6px; }
 .muted { color: var(--muted); }
 .ok { color: var(--ok); }
 .err { color: var(--danger); }
-.recording { color: var(--danger); font-weight: 600; }
+.recording { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-weight: 600; }
+.recording::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 
 .seg, .item, .mom {
   background: var(--glass);
@@ -124,10 +125,17 @@ h3 { font-size: 13px; margin: 14px 0 6px; }
 #crash { white-space: pre-wrap; word-break: break-word; user-select: text; font-size: 12px; max-height: 40vh; overflow: auto; margin: 0; }
 
 .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.actions > div { flex-basis: 100%; }
 .actions .actions { margin: 0; }
+.actions select { flex: 1 1 120px; width: auto; min-width: 0; margin: 0; }
 
 button, details.menu > summary {
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 6px 10px;
   color: var(--text);
   background: var(--glass);
   border: 1px solid var(--border);
@@ -146,6 +154,16 @@ button.danger:hover { background: var(--danger-tint); opacity: .8; }
 
 details.menu { position: relative; }
 details.menu > summary { list-style: none; }
+details.menu > summary::after {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+}
+details.menu[open] > summary::after { transform: translateY(1px) rotate(225deg); }
 details.menu > summary::-webkit-details-marker { display: none; }
 details.menu > .menu-list {
   position: absolute;
@@ -163,11 +181,12 @@ details.menu > .menu-list {
   box-shadow: var(--shadow), var(--highlight);
   backdrop-filter: var(--blur);
 }
-details.menu > .menu-list > button { border-color: transparent; background: none; box-shadow: none; text-align: left; }
+details.menu > .menu-list > button { justify-content: flex-start; white-space: normal; border-color: transparent; background: none; box-shadow: none; text-align: left; }
 details.menu > .menu-list > button:hover { background: var(--glass-hover); }
 details.menu > .menu-list > .muted { font-size: 12px; padding: 0 6px 2px; }
 
 label { display: block; font-weight: 600; margin-top: 10px; }
+label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 6px; }
 textarea, input, select {
   width: 100%;
   box-sizing: border-box;
@@ -181,7 +200,7 @@ textarea, input, select {
 }
 select option { color: var(--text); background: var(--bg); }
 textarea { min-height: 160px; }
-input[type="checkbox"] { width: auto; margin: 0 6px 0 0; vertical-align: middle; accent-color: var(--accent); }
+input[type="checkbox"] { flex: none; width: auto; margin: 0; accent-color: var(--accent); }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 

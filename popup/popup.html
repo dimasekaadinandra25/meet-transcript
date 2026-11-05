@@ -16,7 +16,7 @@
     .rows { padding: 6px 8px 8px; }
     .rows > button,
     .rows > .menu > summary { display: flex; align-items: center; gap: 8px;
-      width: 100%; box-sizing: border-box; padding: 8px 10px; border-color: transparent; border-radius: var(--radius-small);
+      justify-content: flex-start; width: 100%; box-sizing: border-box; padding: 8px 10px; border-color: transparent; border-radius: var(--radius-small);
       background: none; box-shadow: none; text-align: left; }
     .rows svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--muted);
       stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -25,8 +25,8 @@
     .rows > button:hover,
     .rows > .menu > summary:hover,
     .rows > .menu[open] > summary { background: var(--glass-hover); }
-    .menu.inline > summary::after { content: '›'; color: var(--muted); margin-left: auto; }
-    .menu.inline[open] > summary::after { content: '⌄'; }
+    .rows > .menu.inline > summary::after { margin-left: auto; color: var(--muted); transform: rotate(-45deg); }
+    .rows > .menu.inline[open] > summary::after { transform: translateY(-1px) rotate(45deg); }
     .rows > .menu > .menu-list { position: static; min-width: 0; padding: 0;
       border: 0; border-radius: 0; box-shadow: none; background: none; backdrop-filter: none; }
     .rows > .menu > .menu-list > button { display: block; padding: 8px 10px 8px 34px; border-radius: var(--radius-small);

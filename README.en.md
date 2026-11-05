@@ -165,7 +165,7 @@ This extension is designed to be *privacy-first*:
 * **Local storage:** Your API key is stored only in `chrome.storage.local` on your device and is never committed to the repository. The extension has no telemetry or analytics.
 * **Local Whisper:** Audio is sent to the URL **you** enter in *STT Base URL* (default `http://localhost:8080/v1`). The extension **does not** force that URL to actually be local, so make sure it really is your server. If an *STT API key* was ever entered, it is still sent as the `Authorization` header even though the field is hidden in this mode.
 * **Endpoint transparency:** MoM is generated through the endpoint you choose. Make sure your configured endpoint fits your company's or team's data security policy.
-* **Delete a meeting:** Open it in **Riwayat** and choose **Hapus meeting** to permanently remove its transcript, MoM, and stored recordings. A meeting that is still running cannot be deleted.
+* **Delete a meeting:** Open it in **Riwayat** and choose **Hapus** to permanently remove its transcript, MoM, and stored recordings. A meeting that is still running cannot be deleted.
 * **Copy Prompt / Paste into Gemini / Paste into ChatGPT:** All three copy the **entire transcript** to the clipboard, and the Gemini/ChatGPT buttons paste it into `gemini.google.com` / `chatgpt.com` without sending it. Once you press send, the whole meeting's content goes into your Google/OpenAI account. Do not use them for meetings whose content must not leave.
 * **Backup files:** The ZIP created by **Export backup** contains **your API key in plain text** along with all transcripts. Store the file safely and do not share it.
 
