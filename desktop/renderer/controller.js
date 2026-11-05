@@ -1,5 +1,5 @@
 (() => {
-  const CHUNK_MS = 600000;
+  const CHUNK_MS = 120000;
   const SILENT_PEAK = 0.01;
   const AI_URLS = { gemini: 'https://gemini.google.com/app', chatgpt: 'https://chatgpt.com/' };
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
@@ -10,6 +10,7 @@
     let activeId = null;
     let starting = null;
     let finishing = null;
+    let live = null;
     let writes = Promise.resolve();
     const momInFlight = new Map();
 
@@ -95,24 +96,83 @@
       } finally {
         starting = null;
       }
+      live = { meetingId, baseTime, done: { system: new Map(), mic: new Map() }, run: Promise.resolve(), stopped: false };
       setActive(meetingId);
       broadcast({ error: null });
       readSettings().then(checkStt).catch((e) => console.error(e));
       return { ok: true };
     }
 
-    async function sendChunks(loaded, skip, endpoint, progress) {
+    const isSilent = (peaks, index) => peaks[index] !== undefined && peaks[index] !== null && peaks[index] < SILENT_PEAK;
+
+    const sendToStt = (blob, endpoint) => openai.transcribeAudio({ blob, baseUrl: endpoint.baseUrl,
+      apiKey: endpoint.apiKey, model: endpoint.model, language: endpoint.language });
+
+    function finishedTrack(done) {
+      const indices = [...done.keys()].sort((a, b) => a - b);
+      return { results: indices.map((index) => done.get(index)), indices };
+    }
+
+    async function catchUpLive(session) {
+      const settings = await readSettings();
+      if (settings.liveTranscript === false) return;
+      const endpoint = stt.sttEndpoint(settings);
+      if (!endpoint.baseUrl) return;
+      const [system, mic] = await Promise.all([audioStore.loadSystem(session.baseTime), audioStore.loadMic(session.baseTime)]);
+      const peaks = recorder.currentPeaks()?.mic ?? [];
+      const jobs = [[system, session.done.system, () => false], [mic, session.done.mic, (index) => isSilent(peaks, index)]];
+      let changed = false;
+      for (const [loaded, done, skip] of jobs) {
+        for (const [i, index] of (loaded?.indices ?? []).entries()) {
+          if (done.has(index) || session.stopped) continue;
+          if (skip(index)) {
+            done.set(index, { segments: [] });
+            continue;
+          }
+          try {
+            const result = await sendToStt(loaded.blobs[i], endpoint);
+            if (result.error) throw new Error(result.error);
+            done.set(index, result);
+            changed = true;
+          } catch (e) {
+            if (!session.stopped) broadcast({ error: `Live transcript paused (${e.message}). The recording continues, and missing parts are tried again when you stop.` });
+            if (changed) await saveLive(session, system ?? mic);
+            return;
+          }
+        }
+      }
+      if (changed) await saveLive(session, system ?? mic);
+    }
+
+    async function saveLive(session, source) {
+      const segments = tracks.mergeTracks({ system: finishedTrack(session.done.system), mic: finishedTrack(session.done.mic),
+        chunkMs: source.chunkMs, baseTime: source.baseTime });
+      await updateMeeting(session.meetingId, (meeting) => {
+        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime });
+      });
+    }
+
+    function chunkSaved() {
+      const session = live;
+      if (!session || session.stopped) return;
+      session.run = session.run.then(() => catchUpLive(session)).catch((e) => console.error(e));
+    }
+
+    async function sendChunks(loaded, skip, endpoint, progress, known) {
       if (!loaded) return { results: [], indices: [] };
       const results = [];
       for (let i = 0; i < loaded.blobs.length; i++) {
+        if (known?.has(loaded.indices[i])) {
+          results.push(known.get(loaded.indices[i]));
+          continue;
+        }
         if (skip(loaded.indices[i])) {
           results.push({ segments: [] });
           continue;
         }
         progress();
         try {
-          results.push(await openai.transcribeAudio({ blob: loaded.blobs[i], baseUrl: endpoint.baseUrl,
-            apiKey: endpoint.apiKey, model: endpoint.model, language: endpoint.language }));
+          results.push(await sendToStt(loaded.blobs[i], endpoint));
         } catch (e) {
           results.push({ error: e.message });
         }
@@ -120,19 +180,19 @@
       return { results, indices: loaded.indices };
     }
 
-    async function transcribe(meetingId, recId, replace) {
+    async function transcribe(meetingId, recId, replace, known) {
       const endpoint = stt.sttEndpoint(await readSettings());
       const [system, mic] = await Promise.all([audioStore.loadSystem(recId), audioStore.loadMic(recId)]);
       const source = system ?? mic;
       if (!source) throw new Error('The recording audio is no longer saved.');
       const micPeaks = (await readMeeting(meetingId))?.audioPeaks?.[recId] ?? [];
-      const silent = (index) => micPeaks[index] !== undefined && micPeaks[index] !== null && micPeaks[index] < SILENT_PEAK;
-      const skippedMic = mic ? mic.indices.filter(silent).length : 0;
-      const total = (system?.blobs.length ?? 0) + (mic?.blobs.length ?? 0) - skippedMic;
+      const silent = (index) => isSilent(micPeaks, index);
+      const toSend = (loaded, skip, finished) => (loaded?.indices ?? []).filter((index) => !skip(index) && !finished?.has(index)).length;
+      const total = toSend(system, () => false, known?.system) + toSend(mic, silent, known?.mic);
       let done = 0;
       const progress = () => broadcast({ done: done++, total });
-      const systemTrack = await sendChunks(system, () => false, endpoint, progress);
-      const micTrack = await sendChunks(mic, silent, endpoint, progress);
+      const systemTrack = await sendChunks(system, () => false, endpoint, progress, known?.system);
+      const micTrack = await sendChunks(mic, silent, endpoint, progress, known?.mic);
       if (replace) {
         const blocked = tracks.replaceBlocker({ system: systemTrack, mic: micTrack });
         if (blocked) throw new Error(blocked);
@@ -177,12 +237,16 @@
         return;
       }
       const { meetingId, baseTime } = rec;
+      const session = live;
+      live = null;
+      if (session) session.stopped = true;
       rec = { ...rec, recording: false, transcribing: true };
       broadcast();
       finishing = finishRecording(meetingId, baseTime);
       try {
         await finishing;
-        const error = runStt ? await transcribe(meetingId, baseTime, false) : null;
+        if (runStt) await session?.run;
+        const error = runStt ? await transcribe(meetingId, baseTime, false, session?.done) : null;
         rec = { ...IDLE };
         broadcast({ error });
       } catch (e) {
@@ -288,7 +352,7 @@
       }
     }
 
-    return { handle, recover, warn };
+    return { handle, recover, warn, chunkSaved };
   }
 
   globalThis.createController = createController;

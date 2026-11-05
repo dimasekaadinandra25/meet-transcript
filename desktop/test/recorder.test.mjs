@@ -347,3 +347,19 @@ test('level suara dikirim tiap pemeriksaan', async () => {
   assert.equal(levels.at(-1).system, 0.25);
   assert.equal(levels.at(-1).mic, 0.25);
 });
+
+test('recorder memberi tahu setelah potongan tersimpan', async () => {
+  let saved = 0;
+  rec = createRecorder({ ...deps, onChunkSaved: () => { saved++; } });
+  await rec.start(opts);
+  fake.fire(600000);
+  await flush();
+  assert.equal(saved, 2);
+});
+
+test('puncak suara yang berjalan bisa dibaca', async () => {
+  await rec.start(opts);
+  fake.level = 0.3;
+  fake.fire(500);
+  assert.ok(Math.abs(rec.currentPeaks().mic[0] - 0.3) < 1e-6);
+});

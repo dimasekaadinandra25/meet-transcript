@@ -105,6 +105,8 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 
 * Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
 * Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute. It resets to on for each new recording.
+* The transcript fills in about every 2 minutes during the meeting, and finishes when you stop. Turn this off in Settings to send audio only after the meeting.
+* Each recording is also saved to `Documents/Transcripables`. Deleting a meeting in the app does not delete that copy. Turn this off in Settings.
 * Closing the window while recording or transcribing keeps working in the system tray. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
 * Everything on your computer's speakers gets recorded, including notifications and other apps.
 * Without a headset, other people's voices can leak into your microphone and appear twice, labeled **You**.
@@ -112,7 +114,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 
 ### Limits
 
-* If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 10 minutes.
+* If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes.
 * API keys are encrypted on your computer, but **Export backup** stores them in plain text.
 
 ---

@@ -60,6 +60,7 @@ beforeEach(() => {
     },
     async stop() { this.stops++; return { peaks: this.peaks }; },
     setMuted(on) { this.muted = on; },
+    currentPeaks() { return this.peaks; },
     isMuted() { return this.muted; },
   };
   fakeOpenAI = {
@@ -132,8 +133,8 @@ test('rekaman membuat entri desktop-<baseTime> dengan judul tanggal', async () =
   assert.match(m.title, /\d/);
   assert.equal(m.endedAt, null);
   assert.deepEqual(data.meetings, [id]);
-  assert.deepEqual(fakeStore.began[0], { meetingId: id, chunkMs: 600000, baseTime: NOW });
-  assert.equal(fakeRecorder.options.chunkMs, 600000);
+  assert.deepEqual(fakeStore.began[0], { meetingId: id, chunkMs: 120000, baseTime: NOW });
+  assert.equal(fakeRecorder.options.chunkMs, 120000);
   assert.equal(fakeRecorder.options.mic, true);
 });
 
@@ -461,4 +462,74 @@ test('keluar saat merekam tetap menyimpan ke folder', async () => {
   await ctl.handle(START);
   await ctl.handle({ type: 'stop-recording', transcribe: false });
   assert.equal(saved.length, 2);
+});
+
+test('potongan yang tersimpan saat merekam langsung masuk ke transkrip', async () => {
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  assert.equal(fakeOpenAI.transcribeCalls.length, 2);
+  assert.equal(meeting().segments.length, 2);
+  assert.ok(String(meeting().segments[0].id).startsWith(`audio:${NOW}:`));
+});
+
+test('Stop tidak mengirim ulang potongan yang sudah ditranskrip', async () => {
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  await ctl.handle(STOP);
+  assert.equal(fakeOpenAI.transcribeCalls.length, 2);
+  assert.equal(meeting().segments.length, 2);
+  assert.equal(recStates().at(-1).error, null);
+});
+
+test('transkrip saat merekam bisa dimatikan', async () => {
+  data.settings.liveTranscript = false;
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  assert.equal(fakeOpenAI.transcribeCalls.length, 0);
+  await ctl.handle(STOP);
+  assert.equal(fakeOpenAI.transcribeCalls.length, 2);
+});
+
+test('potongan mikrofon yang sunyi tidak dikirim saat merekam', async () => {
+  fakeRecorder.peaks = { system: [0.5], mic: [0.001] };
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  assert.deepEqual(fakeOpenAI.transcribeCalls.map((c) => c.blob.track), ['system']);
+});
+
+test('STT mati saat merekam: diberi tahu, dan Stop mencoba lagi', async () => {
+  fakeOpenAI.fail = new Error('STT mati');
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  assert.match(recStates().at(-1).error, /paused/);
+  assert.equal(recStates().at(-1).recording, true);
+  fakeOpenAI.fail = null;
+  await ctl.handle(STOP);
+  assert.deepEqual(meeting().segments.map((s) => s.text).sort(), ['teks mic', 'teks system']);
+});
+
+test('keluar saat merekam tidak menunggu transkrip berjalan', async () => {
+  await ctl.handle(START);
+  let answer;
+  fakeOpenAI.transcribeAudio = () => new Promise((resolve) => { answer = resolve; });
+  ctl.chunkSaved();
+  await settle();
+  await ctl.handle({ type: 'stop-recording', transcribe: false });
+  assert.equal(recStates().at(-1).transcribing, false);
+  answer({ segments: [] });
+  await settle();
+});
+
+test('potongan dari rekaman yang sudah berhenti diabaikan', async () => {
+  await ctl.handle(START);
+  await ctl.handle(STOP);
+  const calls = fakeOpenAI.transcribeCalls.length;
+  ctl.chunkSaved();
+  await settle();
+  assert.equal(fakeOpenAI.transcribeCalls.length, calls);
 });

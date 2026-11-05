@@ -48,7 +48,7 @@
       const data = [];
       const recorder = new MediaRecorder(track.stream, { mimeType: audioMime });
       recorder.ondataavailable = (e) => { if (e.data.size) data.push(e.data); };
-      recorder.onstop = () => keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId),
+      recorder.onstop = () => keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId).then(() => deps.onChunkSaved?.()),
         `A ${track.name} track part could not be saved: `);
       recorder.start();
       track.recorder = recorder;
@@ -216,7 +216,7 @@
       if (session.gain) session.gain.gain.value = on ? 0 : 1;
     }
 
-    return { start, stop, setMuted, isMuted: () => muted };
+    return { start, stop, setMuted, isMuted: () => muted, currentPeaks: () => session?.peaks };
   }
 
   globalThis.createRecorder = createRecorder;

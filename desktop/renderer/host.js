@@ -15,6 +15,7 @@
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
     warn: (message) => controller.warn(message),
     onLevels: (levels) => showLevels(levels),
+    onChunkSaved: () => controller.chunkSaved(),
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (id) => clearInterval(id),
   });
@@ -152,6 +153,7 @@
       el('h3', null, 'Recordings'),
       settingToggle('autoSave', 'Save each recording to Documents/Transcripables', settings.autoSave !== false),
       open,
+      settingToggle('liveTranscript', 'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)', settings.liveTranscript !== false),
     ];
   }
 
@@ -181,7 +183,7 @@
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
     aiLabel: (name) => `Copy & open ${name}`,
     emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
-    emptySegmentsText: 'The transcript appears after you stop recording.',
+    emptySegmentsText: 'The transcript appears about every 2 minutes, and finishes when you stop.',
     deleteNote: ' Copies in your Documents/Transcripables folder stay.',
     backupWarning: 'The backup file holds your API key in plain text. Keep it somewhere safe and do not share it.',
   };

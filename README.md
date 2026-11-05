@@ -103,6 +103,8 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 
 * Setiap tombol juga punya shortcut `Alt` yang berfungsi saat jendela aktif. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol.
 * Mute di Zoom atau Teams **tidak** menghentikan rekaman mikrofon aplikasi ini. Pakai mute milik aplikasi. Mikrofon kembali menyala di setiap rekaman baru.
+* Transkrip terisi sekitar tiap 2 menit selama meeting, dan selesai saat Stop. Matikan di Settings agar audio hanya dikirim setelah meeting.
+* Setiap rekaman juga disimpan ke `Documents/Transcripables`. Menghapus meeting di aplikasi tidak menghapus salinan itu. Matikan di Settings.
 * Menutup jendela saat merekam atau mentranskrip membuat proses tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan statusnya. Peringatan, misalnya mikrofon terputus, memunculkan jendela lagi.
 * Semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain.
 * Tanpa headset, suara peserta bisa bocor ke mikrofon dan muncul dobel berlabel **You**.
@@ -110,7 +112,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 
 ### Keterbatasan
 
-* Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 10 menit terakhir.
+* Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir.
 * API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
 
 ---
