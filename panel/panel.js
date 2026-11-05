@@ -83,7 +83,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (isShowing(msg.id)) render();
   } else if (msg.type === 'ai-inject') {
     if (msg.ok || !msg.id) return;
-    momErrors.set(msg.id, `Kirim ke AI gagal: ${msg.error} Prompt sudah ada di clipboard — paste manual di tab AI.`);
+    momErrors.set(msg.id, `Tempel ke AI gagal: ${msg.error} Prompt sudah ada di clipboard — paste manual di tab AI.`);
     if (isShowing(msg.id)) render();
   } else if (msg.type === 'rec-state') {
     const wasActive = recState.recording || recState.transcribing;
@@ -200,7 +200,7 @@ async function renderMeeting(id, live, epoch) {
   if (!meeting) {
     view.append(el('p', 'muted',
       !live ? 'Meeting tidak ditemukan.'
-        : Host?.emptyLiveText ?? 'Tidak ada meeting Meet aktif. Tombol Rekam di atas tetap jalan untuk tab aktif (Discord dsb.) — hasilnya masuk ke Riwayat.'));
+        : Host?.emptyLiveText ?? 'Tidak ada meeting Meet aktif. Rekaman dari tab lain (Discord dsb.) masuk ke Riwayat.'));
     return;
   }
   if (!live) {
@@ -245,7 +245,7 @@ async function renderMeeting(id, live, epoch) {
   });
   if (meeting.segments.length) {
     for (const [name, target] of [['Gemini', 'gemini'], ['ChatGPT', 'chatgpt']]) {
-      mom.item(Host ? Host.aiLabel(name) : 'Kirim ke ' + name, async () => {
+      mom.item(Host ? Host.aiLabel(name) : 'Tempel ke ' + name, async () => {
         mom.head.textContent = `Membuka ${name}…`;
         const prompt = promptText(meeting);
         await navigator.clipboard.writeText(prompt).catch(() => {});
@@ -323,6 +323,16 @@ async function renderMeeting(id, live, epoch) {
         }
       }
     }
+  }
+  if (!live) {
+    btn('Hapus meeting', async () => {
+      if (!confirm(`Hapus "${meeting.title}" beserta rekamannya? Tindakan ini tidak bisa dibatalkan.`)) return;
+      momErrors.delete(meeting.id);
+      const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
+      if (res?.ok) viewingId = null;
+      else momErrors.set(meeting.id, res?.error ?? 'Gagal menghubungi service worker.');
+      render();
+    });
   }
   view.append(actions);
   const list = el('div');

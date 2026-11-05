@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 await import('../lib/audiostore.js');
-const { groupRecordings, pruneTargets, KEEP_RECORDINGS } = globalThis.MeetAudioStore;
+const { groupRecordings, pruneTargets, keysOfMeeting, KEEP_RECORDINGS } = globalThis.MeetAudioStore;
 
 const metaOf = (over = {}) => ({ meetingId: 'abc-defg-hij', chunkMs: 600000,
   baseTime: 1000, count: 0, videoCount: 0, ...over });
@@ -145,4 +145,17 @@ test('API rekaman desktop tersedia', () => {
   for (const name of ['appendSystemChunk', 'appendMicChunk', 'appendMixPart', 'loadSystem', 'loadMic', 'loadMix']) {
     assert.equal(typeof globalThis.MeetAudioStore[name], 'function', name);
   }
+});
+
+test('keysOfMeeting mengambil semua bagian rekaman milik meeting itu saja', () => {
+  const metas = new Map([
+    ['meta:1000', metaOf({ baseTime: 1000, meetingId: 'a' })],
+    ['meta:2000', metaOf({ baseTime: 2000, meetingId: 'b' })],
+    ['meta:3000', metaOf({ baseTime: 3000, meetingId: 'a' })],
+  ]);
+  const recs = groupRecordings(['meta:1000', 'chunk:1000:0', 'vchunk:1000:0', 'meta:2000', 'chunk:2000:0',
+    'meta:3000', 'schunk:3000:0', 'mchunk:3000:0', 'xpart:3000:0'], metas);
+  assert.deepEqual(keysOfMeeting(recs, 'a').sort(), ['chunk:1000:0', 'meta:1000', 'meta:3000',
+    'mchunk:3000:0', 'schunk:3000:0', 'vchunk:1000:0', 'xpart:3000:0'].sort());
+  assert.deepEqual(keysOfMeeting(recs, 'tidak-ada'), []);
 });

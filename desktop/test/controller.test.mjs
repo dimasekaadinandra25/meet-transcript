@@ -80,6 +80,10 @@ beforeEach(() => {
     removed: [],
     began: [],
     async beginAudio(meta) { this.began.push(meta); },
+    async removeRecordings(meetingId) {
+      if (this.failRemove) throw new Error(this.failRemove);
+      this.removed.push(meetingId);
+    },
     async listRecordings() { return this.began.map((m) => ({ ...m, recId: m.baseTime })); },
     loadSystem: loaded('system'),
     loadMic: loaded('mic'),
@@ -93,6 +97,7 @@ beforeEach(() => {
         if (failWrites) throw new Error('disk penuh');
         Object.assign(data, structuredClone(values));
       },
+      remove: async (key) => { delete data[key]; },
     },
     merge: globalThis.MeetMerge,
     stt: globalThis.MeetStt,
@@ -339,4 +344,33 @@ test('peringatan memberi tahu main process', async () => {
   ctl.warn('Mikrofon terputus.');
   assert.equal(warned, 1);
   assert.equal(recStates().at(-1).error, 'Mikrofon terputus.');
+});
+
+const DELETE = { type: 'delete-meeting', id };
+
+test('hapus meeting menghapus transkrip, daftar, dan rekamannya', async () => {
+  await runRecording();
+  const res = await ctl.handle(DELETE);
+  assert.deepEqual(res, { ok: true });
+  assert.equal(meeting(), undefined);
+  assert.deepEqual(data.meetings, []);
+  assert.deepEqual(fakeStore.removed, [id]);
+  assert.equal((await ctl.handle({ type: 'get-active' })).id, null);
+  assert.ok(messages.some((m) => m.type === 'meeting-updated' && m.id === id));
+});
+
+test('hapus ditolak saat meeting itu sedang direkam', async () => {
+  await ctl.handle(START);
+  const res = await ctl.handle(DELETE);
+  assert.equal(res.ok, false);
+  assert.ok(meeting());
+  assert.deepEqual(fakeStore.removed, []);
+});
+
+test('rekaman gagal dihapus: transkrip tetap ada dan error dilaporkan', async () => {
+  await runRecording();
+  fakeStore.failRemove = 'db rusak';
+  assert.deepEqual(await ctl.handle(DELETE), { ok: false, error: 'db rusak' });
+  assert.ok(meeting());
+  assert.deepEqual(data.meetings, [id]);
 });

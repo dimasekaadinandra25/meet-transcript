@@ -6,8 +6,11 @@ import vm from 'node:vm';
 const SRC = readFileSync(new URL('../background/service-worker.js', import.meta.url), 'utf8');
 const SESSION = readFileSync(new URL('../content/session.js', import.meta.url), 'utf8');
 
-function loadSw({ offscreen, recordings = [], store = {} }) {
+function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {} }) {
   const sent = [];
+  const scripts = [];
+  const tabUpdated = [];
+  const removedAudio = [];
   let badge = null;
   const chrome = {
     action: {
@@ -39,12 +42,27 @@ function loadSw({ offscreen, recordings = [], store = {} }) {
       remove: async (k) => { for (const x of [].concat(k)) delete store[x]; },
     } },
     offscreen: { closeDocument: async () => {} },
+    tabs: {
+      create: async () => ({ id: 7 }),
+      onUpdated: { addListener: (f) => tabUpdated.push(f), removeListener() {} },
+      onRemoved: { addListener() {}, removeListener() {} },
+    },
+    scripting: { executeScript: async (options) => { scripts.push(options); } },
   };
   const handlers = [];
   const connects = [];
-  const ctx = vm.createContext({ chrome, console, URL });
+  const unrefTimeout = (f, ms) => {
+    const timer = setTimeout(f, ms);
+    timer.unref();
+    return timer;
+  };
+  const ctx = vm.createContext({ chrome, console, URL, setTimeout: unrefTimeout, clearTimeout });
   vm.runInContext('globalThis.MeetAudioStore = {}; globalThis.MeetStt = {};', ctx);
   ctx.MeetAudioStore.listRecordings = async () => recordings;
+  ctx.MeetAudioStore.removeRecordings = async (id) => {
+    removedAudio.push(id);
+    await removeRecordings(id);
+  };
   ctx.MeetStt.sttEndpoint = () => ({ mode: 'api', baseUrl: 'http://localhost:1/v1',
     apiKey: '', model: 'whisper-1', language: '' });
   vm.runInContext(SESSION, ctx);
@@ -60,7 +78,7 @@ function loadSw({ offscreen, recordings = [], store = {} }) {
     for (const f of connects) f(port);
     return { send: (m) => port.msgFns.forEach((f) => f(m)), disconnect: () => port.discFns.forEach((f) => f()) };
   };
-  return { ask, sent, store, connect, badge: () => badge, meetingIdFromUrl: ctx.meetingIdFromUrl,
+  return { ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, meetingIdFromUrl: ctx.meetingIdFromUrl,
     autoTranscribe: ctx.autoTranscribe };
 }
 
@@ -311,4 +329,76 @@ test('Slack: halaman tanpa channel ditolak', () => {
   assert.equal(idOf('https://app.slack.com/client/T019QHUBYQ3/unreads'), null);
   assert.equal(idOf('https://app.slack.com/client/E030G10V24F/dms'), null);
   assert.equal(idOf('https://slack.com/huddle/T019QHUBYQ3/C034CBLMQ9G'), null);
+});
+
+test('Tempel ke AI hanya menempel, tombol kirim tidak ditekan', async () => {
+  const sw = loadSw({ offscreen: null });
+  let clicks = 0;
+  const reports = [];
+  const editor = { tagName: 'DIV', lines: [], focus() {}, replaceChildren() { this.lines = []; },
+    append(p) { this.lines.push(p.textContent); }, dispatchEvent() {} };
+  const sendButton = { disabled: false, click() { clicks++; } };
+  const page = vm.createContext({
+    window: {},
+    InputEvent: class { constructor(type) { this.type = type; } },
+    document: { querySelector: (selector) => (selector.includes('button') ? sendButton : editor), createElement: () => ({}) },
+    chrome: { runtime: { sendMessage: async (m) => { reports.push(m); } } },
+    Date,
+    setInterval: (f) => setInterval(f, 1),
+    clearInterval,
+    setTimeout: (f) => setTimeout(f, 1),
+  });
+  await sw.ask({ type: 'send-to-ai', target: 'chatgpt', text: 'prompt\nkedua', id: 'm' });
+  await flush();
+  for (const f of sw.tabUpdated) f(7, { status: 'complete' }, { url: 'https://chatgpt.com/' });
+  await flush();
+  const { func, args } = sw.scripts[0];
+  vm.runInContext(`(${func})`, page)(...args);
+  await new Promise((r) => setTimeout(r, 60));
+  assert.deepEqual(editor.lines, ['prompt', 'kedua']);
+  assert.equal(clicks, 0);
+  assert.equal(reports.at(-1).ok, true);
+});
+
+const twoMeetings = () => ({
+  meetings: ['a', 'b'],
+  'meeting:a': { id: 'a', title: 'A', segments: [] },
+  'meeting:b': { id: 'b', title: 'B', segments: [] },
+});
+
+test('hapus meeting menghapus transkrip, daftar, dan rekamannya', async () => {
+  const sw = loadSw({ offscreen: null, store: twoMeetings() });
+  const res = await sw.ask({ type: 'delete-meeting', id: 'a' });
+  assert.equal(res.ok, true);
+  assert.equal(sw.store['meeting:a'], undefined);
+  assert.deepEqual(sw.store.meetings, ['b']);
+  assert.ok(sw.store['meeting:b']);
+  assert.deepEqual(sw.removedAudio, ['a']);
+  assert.ok(sw.sent.some((m) => m.type === 'meeting-updated' && m.id === 'a'));
+});
+
+test('hapus ditolak saat meeting itu sedang direkam', async () => {
+  const sw = loadSw({ store: twoMeetings(), offscreen: { recording: true, transcribing: false, meetingId: 'a', tabId: 1, autoStt: false } });
+  await sw.ask({ type: 'get-active' });
+  const res = await sw.ask({ type: 'delete-meeting', id: 'a' });
+  assert.equal(res.ok, false);
+  assert.ok(sw.store['meeting:a']);
+  assert.deepEqual(sw.removedAudio, []);
+});
+
+test('hapus ditolak saat meeting itu sedang berlangsung di Meet', async () => {
+  const sw = loadSw({ offscreen: null, store: twoMeetings() });
+  sw.connect(1).send({ type: 'status', meetingId: 'a', inCall: true, captionsOn: true });
+  const res = await sw.ask({ type: 'delete-meeting', id: 'a' });
+  assert.equal(res.ok, false);
+  assert.ok(sw.store['meeting:a']);
+});
+
+test('rekaman gagal dihapus: transkrip tetap ada dan error dilaporkan', async () => {
+  const sw = loadSw({ offscreen: null, store: twoMeetings(), removeRecordings: async () => { throw new Error('db rusak'); } });
+  const res = await sw.ask({ type: 'delete-meeting', id: 'a' });
+  assert.equal(res.ok, false);
+  assert.equal(res.error, 'db rusak');
+  assert.ok(sw.store['meeting:a']);
+  assert.deepEqual(sw.store.meetings, ['a', 'b']);
 });

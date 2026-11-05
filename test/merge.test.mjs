@@ -83,6 +83,31 @@ test('replaceAudioSegments mengurutkan gabungan caption+audio per waktu', () => 
   assert.deepEqual(out.filter((s) => s.id.startsWith('audio:')).map((s) => s.id), ['audio:7:0', 'audio:7:1']);
 });
 
+test('baris audio yang mengulang caption terdekat tidak ditambahkan', () => {
+  const caption = [{ id: 'cap-1', speaker: 'Ani', text: 'Halo semuanya, mari kita mulai', t: 10000 }];
+  const out = replaceAudioSegments(caption, [audio(12000, 'halo semuanya mari kita mulai')], { baseTime: 7 });
+  assert.deepEqual(out.map((s) => s.id), ['cap-1']);
+  assert.equal(out[0].speaker, 'Ani');
+});
+
+test('baris audio yang isinya berbeda tetap ditambahkan', () => {
+  const caption = [{ id: 'cap-1', speaker: 'Ani', text: 'Halo semuanya, mari kita mulai', t: 10000 }];
+  const out = replaceAudioSegments(caption, [audio(12000, 'anggaran bulan depan naik sepuluh persen')], { baseTime: 7 });
+  assert.deepEqual(out.map((s) => s.id), ['cap-1', 'audio:7:0']);
+});
+
+test('kata yang sama jauh dari caption bukan duplikat', () => {
+  const caption = [{ id: 'cap-1', speaker: 'Ani', text: 'kita lanjut besok', t: 1000 }];
+  const out = replaceAudioSegments(caption, [audio(120000, 'kita lanjut besok')], { baseTime: 7 });
+  assert.equal(out.length, 2);
+});
+
+test('rekaman lain tidak dihitung sebagai caption', () => {
+  const first = replaceAudioSegments([], [audio(1000, 'kita lanjut besok')], { baseTime: 7 });
+  const out = replaceAudioSegments(first, [audio(2000, 'kita lanjut besok')], { baseTime: 8 });
+  assert.equal(out.length, 2);
+});
+
 test('replaceAudioSegments dengan hasil kosong TIDAK menghapus transkrip lama', () => {
   const opt = { baseTime: 100, replace: true };
   const first = replaceAudioSegments([{ id: 'cap-1', text: 'x', speaker: 'Ani', t: 0 }],

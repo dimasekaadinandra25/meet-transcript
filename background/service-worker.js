@@ -423,6 +423,19 @@ const enqueueWrite = (fn) => {
   return writeChain;
 };
 
+async function removeMeeting(id) {
+  if (rec.meetingId === id || active.id === id) throw new Error('Meeting masih berjalan. Hentikan dulu sebelum menghapus.');
+  await globalThis.MeetAudioStore.removeRecordings(id);
+  const { meetings = [] } = await chrome.storage.local.get('meetings');
+  await chrome.storage.local.set({ meetings: meetings.filter((m) => m !== id) });
+  await chrome.storage.local.remove(meetingKey(id));
+  notifyPanel({ type: 'meeting-updated', id });
+}
+
+const deleteMeeting = (id) => new Promise((resolve, reject) => {
+  enqueueWrite(() => removeMeeting(id).then(resolve, reject));
+});
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'captions') return;
   let meetingId = null;
@@ -459,23 +472,20 @@ const AI_TARGETS = {
   gemini: {
     url: 'https://gemini.google.com/app', origin: 'https://gemini.google.com/',
     editor: 'div.ql-editor',
-    send: 'button[aria-label*="Send" i], button[aria-label*="Kirim" i], button.send-button',
   },
   chatgpt: {
     url: 'https://chatgpt.com/', origin: 'https://chatgpt.com/',
     editor: '#prompt-textarea, textarea[name="prompt"], div.ProseMirror[contenteditable="true"]',
-    send: 'button[data-testid="send-button"], button[data-composer-submit], '
-      + 'button[aria-label*="Send" i], button[aria-label*="Kirim" i]',
   },
 };
 
-function injectPrompt(text, sel) {
+function injectPrompt(text, editorSelector) {
   if (window.__transcripablesPrompt) return;
   window.__transcripablesPrompt = true;
   const report = (ok, error) => chrome.runtime.sendMessage({ type: 'ai-inject', ok, error }).catch(() => {});
   const deadline = Date.now() + 60000;
   const timer = setInterval(() => {
-    const editor = document.querySelector(sel.editor);
+    const editor = document.querySelector(editorSelector);
     if (!editor) {
       if (Date.now() > deadline) { clearInterval(timer); report(false, 'Editor tidak muncul dalam 60 detik.'); }
       return;
@@ -494,17 +504,7 @@ function injectPrompt(text, sel) {
       }
     }
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    setTimeout(() => {
-      const sendDeadline = Date.now() + 5000;
-      const sendTimer = setInterval(() => {
-        const send = document.querySelector(sel.send);
-        if (send && !send.disabled) { clearInterval(sendTimer); send.click(); report(true); }
-        else if (Date.now() > sendDeadline) {
-          clearInterval(sendTimer);
-          report(false, 'Prompt tertempel tapi tombol kirim tidak ditemukan — tekan Enter manual.');
-        }
-      }, 250);
-    }, 500);
+    report(true);
   }, 500);
 }
 
@@ -530,7 +530,7 @@ function sendToAi(text, target, meetingId) {
       if (id !== tab.id || info.status !== 'complete') return;
       if (!t.url?.startsWith(ai.origin)) return;
       chrome.scripting.executeScript({
-        target: { tabId: tab.id }, func: injectPrompt, args: [text, { editor: ai.editor, send: ai.send }],
+        target: { tabId: tab.id }, func: injectPrompt, args: [text, ai.editor],
       }).catch((e) => finish(false, e.message));
     };
     function gone(id) { if (id === tab.id) done(); }
@@ -566,6 +566,7 @@ const HANDLERS = {
   },
   'generate-mom': (msg, sender, sendResponse) =>
     reply(generateMomOnce(msg.id).then((mom) => ({ mom })), sendResponse),
+  'delete-meeting': (msg, sender, sendResponse) => reply(deleteMeeting(msg.id), sendResponse),
   'stop-recording': () => { stopRecording(); },
   'start-active-tab-recording': (msg) => {
     chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {

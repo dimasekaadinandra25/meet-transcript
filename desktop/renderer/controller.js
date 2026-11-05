@@ -198,6 +198,23 @@
       return momInFlight.get(id);
     }
 
+    async function deleteMeeting({ id }) {
+      if (rec.meetingId === id) return { ok: false, error: 'Meeting masih berjalan. Hentikan dulu sebelum menghapus.' };
+      try {
+        await audioStore.removeRecordings(id);
+        await enqueue(async () => {
+          const { meetings = [] } = await storage.get('meetings');
+          await storage.set({ meetings: meetings.filter((m) => m !== id) });
+          await storage.remove(meetingKey(id));
+        });
+        if (activeId === id) setActive(null);
+        notify({ type: 'meeting-updated', id });
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+
     const HANDLERS = {
       'get-active': () => ({ id: activeId, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0,
         rec: { ...rec, autoStt: true, muted: recorder.isMuted() }, panelTab: null, panelMeetingId: null }),
@@ -205,6 +222,7 @@
       'stop-recording': stopRecording,
       'regenerate-transcript': regenerate,
       'generate-mom': ({ id }) => generateMomOnce(id),
+      'delete-meeting': deleteMeeting,
       'send-to-ai': ({ target }) => {
         if (Object.hasOwn(AI_URLS, target)) openExternal(AI_URLS[target]);
       },
