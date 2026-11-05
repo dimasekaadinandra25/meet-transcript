@@ -9,11 +9,60 @@
   "scripts": {
     "start": "node scripts/start.js",
     "test": "node --test test/",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dist": "electron-builder --win --publish never",
+    "dist:dir": "electron-builder --win dir --publish never"
   },
   "devDependencies": {
     "@types/node": "20.19.43",
     "electron": "45.2.3",
+    "electron-builder": "26.18.0",
     "typescript": "7.0.2"
+  },
+  "author": "Transcripables",
+  "build": {
+    "appId": "com.transcripables.desktop",
+    "productName": "Transcripables",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**",
+      "preload.js",
+      "renderer/**",
+      "assets/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../lib",
+        "to": "lib"
+      },
+      {
+        "from": "../panel",
+        "to": "panel"
+      },
+      {
+        "from": "../icons",
+        "to": "icons"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png",
+      "artifactName": "Transcripables-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "dimasekaadinandra25",
+        "repo": "meet-transcript"
+      }
+    ]
   }
 }

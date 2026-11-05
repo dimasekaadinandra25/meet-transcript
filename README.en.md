@@ -82,6 +82,40 @@ Install directly from Mozilla's official Add-ons site: **[Transcripables on Fire
 
 ---
 
+## 🖥️ Desktop App (Windows)
+
+The desktop app records your computer's audio and your microphone, so it works with any meeting app that plays through your speakers or headset, including Zoom, Teams, Slack, Webex, Discord, and WhatsApp desktop. It produces a transcript labeled **You** and **Others**, MoM, and one recording file per meeting. It has no speaker names beyond those two labels. macOS support comes later.
+
+### Install
+
+1. Run `Transcripables-Setup-X.Y.Z.exe`.
+2. Windows SmartScreen warns about the unsigned installer. Choose **More info**, then **Run anyway**.
+3. Open **Settings** and fill in your STT and LLM endpoints.
+
+To build the installer yourself: `npm --prefix desktop install`, then `npm --prefix desktop run dist`. It is saved in `desktop/dist/`.
+
+### Use
+
+| Action | Control | Shortcut |
+| --- | --- | --- |
+| Record audio | **Rekam audio** | `Alt+Shift+A` |
+| Record audio + video | **Rekam audio + video** | `Alt+Shift+V` |
+| Stop | **Stop rekam** | `Alt+Shift+S` |
+| Mute or unmute your microphone | **Bisukan mikrofon** | `Alt+Shift+M` |
+
+* Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute.
+* Closing the window while recording keeps recording in the system tray. The tray icon and window title show when it is recording.
+* Everything on your computer's speakers gets recorded, including notifications and other apps.
+* Without a headset, other people's voices can leak into your microphone and appear twice, labeled **You**.
+* Ask meeting participants for permission before recording.
+
+### Limits
+
+* If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 10 minutes.
+* API keys are encrypted on your computer, but **Export backup** stores them in plain text.
+
+---
+
 ## 📖 Quick Start
 
 1. **Start a meeting:** Join Google Meet. The extension tries to turn on Closed Captions (CC) automatically. Captions are **not shown on screen** (hidden by default), so check the **Live** tab in the panel to confirm the transcript is arriving. If it is empty, look at the CC button in Meet's toolbar: a highlighted icon means it is on; if not, click it once.

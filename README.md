@@ -80,6 +80,40 @@ Pasang langsung dari Add-ons resmi Mozilla: **[Transcripables di Firefox Add-ons
 
 ---
 
+## 🖥️ Aplikasi Desktop (Windows)
+
+Aplikasi desktop merekam audio komputer dan mikrofon, jadi berfungsi untuk aplikasi meeting apa pun yang suaranya keluar lewat speaker atau headset, termasuk Zoom, Teams, Slack, Webex, Discord, dan WhatsApp desktop. Hasilnya: transkrip berlabel **You** dan **Others**, MoM, dan satu file rekaman per meeting. Tidak ada nama pembicara selain dua label itu. Dukungan macOS menyusul.
+
+### Instalasi
+
+1. Jalankan `Transcripables-Setup-X.Y.Z.exe`.
+2. Windows SmartScreen memperingatkan installer yang belum ditandatangani. Pilih **More info**, lalu **Run anyway**.
+3. Buka **Settings** dan isi endpoint STT serta LLM.
+
+Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --prefix desktop run dist`. Hasilnya ada di `desktop/dist/`.
+
+### Penggunaan
+
+| Aksi | Tombol | Shortcut |
+| --- | --- | --- |
+| Rekam audio | **Rekam audio** | `Alt+Shift+A` |
+| Rekam audio + video | **Rekam audio + video** | `Alt+Shift+V` |
+| Stop | **Stop rekam** | `Alt+Shift+S` |
+| Bisukan atau nyalakan mikrofon | **Bisukan mikrofon** | `Alt+Shift+M` |
+
+* Mute di Zoom atau Teams **tidak** menghentikan rekaman mikrofon aplikasi ini. Pakai mute milik aplikasi.
+* Menutup jendela saat merekam membuat rekaman tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan status merekam.
+* Semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain.
+* Tanpa headset, suara peserta bisa bocor ke mikrofon dan muncul dobel berlabel **You**.
+* Minta izin peserta meeting sebelum merekam.
+
+### Keterbatasan
+
+* Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 10 menit terakhir.
+* API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
+
+---
+
 ## 📖 Penggunaan Dasar (Quick Start)
 
 1. **Mulai Rapat:** Bergabunglah ke Google Meet. Ekstensi akan mencoba mengaktifkan *Closed Captions* (CC) secara otomatis. Caption **tidak tampil di layar** (disembunyikan bawaan) — cek *tab* **Live** di panel untuk memastikan transkrip masuk. Jika kosong, lihat tombol CC di *toolbar* Meet: ikon tersorot berarti aktif; jika tidak, klik sekali.
