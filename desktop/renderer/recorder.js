@@ -125,6 +125,7 @@
       s.display?.getTracks().forEach((t) => t.stop());
       s.micStream?.getTracks().forEach((t) => t.stop());
       await s.ctx?.close().catch(() => {});
+      muted = false;
     }
 
     async function start(options) {
@@ -165,8 +166,9 @@
     }
 
     function setMuted(on) {
+      if (!session) return;
       muted = on;
-      if (session?.gain) session.gain.gain.value = on ? 0 : 1;
+      if (session.gain) session.gain.gain.value = on ? 0 : 1;
     }
 
     return { start, stop, setMuted, isMuted: () => muted };

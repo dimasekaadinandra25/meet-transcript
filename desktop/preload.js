@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   openExternal: (url) => ipcRenderer.invoke('shell:open', url),
   recState: (state) => ipcRenderer.invoke('rec:state', state),
+  revealWindow: () => ipcRenderer.invoke('window:reveal'),
   quitNow: () => ipcRenderer.invoke('app:quit'),
   onWarn: (listener) => ipcRenderer.on('main:warn', (_event, message) => listener(message)),
   capture: {

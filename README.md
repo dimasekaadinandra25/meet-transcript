@@ -101,8 +101,8 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Stop | **Stop rekam** | `Alt+Shift+S` |
 | Bisukan atau nyalakan mikrofon | **Bisukan mikrofon** | `Alt+Shift+M` |
 
-* Mute di Zoom atau Teams **tidak** menghentikan rekaman mikrofon aplikasi ini. Pakai mute milik aplikasi.
-* Menutup jendela saat merekam membuat rekaman tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan status merekam.
+* Mute di Zoom atau Teams **tidak** menghentikan rekaman mikrofon aplikasi ini. Pakai mute milik aplikasi. Mikrofon kembali menyala di setiap rekaman baru.
+* Menutup jendela saat merekam atau mentranskrip membuat proses tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan statusnya. Peringatan, misalnya mikrofon terputus, memunculkan jendela lagi.
 * Semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain.
 * Tanpa headset, suara peserta bisa bocor ke mikrofon dan muncul dobel berlabel **You**.
 * Minta izin peserta meeting sebelum merekam.

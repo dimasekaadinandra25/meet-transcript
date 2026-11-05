@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-const { closeAction, trayLook, SHORTCUTS } = createRequire(import.meta.url)('../main/lifecycle.js');
+const { closeAction, quitPrompt, trayLook, SHORTCUTS } = createRequire(import.meta.url)('../main/lifecycle.js');
 
 test('tutup jendela saat merekam tidak menghentikan rekaman', () => {
   assert.equal(closeAction({ recording: true, quitting: false }), 'hide');
@@ -30,4 +30,23 @@ test('shortcut memakai kombinasi dari plan', () => {
     'Alt+Shift+S': 'rec-stop',
     'Alt+Shift+M': 'mute-toggle',
   });
+});
+
+test('tutup jendela saat transkrip berjalan tidak menghentikan transkrip', () => {
+  assert.equal(closeAction({ recording: false, transcribing: true, quitting: false }), 'hide');
+});
+
+test('keluar saat transkrip berjalan meminta konfirmasi', () => {
+  assert.equal(closeAction({ recording: false, transcribing: true, quitting: true }), 'confirm-quit');
+});
+
+test('tray menunjukkan transkrip sedang berjalan', () => {
+  assert.deepEqual(trayLook({ recording: false, transcribing: true, muted: false }),
+    { image: 'tray-idle', tooltip: 'Transcripables: mentranskrip' });
+});
+
+test('konfirmasi keluar menjelaskan apa yang berjalan', () => {
+  assert.equal(quitPrompt({ recording: true }).button, 'Hentikan rekaman lalu keluar');
+  assert.equal(quitPrompt({ recording: false }).button, 'Batalkan transkrip lalu keluar');
+  assert.match(quitPrompt({ recording: false }).detail, /Riwayat/);
 });

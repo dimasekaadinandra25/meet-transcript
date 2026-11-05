@@ -7,7 +7,7 @@ const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, callChat, callTest, callStt, probe } = require('./net');
-const { SHORTCUTS, closeAction, trayLook } = require('./lifecycle');
+const { SHORTCUTS, closeAction, quitPrompt, trayLook } = require('./lifecycle');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
@@ -34,7 +34,7 @@ let mainWindow;
 let tray;
 let quitting = false;
 let sleepBlocker;
-let recState = { recording: false, muted: false };
+let recState = { recording: false, transcribing: false, muted: false };
 
 const assetPath = (name) => join(APP_ROOT, 'assets', `${name}.png`);
 
@@ -48,15 +48,20 @@ function showWindow() {
   mainWindow?.focus();
 }
 
+function revealWindow() {
+  if (!mainWindow.isVisible() || mainWindow.isMinimized()) mainWindow.showInactive();
+}
+
 function applyRecState(state) {
   recState = state;
   const look = trayLook(state);
   tray?.setImage(assetPath(look.image));
   tray?.setToolTip(look.tooltip);
-  mainWindow?.setTitle(state.recording ? `● ${look.tooltip}` : 'Transcripables');
-  if (state.recording && sleepBlocker == null) {
+  mainWindow?.setTitle(state.recording ? `● ${look.tooltip}` : look.tooltip);
+  const busy = state.recording || state.transcribing;
+  if (busy && sleepBlocker == null) {
     sleepBlocker = powerSaveBlocker.start('prevent-app-suspension');
-  } else if (!state.recording && sleepBlocker != null) {
+  } else if (!busy && sleepBlocker != null) {
     powerSaveBlocker.stop(sleepBlocker);
     sleepBlocker = undefined;
   }
@@ -83,20 +88,21 @@ function registerShortcuts() {
 }
 
 function handleClose(event) {
-  const action = closeAction({ recording: recState.recording, quitting });
+  const action = closeAction({ ...recState, quitting });
   if (action === 'close') return;
   event.preventDefault();
   if (action === 'hide') {
     mainWindow.hide();
     return;
   }
+  const { button, message, detail } = quitPrompt(recState);
   const choice = dialog.showMessageBoxSync(mainWindow, {
     type: 'warning',
-    buttons: ['Hentikan rekaman lalu keluar', 'Batal'],
+    buttons: [button, 'Batal'],
     defaultId: 1,
     cancelId: 1,
-    message: 'Rekaman masih berjalan.',
-    detail: 'Rekaman disimpan sebelum aplikasi keluar. Transkrip bisa dibuat nanti dari Riwayat.',
+    message,
+    detail,
   });
   if (choice === 0) runCommand('quit-after-stop');
   else quitting = false;
@@ -193,6 +199,7 @@ app.whenReady().then(() => {
   serveNet();
   serveCapture();
   handleFromApp('rec:state', applyRecState);
+  handleFromApp('window:reveal', revealWindow);
   handleFromApp('app:quit', () => app.exit(0));
   handleFromApp('shell:open', (url) => {
     if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);

@@ -103,8 +103,8 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Stop | **Stop rekam** | `Alt+Shift+S` |
 | Mute or unmute your microphone | **Bisukan mikrofon** | `Alt+Shift+M` |
 
-* Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute.
-* Closing the window while recording keeps recording in the system tray. The tray icon and window title show when it is recording.
+* Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute. It resets to on for each new recording.
+* Closing the window while recording or transcribing keeps working in the system tray. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
 * Everything on your computer's speakers gets recorded, including notifications and other apps.
 * Without a headset, other people's voices can leak into your microphone and appear twice, labeled **You**.
 * Ask meeting participants for permission before recording.

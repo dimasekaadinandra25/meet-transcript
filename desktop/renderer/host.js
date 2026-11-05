@@ -29,6 +29,7 @@
     notify: (msg) => shim.runtime.emit(msg),
     openExternal: (url) => desktop.openExternal(url),
     onState: (state) => desktop.recState?.(state),
+    onWarning: () => desktop.revealWindow(),
     now: () => Date.now(),
   });
   controller.recover().catch((e) => console.error(e));

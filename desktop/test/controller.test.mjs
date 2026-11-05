@@ -20,6 +20,8 @@ let fakeRecorder;
 let fakeOpenAI;
 let fakeStore;
 let states;
+let warned;
+let failWrites;
 let ctl;
 
 const START = { type: 'start-recording', video: false };
@@ -37,6 +39,8 @@ beforeEach(() => {
   messages = [];
   openedUrls = [];
   states = [];
+  warned = 0;
+  failWrites = false;
   fakeRecorder = {
     starts: 0,
     stops: 0,
@@ -85,7 +89,10 @@ beforeEach(() => {
     audioStore: fakeStore,
     storage: {
       get: async (key) => (key in data ? { [key]: structuredClone(data[key]) } : {}),
-      set: async (values) => { Object.assign(data, structuredClone(values)); },
+      set: async (values) => {
+        if (failWrites) throw new Error('disk penuh');
+        Object.assign(data, structuredClone(values));
+      },
     },
     merge: globalThis.MeetMerge,
     stt: globalThis.MeetStt,
@@ -94,6 +101,7 @@ beforeEach(() => {
     notify: (m) => messages.push(m),
     openExternal: (url) => openedUrls.push(url),
     onState: (s) => states.push(s),
+    onWarning: () => { warned++; },
     now: () => NOW,
   });
 });
@@ -210,7 +218,7 @@ test('mute diteruskan ke recorder dan state', async () => {
   await ctl.handle({ type: 'set-muted', on: true });
   assert.equal(fakeRecorder.muted, true);
   assert.equal((await ctl.handle({ type: 'get-active' })).rec.muted, true);
-  assert.deepEqual(states.at(-1), { recording: true, muted: true });
+  assert.deepEqual(states.at(-1), { recording: true, transcribing: false, muted: true });
 });
 
 test('ubah judul tersimpan, judul kosong diabaikan', async () => {
@@ -281,4 +289,54 @@ test('peringatan recorder tampil tanpa mengubah state', async () => {
 test('pesan tidak dikenal diabaikan', async () => {
   assert.equal(await ctl.handle({ type: 'constructor' }), undefined);
   assert.equal(await ctl.handle({ type: 'panel-tab-consumed' }), undefined);
+});
+
+test('main process tahu transkrip sedang berjalan setelah Stop', async () => {
+  await runRecording();
+  assert.ok(states.some((s) => !s.recording && s.transcribing));
+  assert.deepEqual(states.at(-1), { recording: false, transcribing: false, muted: false });
+});
+
+test('main process tahu transkrip ulang sedang berjalan', async () => {
+  await runRecording();
+  states.length = 0;
+  await ctl.handle(regenerate(id, NOW));
+  assert.ok(states.some((s) => s.transcribing));
+  assert.equal(states.at(-1).transcribing, false);
+});
+
+test('entri meeting gagal ditulis: recorder berhenti dan bisa merekam lagi', async () => {
+  failWrites = true;
+  const res = await ctl.handle(START);
+  assert.deepEqual(res, { ok: false, error: 'disk penuh' });
+  assert.equal(fakeRecorder.stops, 1);
+  assert.equal((await ctl.handle({ type: 'get-active' })).rec.recording, false);
+  failWrites = false;
+  assert.equal((await ctl.handle(START)).ok, true);
+});
+
+test('Stop kedua menunggu rekaman selesai disimpan', async () => {
+  let finishStop;
+  const recorderStop = fakeRecorder.stop;
+  fakeRecorder.stop = async function stop() {
+    await new Promise((resolve) => { finishStop = resolve; });
+    return recorderStop.call(this);
+  };
+  await ctl.handle(START);
+  const first = ctl.handle(STOP);
+  await new Promise((resolve) => setImmediate(resolve));
+  let secondDone = false;
+  const second = ctl.handle({ type: 'stop-recording', transcribe: false }).then(() => { secondDone = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(secondDone, false);
+  finishStop();
+  await second;
+  assert.ok(meeting().endedAt);
+  await first;
+});
+
+test('peringatan memberi tahu main process', async () => {
+  ctl.warn('Mikrofon terputus.');
+  assert.equal(warned, 1);
+  assert.equal(recStates().at(-1).error, 'Mikrofon terputus.');
 });

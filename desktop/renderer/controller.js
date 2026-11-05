@@ -5,10 +5,11 @@
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
 
   function createController(deps) {
-    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, now } = deps;
+    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, now } = deps;
     let rec = { ...IDLE };
     let activeId = null;
     let starting = null;
+    let finishing = null;
     let writes = Promise.resolve();
     const momInFlight = new Map();
 
@@ -16,7 +17,7 @@
     const meetingKey = (id) => `meeting:${id}`;
     const readSettings = async () => (await storage.get('settings')).settings ?? {};
     const readMeeting = async (id) => (await storage.get(meetingKey(id)))[meetingKey(id)];
-    const publishState = () => onState({ recording: rec.recording, muted: recorder.isMuted() });
+    const publishState = () => onState({ recording: rec.recording, transcribing: rec.transcribing, muted: recorder.isMuted() });
 
     function enqueue(work) {
       const run = writes.then(work);
@@ -32,8 +33,11 @@
       notify({ type: 'meeting-updated', id });
     });
 
-    const broadcast = (extra = {}) => notify({ type: 'rec-state', recording: rec.recording,
-      transcribing: rec.transcribing, saving: false, muted: recorder.isMuted(), ...extra });
+    function broadcast(extra = {}) {
+      publishState();
+      notify({ type: 'rec-state', recording: rec.recording, transcribing: rec.transcribing,
+        saving: false, muted: recorder.isMuted(), ...extra });
+    }
 
     const addMeeting = (meeting) => enqueue(async () => {
       const { meetings = [] } = await storage.get('meetings');
@@ -57,14 +61,16 @@
         await recorder.start({ baseTime, mic: !!settings.mic, video: !!video, chunkMs: CHUNK_MS,
           prepare: () => audioStore.beginAudio({ meetingId, chunkMs: CHUNK_MS, baseTime }) });
         await addMeeting({ id: meetingId, title: new Date(baseTime).toLocaleString('id-ID'), startedAt: baseTime,
-          endedAt: null, segments: [], mom: null, source: 'audio' });
+          endedAt: null, segments: [], mom: null, source: 'audio' }).catch(async (e) => {
+          await recorder.stop().catch(() => {});
+          throw e;
+        });
       };
       starting = begin();
       try {
         await starting;
       } catch (e) {
         rec = { ...IDLE };
-        publishState();
         broadcast({ error: e.message });
         return { ok: false, error: e.message };
       } finally {
@@ -121,19 +127,26 @@
       return failures.length ? `${failures.length}/${total} potongan gagal ditranskrip: ${failures[0].error}` : null;
     }
 
+    async function finishRecording(meetingId, baseTime) {
+      const { peaks } = await recorder.stop();
+      await updateMeeting(meetingId, (meeting) => {
+        meeting.endedAt = now();
+        meeting.audioPeaks = { ...meeting.audioPeaks, [baseTime]: peaks.mic };
+      });
+    }
+
     async function stopRecording({ transcribe: runStt = true } = {}) {
       if (starting) await starting.catch(() => {});
-      if (!rec.recording) return;
+      if (!rec.recording) {
+        await finishing?.catch(() => {});
+        return;
+      }
       const { meetingId, baseTime } = rec;
       rec = { ...rec, recording: false, transcribing: true };
-      publishState();
       broadcast();
+      finishing = finishRecording(meetingId, baseTime);
       try {
-        const { peaks } = await recorder.stop();
-        await updateMeeting(meetingId, (meeting) => {
-          meeting.endedAt = now();
-          meeting.audioPeaks = { ...meeting.audioPeaks, [baseTime]: peaks.mic };
-        });
+        await finishing;
         const error = runStt ? await transcribe(meetingId, baseTime, false) : null;
         rec = { ...IDLE };
         broadcast({ error });
@@ -141,7 +154,6 @@
         rec = { ...IDLE };
         broadcast({ error: e.message });
       }
-      publishState();
     }
 
     async function regenerate({ id, recId }) {
@@ -198,7 +210,6 @@
       },
       'set-muted': ({ on }) => {
         recorder.setMuted(!!on);
-        publishState();
         broadcast();
       },
       'rename-meeting': async ({ id, title }) => {
@@ -224,7 +235,12 @@
       }
     }
 
-    return { handle, recover, warn: (error) => broadcast({ error }) };
+    function warn(error) {
+      broadcast({ error });
+      onWarning();
+    }
+
+    return { handle, recover, warn };
   }
 
   globalThis.createController = createController;

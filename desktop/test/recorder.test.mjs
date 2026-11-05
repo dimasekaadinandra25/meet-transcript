@@ -139,6 +139,20 @@ test('mute menutup gain mikrofon sebelum track mikrofon dan campuran', async () 
   assert.equal(rec.isMuted(), false);
 });
 
+test('mute tidak terbawa ke rekaman berikutnya', async () => {
+  await rec.start(opts);
+  rec.setMuted(true);
+  await rec.stop();
+  assert.equal(rec.isMuted(), false);
+  await rec.start({ ...opts, baseTime: 2000 });
+  assert.equal(fake.gains.at(-1).gain.value, 1);
+});
+
+test('mute saat tidak merekam diabaikan', () => {
+  rec.setMuted(true);
+  assert.equal(rec.isMuted(), false);
+});
+
 test('STT berotasi, campuran tidak', async () => {
   await rec.start(opts);
   const { mix } = fake.parts();
