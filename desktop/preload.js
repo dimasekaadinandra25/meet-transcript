@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('desktop', {
     clear: () => ipcRenderer.invoke('store:clear'),
     onChanged: (listener) => ipcRenderer.on('store:changed', (_event, changes) => listener(changes)),
   },
+  capture: {
+    sources: () => ipcRenderer.invoke('capture:sources'),
+    use: (id) => ipcRenderer.invoke('capture:use', id),
+  },
   net: {
     chat: (args) => ipcRenderer.invoke('net:chat', args),
     test: (args) => ipcRenderer.invoke('net:test', args),

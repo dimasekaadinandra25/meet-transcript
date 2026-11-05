@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, net, protocol, safeStorage, session } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session } = require('electron');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
@@ -7,6 +7,7 @@ const { loadLib, callChat, callTest, callStt, probe } = require('./net');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
+const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture']);
 
 const sharedRoot = () => (app.isPackaged ? process.resourcesPath : join(APP_ROOT, '..'));
 
@@ -57,12 +58,28 @@ function serveNet() {
   handleFromApp('net:probe', probe);
 }
 
+function serveCapture() {
+  let chosenSource = null;
+  const listSources = () => desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 0, height: 0 },
+  });
+  handleFromApp('capture:sources', async () => (await listSources()).map(({ id, name }) => ({ id, name })));
+  handleFromApp('capture:use', (id) => { chosenSource = id; });
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    listSources().then((sources) => {
+      const video = sources.find((s) => s.id === chosenSource) ?? sources.find((s) => s.id.startsWith('screen:'));
+      callback({ video, audio: 'loopback' });
+    }).catch(() => callback({}));
+  });
+}
+
 function limitPermissions() {
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
-    callback(permission === 'media' && isAppUrl(details.requestingUrl));
+    callback(ALLOWED_PERMISSIONS.has(permission) && isAppUrl(details.requestingUrl));
   });
   session.defaultSession.setPermissionCheckHandler((_contents, permission, origin) => (
-    permission === 'media' && isAppUrl(origin)
+    ALLOWED_PERMISSIONS.has(permission) && isAppUrl(origin)
   ));
 }
 
@@ -92,6 +109,7 @@ app.whenReady().then(() => {
   limitPermissions();
   serveStore();
   serveNet();
+  serveCapture();
   mainWindow = createWindow();
 });
 
