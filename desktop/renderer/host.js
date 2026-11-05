@@ -1,6 +1,6 @@
 (() => {
   const { desktop } = window;
-  const { el, mkBtn } = globalThis.MeetUi;
+  const { el, raw, mkBtn } = globalThis.MeetUi;
   let controller;
 
   const shim = globalThis.createChromeShim({ store: desktop.store, handle: (msg) => controller.handle(msg) });
@@ -38,6 +38,12 @@
   });
   controller.recover().catch((e) => console.error(e));
 
+  const tellLanguage = (settings) => desktop.setLanguage(settings?.uiLang);
+  shim.storage.local.get('settings').then(({ settings }) => tellLanguage(settings));
+  shim.storage.onChanged.addListener((changes) => {
+    if (changes.settings) tellLanguage(changes.settings.newValue);
+  });
+
   const send = (msg) => shim.runtime.sendMessage(msg);
   let chosenSource = '';
   let consentShown = true;
@@ -72,7 +78,7 @@
     select.addEventListener('focus', async () => {
       const sources = await desktop.capture.sources();
       select.replaceChildren(...sources.map(({ id, name }) =>
-        Object.assign(document.createElement('option'), { value: id, textContent: name })));
+        raw(Object.assign(document.createElement('option'), { value: id, textContent: name }))));
       select.value = chosenSource || sources.find((s) => s.id.startsWith('screen:'))?.id;
     }, { once: true });
     select.addEventListener('change', () => {

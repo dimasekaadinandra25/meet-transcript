@@ -1,3 +1,4 @@
+globalThis.MeetI18n.follow().catch(() => {});
 const msg = document.getElementById('msg');
 navigator.mediaDevices.getUserMedia({ audio: true }).then(
   (s) => { s.getTracks().forEach((t) => t.stop()); return true; },

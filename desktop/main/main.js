@@ -39,6 +39,7 @@ let sleepBlocker;
 let recordingFolder;
 let recState = { recording: false, transcribing: false, muted: false };
 
+const t = (text) => globalThis.MeetI18n.t(text);
 const assetPath = (name) => join(APP_ROOT, 'assets', `${name}.png`);
 
 function runCommand(command) {
@@ -62,21 +63,27 @@ const TRAY_ACTIONS = {
 };
 
 function buildTrayMenu(state) {
-  tray?.setContextMenu(Menu.buildFromTemplate(trayMenu(state).map(({ separator, command, action, accelerator, ...item }) => (separator ? { type: 'separator' } : {
+  tray?.setContextMenu(Menu.buildFromTemplate(trayMenu(state).map(({ separator, command, action, accelerator, label, ...item }) => (separator ? { type: 'separator' } : {
     ...item,
+    label: t(label),
     accelerator,
     registerAccelerator: false,
     click: () => (command ? runCommand(command) : TRAY_ACTIONS[action]?.()),
   }))));
 }
 
+function showState(state) {
+  const look = trayLook(state);
+  const tooltip = t(look.tooltip);
+  tray?.setImage(assetPath(look.image));
+  tray?.setToolTip(tooltip);
+  buildTrayMenu(state);
+  mainWindow?.setTitle(state.recording ? `● ${tooltip}` : tooltip);
+}
+
 function applyRecState(state) {
   recState = state;
-  const look = trayLook(state);
-  tray?.setImage(assetPath(look.image));
-  tray?.setToolTip(look.tooltip);
-  buildTrayMenu(state);
-  mainWindow?.setTitle(state.recording ? `● ${look.tooltip}` : look.tooltip);
+  showState(state);
   const busy = state.recording || state.transcribing;
   if (busy && sleepBlocker == null) {
     sleepBlocker = powerSaveBlocker.start('prevent-app-suspension');
@@ -115,11 +122,11 @@ function handleClose(event) {
   const { button, message, detail } = quitPrompt(recState);
   const choice = dialog.showMessageBoxSync(mainWindow, {
     type: 'warning',
-    buttons: [button, 'Cancel'],
+    buttons: [t(button), t('Cancel')],
     defaultId: 1,
     cancelId: 1,
-    message,
-    detail,
+    message: t(message),
+    detail: t(detail),
   });
   if (choice === 0) runCommand('quit-after-stop');
   else quitting = false;
@@ -230,6 +237,10 @@ app.whenReady().then(() => {
   serveRecordings();
   handleFromApp('rec:state', applyRecState);
   handleFromApp('window:reveal', revealWindow);
+  handleFromApp('app:language', (code) => {
+    globalThis.MeetI18n.setLang(code);
+    showState(recState);
+  });
   handleFromApp('app:update-check', () => checkForUpdate({ current: app.getVersion() }).catch((e) => ({ status: 'failed', error: e.message })));
   handleFromApp('app:update-open', () => shell.openExternal(RELEASES_URL));
   handleFromApp('pdf:make', () => mainWindow.webContents.printToPDF({ printBackground: false }));

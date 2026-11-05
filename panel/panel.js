@@ -14,7 +14,8 @@ const Host = globalThis.PanelHost;
 let settingsCache = {};
 async function loadSettings() { settingsCache = (await chrome.storage.local.get('settings')).settings ?? {}; }
 
-const { el, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
+const { el, raw, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
+const { t } = globalThis.MeetI18n;
 const mkEl = (tag, props) => Object.assign(document.createElement(tag), props);
 const addOptions = (select, pairs) => {
   for (const [value, textContent] of pairs) select.append(mkEl('option', { value, textContent }));
@@ -242,7 +243,7 @@ async function renderMeeting(id, live, epoch) {
     back.addEventListener('click', () => { viewingId = null; render(); });
     view.append(back);
   }
-  view.append(Host ? Host.titleEditor(meeting) : el('h2', null, meeting.title));
+  view.append(Host ? Host.titleEditor(meeting) : raw(el('h2', null, meeting.title)));
   const startedText = new Date(meeting.startedAt).toLocaleString();
   if (meeting.title !== startedText) view.append(el('p', 'muted', startedText));
   if (momErrors.has(meeting.id)) view.append(el('div', 'error', momErrors.get(meeting.id)));
@@ -374,7 +375,7 @@ async function renderMeeting(id, live, epoch) {
   }
   if (!live) {
     const remove = btn('Delete', async () => {
-      if (!confirm(`Delete "${meeting.title}" and its recordings? This cannot be undone.${Host?.deleteNote ?? ''}`)) return;
+      if (!confirm(`${t(`Delete "${meeting.title}" and its recordings? This cannot be undone.`)}${t(Host?.deleteNote ?? '')}`)) return;
       momErrors.delete(meeting.id);
       const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
       if (res?.ok) viewingId = null;
@@ -384,7 +385,7 @@ async function renderMeeting(id, live, epoch) {
     remove.classList.add('danger');
   }
   view.append(actions);
-  const list = el('div');
+  const list = raw(el('div'));
   for (const s of meeting.segments) {
     const seg = el('div', 'seg');
     const head = el('div');
@@ -392,11 +393,11 @@ async function renderMeeting(id, live, epoch) {
     seg.append(head, el('div', null, s.text));
     list.append(seg);
   }
-  if (!meeting.segments.length) list.append(el('p', 'muted', Host?.emptySegmentsText ?? 'No captions yet.'));
+  if (!meeting.segments.length) view.append(el('p', 'muted', Host?.emptySegmentsText ?? 'No captions yet.'));
   view.append(list);
   if (meeting.mom) {
     view.append(el('h3', null, 'MoM'));
-    view.append(el('div', 'mom', meeting.mom));
+    view.append(raw(el('div', 'mom', meeting.mom)));
   }
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
 }
@@ -409,12 +410,12 @@ function historyList(items) {
   return found.map((m) => {
     const item = el('button', 'item');
     item.append(
-      el('div', 'who', m.title),
+      raw(el('div', 'who', m.title)),
       el('div', 'muted',
         `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} ${m.segments.length === 1 ? 'segment' : 'segments'}${m.mom ? ' — MoM ✓' : ''}`)
     );
     const snippet = M.searchSnippet(m, historyQuery);
-    if (snippet) item.append(el('div', 'snippet', snippet));
+    if (snippet) item.append(raw(el('div', 'snippet', snippet)));
     item.addEventListener('click', () => { viewingId = m.id; render(); });
     return item;
   });
@@ -455,6 +456,13 @@ async function renderSettings(epoch) {
   view.replaceChildren();
   view.append(el('h2', null, 'Settings'));
   view.append(el('p', 'muted', 'Hold Alt to see the shortcut for each button.'));
+  const language = mkEl('select', {});
+  addOptions(language, [['en', 'English'], ['id', 'Bahasa Indonesia']]);
+  language.value = settings.uiLang === 'id' ? 'id' : 'en';
+  language.addEventListener('change', () => patchSettings({ uiLang: language.value }));
+  const languageRow = el('div');
+  languageRow.append(el('label', null, 'Language'), language);
+  view.append(languageRow);
   const rowOf = new WeakMap();
   const field = (label, input) => {
     const row = el('div');
@@ -682,16 +690,16 @@ async function renderSettings(epoch) {
     if (recState.recording || recState.transcribing || status.inCall) {
       return setBnote('err', '✗ A recording, transcript, or meeting is running. Stop it or leave before importing.');
     }
-    if (!confirm('Import REPLACES all current data (history, settings, saved recordings). Continue?')) return;
+    if (!confirm(t('Import REPLACES all current data (history, settings, saved recordings). Continue?'))) return;
     importBtn.disabled = true;
     setBnote('muted', 'Importing…');
     try {
       const r = await globalThis.MeetBackup.importBackup(file);
       await loadSettings();
       audioMetaKey = null;
-      alert(r.audioError
+      alert(t(r.audioError
         ? `Import PARTLY finished: ${r.meetings} meetings restored, but audio and video could not be restored (${r.audioError}). The old data has been replaced.`
-        : `Import finished: ${r.meetings} meetings${r.chunks ? `, ${r.chunks} recording parts` : ''}.`);
+        : `Import finished: ${r.meetings} meetings${r.chunks ? `, ${r.chunks} recording parts` : ''}.`));
       render();
     } catch (e) {
       setBnote('err', '✗ Import failed: ' + (e?.message ?? e));
@@ -716,6 +724,7 @@ chrome.storage.onChanged.addListener((c, area) => {
 });
 
 (async () => {
+  await globalThis.MeetI18n.follow();
   await loadSettings();
   const a = await chrome.runtime.sendMessage({ type: 'get-active' }).catch(() => null);
   if (a) status = a;

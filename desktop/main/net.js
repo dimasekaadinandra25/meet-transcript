@@ -3,6 +3,7 @@ const { join } = require('node:path');
 const PROBE_TIMEOUT_MS = 15000;
 
 function loadLib(root) {
+  require(join(root, 'lib', 'i18n.js'));
   require(join(root, 'lib', 'stt.js'));
   require(join(root, 'lib', 'openai.js'));
 }
