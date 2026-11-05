@@ -9,6 +9,7 @@ const busyLabel = () => (recState.saving ? 'Menyimpan rekaman…'
   : recState.total ? `Mentranskrip… ${recState.done}/${recState.total}` : 'Mentranskrip…');
 
 const HAS_AUDIO = !!chrome.tabCapture;
+const Host = globalThis.PanelHost;
 
 let settingsCache = {};
 async function loadSettings() { settingsCache = (await chrome.storage.local.get('settings')).settings ?? {}; }
@@ -87,7 +88,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === 'rec-state') {
     const wasActive = recState.recording || recState.transcribing;
     if (wasActive !== (msg.recording || msg.transcribing)) audioMetaKey = null;
-    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving,
+    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted,
       done: msg.done ?? 0, total: msg.total ?? 0,
       error: 'error' in msg ? msg.error : recState.error };
     if (tab === 'live' || (tab === 'history' && viewingId)) render();
@@ -133,6 +134,12 @@ async function downloadVideo(meeting, rec, suffix) {
   return true;
 }
 
+async function downloadMix(meeting, rec, suffix) {
+  const saved = await globalThis.MeetAudioStore.loadMix(rec.recId);
+  if (!saved?.blobs?.length || saved.meetingId !== meeting.id) return false;
+  download(`${meeting.title}${suffix}.webm`, new Blob(saved.blobs, { type: 'audio/webm' }));
+  return true;
+}
 let renderEpoch = 0;
 let lastRenderedKey = null;
 let audioMeta = null;
@@ -167,7 +174,9 @@ async function renderMeeting(id, live, epoch) {
   view.replaceChildren();
   if (live && HAS_AUDIO) {
     const bar = el('div', 'actions');
-    if (recState.transcribing) {
+    if (Host) {
+      bar.append(Host.recordControls(recState, busyLabel()));
+    } else if (recState.transcribing) {
       bar.append(el('span', 'muted', busyLabel()));
     } else if (recState.recording) {
       const stop = el('button', null, 'Stop rekam');
@@ -191,7 +200,7 @@ async function renderMeeting(id, live, epoch) {
   if (!meeting) {
     view.append(el('p', 'muted',
       !live ? 'Meeting tidak ditemukan.'
-        : 'Tidak ada meeting Meet aktif. Tombol Rekam di atas tetap jalan untuk tab aktif (Discord dsb.) — hasilnya masuk ke Riwayat.'));
+        : Host?.emptyLiveText ?? 'Tidak ada meeting Meet aktif. Tombol Rekam di atas tetap jalan untuk tab aktif (Discord dsb.) — hasilnya masuk ke Riwayat.'));
     return;
   }
   if (!live) {
@@ -199,7 +208,7 @@ async function renderMeeting(id, live, epoch) {
     back.addEventListener('click', () => { viewingId = null; render(); });
     view.append(back);
   }
-  view.append(el('h2', null, meeting.title));
+  view.append(Host ? Host.titleEditor(meeting) : el('h2', null, meeting.title));
   view.append(el('p', 'muted', new Date(meeting.startedAt).toLocaleString()));
   if (momErrors.has(meeting.id)) view.append(el('div', 'error', momErrors.get(meeting.id)));
   if (!live && recState.error && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
@@ -236,7 +245,7 @@ async function renderMeeting(id, live, epoch) {
   });
   if (meeting.segments.length) {
     for (const [name, target] of [['Gemini', 'gemini'], ['ChatGPT', 'chatgpt']]) {
-      mom.item('Kirim ke ' + name, async () => {
+      mom.item(Host ? Host.aiLabel(name) : 'Kirim ke ' + name, async () => {
         mom.head.textContent = `Membuka ${name}…`;
         const prompt = promptText(meeting);
         await navigator.clipboard.writeText(prompt).catch(() => {});
@@ -252,13 +261,19 @@ async function renderMeeting(id, live, epoch) {
     actions.append(el('span', 'muted', busyLabel()));
   }
   const recs = (audioMeta ?? []).filter((r) => r.meetingId === meeting.id
-    && (r.count > 0 || r.videoCount > 0));
+    && (r.count > 0 || r.videoCount > 0 || r.mixCount > 0 || r.systemCount > 0 || r.micCount > 0));
   if (recs.length && !recState.recording && !recState.transcribing) {
     const many = recs.length > 1;
     const jam = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     for (const r of recs) {
       const tag = many ? ` — ${jam(r.baseTime)}` : '';
       const sfx = many ? `-${jam(r.baseTime).replace(/\D/g, '')}` : '';
+      if (r.mixCount > 0) {
+        dl.item(`Unduh rekaman${tag}`, async () => {
+          const ok = await downloadMix(meeting, r, sfx).catch(() => false);
+          flash(dl.head, ok ? 'Diunduh ✓' : 'Rekaman tidak ditemukan', 3000);
+        });
+      }
       if (r.count > 0) {
         dl.item(`Unduh audio${tag}${r.count > 1 ? ` (${r.count} file)` : ''}`, async () => {
           const n = await downloadAudio(meeting, r, sfx).catch(() => 0);
@@ -274,7 +289,7 @@ async function renderMeeting(id, live, epoch) {
         });
       }
     }
-    const reable = recs.filter((r) => r.count > 0);
+    const reable = recs.filter((r) => r.count > 0 || r.systemCount > 0 || r.micCount > 0);
     const transcribed = (r) => meeting.segments.some((s) => String(s.id ?? '').startsWith(`audio:${r.baseTime}:`));
     const label = (r) => (transcribed(r) ? 'Transkrip ulang' : 'Generate transkrip');
     if (reable.length) {
@@ -318,7 +333,7 @@ async function renderMeeting(id, live, epoch) {
     seg.append(head, el('div', null, s.text));
     list.append(seg);
   }
-  if (!meeting.segments.length) list.append(el('p', 'muted', 'Belum ada caption masuk.'));
+  if (!meeting.segments.length) list.append(el('p', 'muted', Host?.emptySegmentsText ?? 'Belum ada caption masuk.'));
   view.append(list);
   if (meeting.mom) {
     view.append(el('h3', null, 'MoM'));
@@ -376,17 +391,19 @@ async function renderSettings(epoch) {
   const source = field('Sumber transkrip',
     document.createElement('select'));
   addOptions(source, [['caption', 'Caption Meet'], ['audio', 'Rekam audio']]);
-  source.value = settings.transcriptSource ?? 'caption';
+  source.value = Host ? 'audio' : settings.transcriptSource ?? 'caption';
   const hideBox = mkEl('input', { type: 'checkbox', checked: settings.hideCaptions !== false });
   const hideLabel = el('label');
   hideLabel.append(hideBox, 'Sembunyikan caption di layar Meet (transkrip tetap jalan)');
   hideBox.addEventListener('change', () => patchSettings({ hideCaptions: hideBox.checked }));
   const hideRow = el('div');
   hideRow.append(hideLabel);
+  hideRow.hidden = !!Host;
   view.append(hideRow);
   const captionLang = field('Bahasa caption Meet', document.createElement('select'));
   addOptions(captionLang, [['id', 'Indonesia'], ['en', 'English']]);
   captionLang.value = settings.captionLang ?? 'id';
+  show(captionLang, !Host);
   captionLang.addEventListener('change', () => patchSettings({ captionLang: captionLang.value }));
   const micWrap = el('div');
   const micBox = mkEl('input', { type: 'checkbox', checked: !!settings.mic });
@@ -397,6 +414,7 @@ async function renderSettings(epoch) {
   micBtn.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-mic-permission' }).catch(() => {}));
   const micRow = el('div', 'actions');
   micRow.append(micBtn);
+  micBtn.hidden = !!Host;
   micWrap.append(micLabel, micRow, el('div', 'muted',
     'Tanpa headset, suara peserta dari speaker bisa ikut terekam lewat mic (dobel).'));
   micWrap.hidden = !HAS_AUDIO;
@@ -427,7 +445,7 @@ async function renderSettings(epoch) {
   function applyMode() {
     const audio = HAS_AUDIO;
     const m = sttModeSel.value;
-    show(source, HAS_AUDIO);
+    show(source, HAS_AUDIO && !Host);
     show(sttModeSel, audio);
     show(sttBaseUrl, audio);
     show(sttApiKey, audio && m === 'api');
@@ -457,7 +475,7 @@ async function renderSettings(epoch) {
     const host = new URL(base).hostname;
     let res;
     try {
-      res = await fetch(`${base}/models`, {
+      res = await (Host?.fetch ?? fetch)(`${base}/models`, {
         ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
         signal: AbortSignal.timeout(15000),
       });
@@ -592,6 +610,7 @@ async function renderSettings(epoch) {
   const backupRow = el('div', 'actions');
   backupRow.append(exportBtn, importBtn, importInput, bnote);
   view.append(backupRow);
+  if (Host) view.append(el('div', 'err', Host.backupWarning));
   view.append(el('div', 'muted',
     'Backup berisi transkrip, MoM, dan Settings — bukan file rekaman. Audio & '
     + 'video tidak ikut karena bisa ratusan MB per rekaman. Unduh sendiri dari '
@@ -608,7 +627,7 @@ chrome.storage.onChanged.addListener((c, area) => {
   await loadSettings();
   const a = await chrome.runtime.sendMessage({ type: 'get-active' }).catch(() => null);
   if (a) status = a;
-  if (a?.rec) recState = { ...recState, recording: a.rec.recording, transcribing: a.rec.transcribing,
+  if (a?.rec) recState = { ...recState, recording: a.rec.recording, transcribing: a.rec.transcribing, muted: a.rec.muted,
     saving: a.rec.transcribing && a.rec.autoStt === false };
   if (a?.panelTab) selectTab(a.panelTab);
   if (a?.panelMeetingId) viewingId = a.panelMeetingId;

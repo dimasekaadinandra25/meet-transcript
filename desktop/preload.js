@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('desktop', {
     clear: () => ipcRenderer.invoke('store:clear'),
     onChanged: (listener) => ipcRenderer.on('store:changed', (_event, changes) => listener(changes)),
   },
+  openExternal: (url) => ipcRenderer.invoke('shell:open', url),
   capture: {
     sources: () => ipcRenderer.invoke('capture:sources'),
     use: (id) => ipcRenderer.invoke('capture:use', id),

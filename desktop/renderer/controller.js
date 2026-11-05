@@ -224,7 +224,7 @@
       }
     }
 
-    return { handle, recover };
+    return { handle, recover, warn: (error) => broadcast({ error }) };
   }
 
   globalThis.createController = createController;

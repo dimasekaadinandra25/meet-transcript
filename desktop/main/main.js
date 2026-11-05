@@ -1,4 +1,4 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session, shell } = require('electron');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
@@ -7,7 +7,8 @@ const { loadLib, callChat, callTest, callStt, probe } = require('./net');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
-const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture']);
+const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture', 'clipboard-sanitized-write']);
+const EXTERNAL_URLS = new Set(['https://gemini.google.com/app', 'https://chatgpt.com/']);
 
 const sharedRoot = () => (app.isPackaged ? process.resourcesPath : join(APP_ROOT, '..'));
 
@@ -110,6 +111,10 @@ app.whenReady().then(() => {
   serveStore();
   serveNet();
   serveCapture();
+  handleFromApp('shell:open', (url) => {
+    if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);
+    return undefined;
+  });
   mainWindow = createWindow();
 });
 
