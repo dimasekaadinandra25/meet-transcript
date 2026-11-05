@@ -1,0 +1,19 @@
+{
+  "name": "transcripables-desktop",
+  "productName": "Transcripables",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Rekam audio komputer dan mikrofon dari aplikasi meeting apa pun, lalu buat transkrip dan MoM.",
+  "license": "MIT",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "test": "node --test test/",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "electron": "45.2.3",
+    "typescript": "7.0.2"
+  }
+}
