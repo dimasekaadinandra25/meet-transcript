@@ -5,6 +5,13 @@ const SHORTCUTS = {
   'Alt+Shift+M': 'mute-toggle',
 };
 
+const ZOOM_KEYS = { '=': 1, '+': 1, '-': -1, 0: 0 };
+
+function zoomStep({ type, control, alt, meta, key }) {
+  if (type !== 'keyDown' || !control || alt || meta) return null;
+  return ZOOM_KEYS[key] ?? null;
+}
+
 function closeAction({ recording, transcribing, quitting }) {
   if (!recording && !transcribing) return 'close';
   return quitting ? 'confirm-quit' : 'hide';
@@ -31,4 +38,4 @@ function trayLook({ recording, transcribing, muted }) {
   return { image: 'tray-recording', tooltip: 'Transcripables: recording' };
 }
 
-module.exports = { SHORTCUTS, closeAction, quitPrompt, trayLook };
+module.exports = { SHORTCUTS, closeAction, quitPrompt, trayLook, zoomStep };

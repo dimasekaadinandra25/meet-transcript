@@ -3,7 +3,7 @@
   "productName": "Transcripables",
   "private": true,
   "version": "0.1.0",
-  "description": "Rekam audio komputer dan mikrofon dari aplikasi meeting apa pun, lalu buat transkrip dan MoM.",
+  "description": "Record computer audio and microphone from any meeting app, then make a transcript and MoM.",
   "license": "MIT",
   "main": "main/main.js",
   "scripts": {

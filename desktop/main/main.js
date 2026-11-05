@@ -7,7 +7,7 @@ const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, callChat, callTest, callStt, probe } = require('./net');
-const { SHORTCUTS, closeAction, quitPrompt, trayLook } = require('./lifecycle');
+const { SHORTCUTS, closeAction, quitPrompt, trayLook, zoomStep } = require('./lifecycle');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
@@ -179,6 +179,12 @@ function createWindow() {
     },
   });
   win.on('close', handleClose);
+  win.webContents.on('before-input-event', (event, input) => {
+    const step = zoomStep(input);
+    if (step === null) return;
+    event.preventDefault();
+    win.webContents.setZoomLevel(step === 0 ? 0 : win.webContents.getZoomLevel() + step);
+  });
   win.on('page-title-updated', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => {

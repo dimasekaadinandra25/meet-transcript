@@ -58,7 +58,7 @@ function makeFake() {
   }
   const node = (extra) => ({ connect(to) { f.connections.push({ from: this, to }); }, ...extra });
   f.AudioContext = class {
-    constructor() { f.ctx = this; this.destination = { speaker: true }; this.state = 'running'; }
+    constructor() { f.ctx = this; this.destination = { speaker: true }; this.state = 'running'; this.sampleRate = f.sampleRate ?? 48000; }
     async resume() {}
     async close() { f.closed = true; }
     createMediaStreamSource(stream) { return node({ stream }); }
@@ -305,4 +305,12 @@ test('mikrofon yang macet tidak menahan rekaman, stream yang telat dihentikan', 
   answer({ getTracks: () => [{ stop() { stopped++; } }] });
   await flush();
   assert.equal(stopped, 1);
+});
+
+test('perangkat 96 kHz juga diperiksa tanpa celah waktu', async () => {
+  fake.sampleRate = 96000;
+  await rec.start(opts);
+  const sampleMs = fake.intervals.map((i) => i.ms).find((ms) => ms < 1000);
+  const windowMs = (fake.analysers[0].fftSize / 96000) * 1000;
+  assert.ok(windowMs >= sampleMs, `window ${windowMs} ms, sampling every ${sampleMs} ms`);
 });

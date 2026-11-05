@@ -231,3 +231,14 @@ test('ownerOfRecording pilih record termuda yang mulai <= baseTime rekaman', () 
   assert.equal(ownerOfRecording([a, b, c], 500), null);
   assert.equal(ownerOfRecording([null, a], 2000), a);
 });
+
+test('transkrip panjang dengan caption selesai dalam waktu wajar', () => {
+  const segment = 'kita membahas rencana peluncuran produk baru minggu depan bersama seluruh tim';
+  const captions = Array.from({ length: 1440 }, (_, i) => ({ id: `cap-${i}`, speaker: 'Ani', text: `${segment} ${i}`, t: i * 5000 }));
+  const lines = Array.from({ length: 1200 }, (_, i) => audio(i * 6000, `pembahasan anggaran bagian ${i} sudah selesai`));
+  const started = Date.now();
+  const out = replaceAudioSegments(captions, lines, { baseTime: 7 });
+  const took = Date.now() - started;
+  assert.equal(out.length, 2640);
+  assert.ok(took < 1000, `took ${took} ms`);
+});

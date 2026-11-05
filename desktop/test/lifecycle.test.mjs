@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-const { closeAction, quitPrompt, trayLook, SHORTCUTS } = createRequire(import.meta.url)('../main/lifecycle.js');
+const { closeAction, quitPrompt, trayLook, zoomStep, SHORTCUTS } = createRequire(import.meta.url)('../main/lifecycle.js');
 
 test('tutup jendela saat merekam tidak menghentikan rekaman', () => {
   assert.equal(closeAction({ recording: true, quitting: false }), 'hide');
@@ -49,4 +49,17 @@ test('konfirmasi keluar menjelaskan apa yang berjalan', () => {
   assert.equal(quitPrompt({ recording: true }).button, 'Stop recording and quit');
   assert.equal(quitPrompt({ recording: false }).button, 'Cancel transcript and quit');
   assert.match(quitPrompt({ recording: false }).detail, /History/);
+});
+
+test('Ctrl plus, minus, dan 0 mengubah zoom', () => {
+  const press = (key, extra = {}) => zoomStep({ type: 'keyDown', control: true, key, ...extra });
+  assert.equal(press('='), 1);
+  assert.equal(press('+'), 1);
+  assert.equal(press('-'), -1);
+  assert.equal(press('0'), 0);
+  assert.equal(press('a'), null);
+  assert.equal(press('='), 1);
+  assert.equal(zoomStep({ type: 'keyDown', control: false, key: '=' }), null);
+  assert.equal(zoomStep({ type: 'keyUp', control: true, key: '=' }), null);
+  assert.equal(press('=', { alt: true }), null);
 });

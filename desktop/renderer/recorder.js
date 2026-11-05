@@ -142,7 +142,8 @@
       startMix(s, mix);
       if (video) startVideo(s, mix);
       s.timers.push(deps.setInterval(() => rotate(s), chunkMs));
-      s.timers.push(deps.setInterval(() => samplePeaks(s), PEAK_SAMPLE_MS));
+      const fullWindowMs = (PEAK_WINDOW_SAMPLES / s.ctx.sampleRate) * 1000;
+      s.timers.push(deps.setInterval(() => samplePeaks(s), Math.min(PEAK_SAMPLE_MS, Math.floor(fullWindowMs))));
     }
 
     async function release(s) {

@@ -146,13 +146,40 @@ let audioMeta = null;
 let audioMetaKey = null;
 const momErrors = new Map();
 
+const CLICK_HOLD_MS = 1000;
+let clickHold = null;
+let renderWaiting = false;
+
+function flushRender() {
+  if (!renderWaiting) return;
+  renderWaiting = false;
+  render();
+}
+
+function endClickHold() {
+  clearTimeout(clickHold);
+  clickHold = null;
+  setTimeout(flushRender);
+}
+
+document.addEventListener('pointerdown', () => {
+  clearTimeout(clickHold);
+  clickHold = setTimeout(endClickHold, CLICK_HOLD_MS);
+}, true);
+addEventListener('pointerup', endClickHold);
+addEventListener('pointercancel', endClickHold);
+
 view.addEventListener('focusout', (e) => {
-  if (e.target.matches?.('[data-title-editor]')) render();
+  if (e.target.matches?.('[data-title-editor]')) flushRender();
 });
 
 async function render() {
   const editing = document.activeElement;
-  if (editing?.matches?.('[data-title-editor]') && editing.value !== editing.defaultValue) return;
+  const typingTitle = editing?.matches?.('[data-title-editor]') && editing.value !== editing.defaultValue;
+  if (clickHold || typingTitle) {
+    renderWaiting = true;
+    return;
+  }
   const epoch = ++renderEpoch;
   if (tab === 'live') return renderMeeting(status.id, true, epoch);
   if (tab === 'history') return viewingId ? renderMeeting(viewingId, false, epoch) : renderHistory(epoch);
@@ -283,9 +310,9 @@ async function renderMeeting(id, live, epoch) {
         });
       }
       if (r.count > 0) {
-        dl.item(`Download audio${tag}${r.count > 1 ? ` (${r.count} file)` : ''}`, async () => {
+        dl.item(`Download audio${tag}${r.count > 1 ? ` (${r.count} files)` : ''}`, async () => {
           const n = await downloadAudio(meeting, r, sfx).catch(() => 0);
-          flash(dl.head, n ? `Downloaded ✓${n > 1 ? ` (${n} file)` : ''}` : 'Audio not found', 3000);
+          flash(dl.head, n ? `Downloaded ✓${n > 1 ? ` (${n} files)` : ''}` : 'Audio not found', 3000);
         });
         if (r.count > 1) dl.list.append(el('span', 'muted',
           'Several files: allow "Download multiple files" if Chrome asks.'));
@@ -440,7 +467,7 @@ async function renderSettings(epoch) {
   micWrap.hidden = !HAS_AUDIO;
   view.append(micWrap);
   const ST = globalThis.MeetStt;
-  const sttModeSel = field('Mode STT',
+  const sttModeSel = field('STT mode',
     document.createElement('select'));
   addOptions(sttModeSel, [['whisper-local', 'Local Whisper (your own server)'], ['api', 'STT API']]);
   sttModeSel.value = ST.sttMode(settings);
@@ -592,7 +619,7 @@ async function renderSettings(epoch) {
     try {
       const zip = await globalThis.MeetBackup.exportBackup();
       download(`transcripables-backup-${new Date().toISOString().slice(0, 10)}.zip`, zip);
-      setBnote('ok', `✓ Backup siap (${zip.size < 1048576
+      setBnote('ok', `✓ Backup ready (${zip.size < 1048576
         ? `${Math.max(1, Math.round(zip.size / 1024))} KB`
         : `${(zip.size / 1048576).toFixed(1)} MB`}).`);
     } catch (e) {
