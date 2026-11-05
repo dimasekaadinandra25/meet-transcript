@@ -411,7 +411,7 @@ function historyList(items) {
     item.append(
       el('div', 'who', m.title),
       el('div', 'muted',
-        `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} segments${m.mom ? ' — MoM ✓' : ''}`)
+        `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} ${m.segments.length === 1 ? 'segment' : 'segments'}${m.mom ? ' — MoM ✓' : ''}`)
     );
     const snippet = M.searchSnippet(m, historyQuery);
     if (snippet) item.append(el('div', 'snippet', snippet));

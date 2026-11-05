@@ -103,6 +103,8 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Stop | **Stop recording** | `Alt+Shift+S` |
 | Mute or unmute your microphone | **Mute microphone** | `Alt+Shift+M` |
 
+* Right-click the tray icon to record, stop, mute, or open the recordings folder without opening the window.
+* **Check for updates** in Settings looks for a new GitHub release and opens its download page. It does not install anything by itself.
 * Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
 * Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute. It resets to on for each new recording.
 * The transcript fills in about every 2 minutes during the meeting, and finishes when you stop. Turn this off in Settings to send audio only after the meeting.

@@ -8,12 +8,13 @@ const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, callChat, callTest, callStt, probe } = require('./net');
 const { createRecordingFolder } = require('./recordings');
-const { SHORTCUTS, closeAction, quitPrompt, trayLook, zoomStep } = require('./lifecycle');
+const { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep } = require('./lifecycle');
+const { RELEASES_URL, checkForUpdate } = require('./update');
 
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
 const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture', 'clipboard-sanitized-write']);
-const EXTERNAL_URLS = new Set(['https://gemini.google.com/app', 'https://chatgpt.com/']);
+const EXTERNAL_URLS = new Set(['https://gemini.google.com/app', 'https://chatgpt.com/', RELEASES_URL]);
 
 const sharedRoot = () => (app.isPackaged ? process.resourcesPath : join(APP_ROOT, '..'));
 
@@ -35,6 +36,7 @@ let mainWindow;
 let tray;
 let quitting = false;
 let sleepBlocker;
+let recordingFolder;
 let recState = { recording: false, transcribing: false, muted: false };
 
 const assetPath = (name) => join(APP_ROOT, 'assets', `${name}.png`);
@@ -53,11 +55,27 @@ function revealWindow() {
   if (!mainWindow.isVisible() || mainWindow.isMinimized()) mainWindow.showInactive();
 }
 
+const TRAY_ACTIONS = {
+  show: () => showWindow(),
+  quit: () => app.quit(),
+  folder: async () => shell.openPath(await recordingFolder.ensure()),
+};
+
+function buildTrayMenu(state) {
+  tray?.setContextMenu(Menu.buildFromTemplate(trayMenu(state).map(({ separator, command, action, accelerator, ...item }) => (separator ? { type: 'separator' } : {
+    ...item,
+    accelerator,
+    registerAccelerator: false,
+    click: () => (command ? runCommand(command) : TRAY_ACTIONS[action]?.()),
+  }))));
+}
+
 function applyRecState(state) {
   recState = state;
   const look = trayLook(state);
   tray?.setImage(assetPath(look.image));
   tray?.setToolTip(look.tooltip);
+  buildTrayMenu(state);
   mainWindow?.setTitle(state.recording ? `● ${look.tooltip}` : look.tooltip);
   const busy = state.recording || state.transcribing;
   if (busy && sleepBlocker == null) {
@@ -71,10 +89,7 @@ function applyRecState(state) {
 function setupTray() {
   tray = new Tray(assetPath('tray-idle'));
   tray.setToolTip('Transcripables');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show', click: showWindow },
-    { label: 'Quit', click: () => app.quit() },
-  ]));
+  buildTrayMenu(recState);
   tray.on('click', showWindow);
 }
 
@@ -142,9 +157,9 @@ function serveNet() {
 }
 
 function serveRecordings() {
-  const folder = createRecordingFolder(process.env.TRANSCRIPABLES_RECORDINGS_DIR ?? join(app.getPath('documents'), 'Transcripables'));
-  handleFromApp('recordings:write', folder.write);
-  handleFromApp('recordings:open', async () => shell.openPath(await folder.ensure()));
+  recordingFolder = createRecordingFolder(process.env.TRANSCRIPABLES_RECORDINGS_DIR ?? join(app.getPath('documents'), 'Transcripables'));
+  handleFromApp('recordings:write', recordingFolder.write);
+  handleFromApp('recordings:open', TRAY_ACTIONS.folder);
 }
 
 function serveCapture() {
@@ -215,6 +230,8 @@ app.whenReady().then(() => {
   serveRecordings();
   handleFromApp('rec:state', applyRecState);
   handleFromApp('window:reveal', revealWindow);
+  handleFromApp('app:update-check', () => checkForUpdate({ current: app.getVersion() }).catch((e) => ({ status: 'failed', error: e.message })));
+  handleFromApp('app:update-open', () => shell.openExternal(RELEASES_URL));
   handleFromApp('pdf:make', () => mainWindow.webContents.printToPDF({ printBackground: false }));
   handleFromApp('app:quit', () => app.exit(0));
   handleFromApp('shell:open', (url) => {

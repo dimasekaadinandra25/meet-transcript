@@ -101,6 +101,8 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Stop | **Stop recording** | `Alt+Shift+S` |
 | Bisukan atau nyalakan mikrofon | **Mute microphone** | `Alt+Shift+M` |
 
+* Klik kanan ikon tray untuk merekam, berhenti, membisukan, atau membuka folder rekaman tanpa membuka jendela.
+* **Check for updates** di Settings mencari rilis GitHub baru dan membuka halaman unduhnya. Tidak memasang apa pun sendiri.
 * Setiap tombol juga punya shortcut `Alt` yang berfungsi saat jendela aktif. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol.
 * Mute di Zoom atau Teams **tidak** menghentikan rekaman mikrofon aplikasi ini. Pakai mute milik aplikasi. Mikrofon kembali menyala di setiap rekaman baru.
 * Transkrip terisi sekitar tiap 2 menit selama meeting, dan selesai saat Stop. Matikan di Settings agar audio hanya dikirim setelah meeting.

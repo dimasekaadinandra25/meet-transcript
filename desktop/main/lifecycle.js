@@ -12,6 +12,33 @@ function zoomStep({ type, control, alt, meta, key }) {
   return ZOOM_KEYS[key] ?? null;
 }
 
+const ACCELERATORS = Object.fromEntries(Object.entries(SHORTCUTS).map(([accelerator, command]) => [command, accelerator]));
+const commandItem = (label, command) => ({ label, command, accelerator: ACCELERATORS[command] });
+const statusItem = (label) => ({ label, enabled: false });
+const SEPARATOR = { separator: true };
+
+function trayControls({ recording, transcribing, muted }) {
+  if (transcribing) return [statusItem('Transcribing…')];
+  if (recording) {
+    return [
+      statusItem(muted ? 'Recording, microphone muted' : 'Recording'),
+      commandItem('Stop recording', 'rec-stop'),
+      commandItem(muted ? 'Unmute microphone' : 'Mute microphone', 'mute-toggle'),
+    ];
+  }
+  return [commandItem('Record audio', 'rec-start'), commandItem('Record audio + video', 'rec-start-video')];
+}
+
+function trayMenu(state) {
+  return [
+    ...trayControls(state),
+    SEPARATOR,
+    { label: 'Open recordings folder', action: 'folder' },
+    { label: 'Show', action: 'show' },
+    { label: 'Quit', action: 'quit' },
+  ];
+}
+
 function closeAction({ recording, transcribing, quitting }) {
   if (!recording && !transcribing) return 'close';
   return quitting ? 'confirm-quit' : 'hide';
@@ -38,4 +65,4 @@ function trayLook({ recording, transcribing, muted }) {
   return { image: 'tray-recording', tooltip: 'Transcripables: recording' };
 }
 
-module.exports = { SHORTCUTS, closeAction, quitPrompt, trayLook, zoomStep };
+module.exports = { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep };
