@@ -1,0 +1,268 @@
+import { test, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+await import('../../lib/merge.js');
+await import('../../lib/stt.js');
+require('../renderer/tracks.js');
+require('../renderer/controller.js');
+const { createController } = globalThis;
+
+const NOW = 1700000000000;
+const id = `desktop-${NOW}`;
+const blob = (track) => ({ track });
+
+let data;
+let messages;
+let openedUrls;
+let fakeRecorder;
+let fakeOpenAI;
+let fakeStore;
+let states;
+let ctl;
+
+const START = { type: 'start-recording', video: false };
+const STOP = { type: 'stop-recording' };
+const regenerate = (meetingId, recId) => ({ type: 'regenerate-transcript', id: meetingId, recId });
+const meeting = () => data[`meeting:${id}`];
+const recStates = () => messages.filter((m) => m.type === 'rec-state');
+const runRecording = async () => {
+  await ctl.handle(START);
+  await ctl.handle(STOP);
+};
+
+beforeEach(() => {
+  data = { settings: { mic: true, sttMode: 'api', sttBaseUrl: 'http://stt/v1', apiKey: 'k', baseUrl: 'http://llm/v1' } };
+  messages = [];
+  openedUrls = [];
+  states = [];
+  fakeRecorder = {
+    starts: 0,
+    stops: 0,
+    muted: false,
+    peaks: { system: [0.5], mic: [0.5] },
+    async start(options) {
+      this.starts++;
+      this.options = options;
+      if (this.failStart) throw new Error(this.failStart);
+      await options.prepare();
+    },
+    async stop() { this.stops++; return { peaks: this.peaks }; },
+    setMuted(on) { this.muted = on; },
+    isMuted() { return this.muted; },
+  };
+  fakeOpenAI = {
+    DEFAULT_MODEL: 'default-model',
+    fail: null,
+    failFor: null,
+    transcribeCalls: [],
+    async transcribeAudio(args) {
+      this.transcribeCalls.push(args);
+      if (this.fail) throw this.fail;
+      if (this.failFor === args.blob.track) throw new Error(`STT ${args.blob.track} mati`);
+      return { segments: [{ start: 0, text: `teks ${args.blob.track}` }] };
+    },
+    async generateMoM(args) {
+      this.momCalls = (this.momCalls ?? 0) + 1;
+      this.momArgs = args;
+      return 'MOM HASIL';
+    },
+  };
+  const loaded = (track) => async (recId) => ({
+    meetingId: id, chunkMs: 600000, baseTime: recId, blobs: [blob(track)], indices: [0],
+  });
+  fakeStore = {
+    removed: [],
+    began: [],
+    async beginAudio(meta) { this.began.push(meta); },
+    async listRecordings() { return this.began.map((m) => ({ ...m, recId: m.baseTime })); },
+    loadSystem: loaded('system'),
+    loadMic: loaded('mic'),
+  };
+  ctl = createController({
+    recorder: fakeRecorder,
+    audioStore: fakeStore,
+    storage: {
+      get: async (key) => (key in data ? { [key]: structuredClone(data[key]) } : {}),
+      set: async (values) => { Object.assign(data, structuredClone(values)); },
+    },
+    merge: globalThis.MeetMerge,
+    stt: globalThis.MeetStt,
+    tracks: globalThis.MeetTracks,
+    openai: fakeOpenAI,
+    notify: (m) => messages.push(m),
+    openExternal: (url) => openedUrls.push(url),
+    onState: (s) => states.push(s),
+    now: () => NOW,
+  });
+});
+
+test('rekaman membuat entri desktop-<baseTime> dengan judul tanggal', async () => {
+  const res = await ctl.handle(START);
+  assert.deepEqual(res, { ok: true });
+  const m = meeting();
+  assert.equal(m.source, 'audio');
+  assert.match(m.title, /\d/);
+  assert.equal(m.endedAt, null);
+  assert.deepEqual(data.meetings, [id]);
+  assert.deepEqual(fakeStore.began[0], { meetingId: id, chunkMs: 600000, baseTime: NOW });
+  assert.equal(fakeRecorder.options.chunkMs, 600000);
+  assert.equal(fakeRecorder.options.mic, true);
+});
+
+test('get-active melaporkan rekaman dan meeting yang berjalan', async () => {
+  await ctl.handle(START);
+  const a = await ctl.handle({ type: 'get-active' });
+  assert.equal(a.id, id);
+  assert.equal(a.rec.recording, true);
+  assert.equal(a.rec.transcribing, false);
+  assert.equal(a.inCall, false);
+});
+
+test('klik ganda Rekam dan Stop hanya menghasilkan satu rekaman dan satu transkrip', async () => {
+  const started = await Promise.all([ctl.handle(START), ctl.handle(START)]);
+  assert.equal(fakeRecorder.starts, 1);
+  assert.equal(started.filter((r) => r.ok).length, 1);
+  await Promise.all([ctl.handle(STOP), ctl.handle(STOP)]);
+  assert.equal(fakeRecorder.stops, 1);
+  assert.equal(fakeOpenAI.transcribeCalls.length, 2);
+});
+
+test('gagal mulai merekam: state kembali idle dan entri tidak dibuat', async () => {
+  fakeRecorder.failStart = 'tidak ada audio';
+  const res = await ctl.handle(START);
+  assert.deepEqual(res, { ok: false, error: 'tidak ada audio' });
+  assert.equal(meeting(), undefined);
+  assert.equal((await ctl.handle({ type: 'get-active' })).rec.recording, false);
+  assert.equal(fakeStore.began.length, 0);
+  fakeRecorder.failStart = null;
+  assert.equal((await ctl.handle(START)).ok, true);
+});
+
+test('Stop mentranskrip kedua track dan memberi label', async () => {
+  await runRecording();
+  const m = meeting();
+  assert.deepEqual(m.segments.map((s) => [s.speaker, s.text]).sort(), [['Others', 'teks system'], ['You', 'teks mic']]);
+  assert.ok(m.endedAt);
+  assert.ok(String(m.segments[0].id).startsWith(`audio:${NOW}:`));
+  assert.equal(recStates().at(-1).transcribing, false);
+  assert.equal(recStates().at(-1).error, null);
+});
+
+test('endpoint STT dari settings dipakai', async () => {
+  await runRecording();
+  assert.equal(fakeOpenAI.transcribeCalls[0].baseUrl, 'http://stt/v1');
+  assert.ok(fakeOpenAI.transcribeCalls[0].model);
+});
+
+test('progres dilaporkan tanpa menghapus error', async () => {
+  await runRecording();
+  const progress = recStates().filter((m) => m.total);
+  assert.equal(progress.at(0).total, 2);
+  assert.ok(progress.every((m) => !('error' in m)));
+});
+
+test('STT mati saat Stop: audio utuh, error terlihat, transkrip ulang berhasil', async () => {
+  fakeOpenAI.fail = new Error('Tidak bisa terhubung');
+  await runRecording();
+  assert.match(recStates().at(-1).error, /Tidak bisa terhubung/);
+  assert.equal(fakeStore.removed.length, 0);
+  assert.ok(meeting().segments.every((s) => s.text === '[transkrip gagal]'));
+  fakeOpenAI.fail = null;
+  assert.equal((await ctl.handle(regenerate(id, NOW))).ok, true);
+  assert.ok(meeting().segments.some((s) => s.speaker === 'Others' && s.text === 'teks system'));
+  assert.ok(!meeting().segments.some((s) => s.text === '[transkrip gagal]'));
+});
+
+test('transkrip ulang yang diblokir tidak mengubah baris lama', async () => {
+  await runRecording();
+  const before = structuredClone(meeting().segments);
+  fakeOpenAI.failFor = 'system';
+  const res = await ctl.handle(regenerate(id, NOW));
+  assert.equal(res.ok, false);
+  assert.match(res.error, /STT system mati/);
+  assert.deepEqual(meeting().segments, before);
+});
+
+test('transkrip ulang ditolak saat sedang merekam', async () => {
+  await ctl.handle(START);
+  assert.equal((await ctl.handle(regenerate(id, NOW))).ok, false);
+});
+
+test('transkrip ulang menolak rekaman yang sudah tidak ada', async () => {
+  await runRecording();
+  const res = await ctl.handle(regenerate(id, 123));
+  assert.equal(res.ok, false);
+  assert.match(res.error, /tidak tersimpan/);
+});
+
+test('potongan mikrofon sunyi dilewati, juga saat transkrip ulang', async () => {
+  fakeRecorder.peaks = { system: [0.5], mic: [0.005] };
+  await runRecording();
+  assert.deepEqual(fakeOpenAI.transcribeCalls.map((c) => c.blob.track), ['system']);
+  await ctl.handle(regenerate(id, NOW));
+  assert.deepEqual(fakeOpenAI.transcribeCalls.map((c) => c.blob.track), ['system', 'system']);
+});
+
+test('mute diteruskan ke recorder dan state', async () => {
+  await ctl.handle(START);
+  await ctl.handle({ type: 'set-muted', on: true });
+  assert.equal(fakeRecorder.muted, true);
+  assert.equal((await ctl.handle({ type: 'get-active' })).rec.muted, true);
+  assert.deepEqual(states.at(-1), { recording: true, muted: true });
+});
+
+test('ubah judul tersimpan, judul kosong diabaikan', async () => {
+  await ctl.handle(START);
+  await ctl.handle({ type: 'rename-meeting', id, title: '  Rapat tim  ' });
+  assert.equal(meeting().title, 'Rapat tim');
+  await ctl.handle({ type: 'rename-meeting', id, title: '   ' });
+  assert.equal(meeting().title, 'Rapat tim');
+});
+
+test('MoM tersimpan dan klik ganda hanya memanggil sekali', async () => {
+  await runRecording();
+  const results = await Promise.all([ctl.handle({ type: 'generate-mom', id }), ctl.handle({ type: 'generate-mom', id })]);
+  assert.deepEqual(results[0], { ok: true, mom: 'MOM HASIL' });
+  assert.equal(fakeOpenAI.momCalls, 1);
+  assert.equal(meeting().mom, 'MOM HASIL');
+  assert.ok(fakeOpenAI.momArgs.prompt.includes('teks system'));
+});
+
+test('MoM ditolak tanpa API key', async () => {
+  await runRecording();
+  data.settings.apiKey = '';
+  const res = await ctl.handle({ type: 'generate-mom', id });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /API key/);
+});
+
+test('recover menutup entri dari crash dan mempertahankan rekamannya', async () => {
+  data['meeting:desktop-5'] = { id: 'desktop-5', title: 't', startedAt: 5, endedAt: null, segments: [], mom: null, source: 'audio' };
+  data.meetings = ['desktop-5'];
+  await ctl.recover();
+  assert.ok(data['meeting:desktop-5'].endedAt);
+  assert.equal(fakeStore.removed.length, 0);
+});
+
+test('recover menyalakan mikrofon bawaan hanya bila belum pernah diatur', async () => {
+  data.settings = {};
+  await ctl.recover();
+  assert.equal(data.settings.mic, true);
+  data.settings.mic = false;
+  await ctl.recover();
+  assert.equal(data.settings.mic, false);
+});
+
+test('send-to-ai membuka situs di browser default tanpa injeksi', async () => {
+  await ctl.handle({ type: 'send-to-ai', target: 'gemini', text: 'p', id });
+  await ctl.handle({ type: 'send-to-ai', target: 'chatgpt', text: 'p', id });
+  await ctl.handle({ type: 'send-to-ai', target: 'lain', text: 'p', id });
+  assert.deepEqual(openedUrls, ['https://gemini.google.com/app', 'https://chatgpt.com/']);
+});
+
+test('pesan tidak dikenal diabaikan', async () => {
+  assert.equal(await ctl.handle({ type: 'constructor' }), undefined);
+  assert.equal(await ctl.handle({ type: 'panel-tab-consumed' }), undefined);
+});
