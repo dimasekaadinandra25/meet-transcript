@@ -108,6 +108,13 @@ test('rekaman lain tidak dihitung sebagai caption', () => {
   assert.equal(out.length, 2);
 });
 
+test('giliran bicara panjang: baris audio di akhir caption tetap dianggap duplikat', () => {
+  const opening = Array.from({ length: 130 }, (_, i) => `kata${i}`).join(' ');
+  const caption = [{ id: 'cap-1', speaker: 'Ani', text: `${opening} kita tutup rapat hari ini`, t: 1000 }];
+  const out = replaceAudioSegments(caption, [audio(61000, 'kita tutup rapat hari ini')], { baseTime: 7 });
+  assert.deepEqual(out.map((s) => s.id), ['cap-1']);
+});
+
 test('replaceAudioSegments dengan hasil kosong TIDAK menghapus transkrip lama', () => {
   const opt = { baseTime: 100, replace: true };
   const first = replaceAudioSegments([{ id: 'cap-1', text: 'x', speaker: 'Ani', t: 0 }],

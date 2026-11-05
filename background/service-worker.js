@@ -348,6 +348,10 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
     meeting.segments, segments, { baseTime: baseTime ?? 0, replace: !!replace, legacy: !!legacy });
   await storeMeeting(meetingId, meeting, data);
   notifyPanel({ type: 'meeting-updated', id: meetingId });
+  const tag = `audio:${baseTime ?? 0}:`;
+  if (segments.length && !meeting.segments.some((s) => String(s.id ?? '').startsWith(tag))) {
+    broadcastRec({ error: 'Transkrip audio sama dengan caption, jadi tidak ada baris baru.' });
+  }
 }
 
 async function saveSegments({ meetingId, title, segs }) {
@@ -424,7 +428,8 @@ const enqueueWrite = (fn) => {
 };
 
 async function removeMeeting(id) {
-  if (rec.meetingId === id || active.id === id) throw new Error('Meeting masih berjalan. Hentikan dulu sebelum menghapus.');
+  const recordingHere = rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`);
+  if (recordingHere || (active.inCall && active.id === id)) throw new Error('Meeting masih berjalan. Hentikan dulu sebelum menghapus.');
   await globalThis.MeetAudioStore.removeRecordings(id);
   const { meetings = [] } = await chrome.storage.local.get('meetings');
   await chrome.storage.local.set({ meetings: meetings.filter((m) => m !== id) });

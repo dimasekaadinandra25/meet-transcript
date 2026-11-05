@@ -5,6 +5,7 @@ import vm from 'node:vm';
 
 const SRC = readFileSync(new URL('../background/service-worker.js', import.meta.url), 'utf8');
 const SESSION = readFileSync(new URL('../content/session.js', import.meta.url), 'utf8');
+const MERGE = readFileSync(new URL('../lib/merge.js', import.meta.url), 'utf8');
 
 function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {} }) {
   const sent = [];
@@ -66,6 +67,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   ctx.MeetStt.sttEndpoint = () => ({ mode: 'api', baseUrl: 'http://localhost:1/v1',
     apiKey: '', model: 'whisper-1', language: '' });
   vm.runInContext(SESSION, ctx);
+  vm.runInContext(MERGE, ctx);
   vm.runInContext(SRC, ctx);
   const ask = (msg) => new Promise((resolve) => {
     for (const f of handlers) if (f(msg, {}, resolve) === true) return;
@@ -401,4 +403,44 @@ test('rekaman gagal dihapus: transkrip tetap ada dan error dilaporkan', async ()
   assert.equal(res.error, 'db rusak');
   assert.ok(sw.store['meeting:a']);
   assert.deepEqual(sw.store.meetings, ['a', 'b']);
+});
+
+test('tab lobi Meet tidak menghalangi hapus entri lama', async () => {
+  const sw = loadSw({ offscreen: null, store: twoMeetings() });
+  sw.connect(1).send({ type: 'status', meetingId: 'a', inCall: false, captionsOn: false });
+  const res = await sw.ask({ type: 'delete-meeting', id: 'a' });
+  assert.equal(res.ok, true);
+  assert.equal(sw.store['meeting:a'], undefined);
+});
+
+test('hapus arsip ditolak selama rekaman ruang itu masih berjalan', async () => {
+  const store = { meetings: ['a@5'], 'meeting:a@5': { id: 'a@5', title: 'A', segments: [] } };
+  const sw = loadSw({ store, offscreen: { recording: false, transcribing: true, meetingId: 'a', tabId: null, autoStt: true } });
+  await sw.ask({ type: 'get-active' });
+  const res = await sw.ask({ type: 'delete-meeting', id: 'a@5' });
+  assert.equal(res.ok, false);
+  assert.ok(sw.store['meeting:a@5']);
+  assert.deepEqual(sw.removedAudio, []);
+});
+
+const captionMeeting = () => ({ meetings: ['a'], 'meeting:a': { id: 'a', title: 'A', startedAt: 0, segments: [
+  { id: 'cap-1', speaker: 'Ani', text: 'Halo semuanya, mari kita mulai', t: 1000 },
+] } });
+const finished = (text) => ({ type: 'audio-transcript', meetingId: 'a', baseTime: 500, segments: [{ t: 1500, speaker: '', text }] });
+
+test('semua baris audio sama dengan caption: pengguna diberi tahu', async () => {
+  const sw = loadSw({ offscreen: null, store: captionMeeting() });
+  await sw.ask(finished('halo semuanya mari kita mulai'));
+  await flush();
+  await flush();
+  assert.ok(sw.sent.some((m) => m.type === 'rec-state' && /sama dengan caption/.test(m.error ?? '')));
+});
+
+test('baris audio baru tersimpan tanpa pemberitahuan itu', async () => {
+  const sw = loadSw({ offscreen: null, store: captionMeeting() });
+  await sw.ask(finished('anggaran bulan depan naik sepuluh persen'));
+  await flush();
+  await flush();
+  assert.equal(sw.store['meeting:a'].segments.length, 2);
+  assert.ok(!sw.sent.some((m) => m.type === 'rec-state' && /sama dengan caption/.test(m.error ?? '')));
 });

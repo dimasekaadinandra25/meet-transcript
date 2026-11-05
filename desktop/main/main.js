@@ -95,6 +95,7 @@ function handleClose(event) {
     mainWindow.hide();
     return;
   }
+  mainWindow.show();
   const { button, message, detail } = quitPrompt(recState);
   const choice = dialog.showMessageBoxSync(mainWindow, {
     type: 'warning',
