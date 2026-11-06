@@ -1,6 +1,6 @@
 const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { join } = require('node:path');
+const { join, resolve } = require('node:path');
 const { createEngine } = require('../main/engine');
 const { createModels, MODELS } = require('../main/models');
 const { loadLib } = require('../main/net');
@@ -28,7 +28,7 @@ async function main() {
   if (!res.ok) throw new Error(`Sample: HTTP ${res.status}`);
   const bytes = await res.arrayBuffer();
   const dir = mkdtempSync(join(tmpdir(), 'transcripables-models-'));
-  const engine = createEngine({ dir: process.argv[2] ?? join(__dirname, '..', 'engine') });
+  const engine = createEngine({ dir: resolve(process.argv[2] ?? join(__dirname, '..', 'engine')) });
   const models = createModels({ dir, onProgress: () => {} });
   try {
     if (!engine.available()) throw new Error('The speech engine is not installed.');
