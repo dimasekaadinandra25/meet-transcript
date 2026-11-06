@@ -138,6 +138,12 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .seg .time { color: var(--muted); font-size: 12px; margin-left: 8px; }
 .seg > div:first-child { margin-bottom: 4px; }
 .seg textarea { min-height: 0; resize: vertical; }
+.seg .play { float: right; min-height: 0; padding: 0 8px; line-height: 22px; font-size: 11px; }
+.mark { margin-bottom: var(--gap); color: var(--accent); font-weight: 600; font-size: 13px; }
+.ask { margin-bottom: var(--gap); }
+.ask-row { display: flex; gap: 8px; align-items: center; margin-bottom: var(--gap); }
+.ask-row input { flex: 1; margin: 0; }
+.ask .mom strong { display: block; margin-bottom: 4px; }
 .actions.secondary { justify-content: space-between; margin-top: 0; }
 h3.group { margin: var(--gap) 0 6px; font-size: 13px; color: var(--muted); }
 .seg > input { width: 60%; margin-top: 0; }
@@ -271,6 +277,7 @@ input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; acce
   html, body { background: #fff; }
   body::before, nav, .actions, main > button, #history-search, #crash { display: none !important; }
   main { height: auto; overflow: visible; padding: 0; mask-image: none; }
+  .play, .ask, .ask-row { display: none !important; }
   .seg, .mom, main > input { background: none; border: 0; box-shadow: none; padding: 2px 0; break-inside: avoid; }
 }
 

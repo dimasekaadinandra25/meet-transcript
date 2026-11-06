@@ -122,6 +122,12 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.
 * Server LLM lokal seperti Ollama dan LM Studio tidak memerlukan API key. Key hanya wajib untuk alamat default OpenAI.
+* **Ask** pada meeting mengirim pertanyaan dan transkrip ke layanan AI Anda. Jawaban tidak disimpan.
+* **Mark moment** (`Alt+Shift+K` di aplikasi desktop dan Chrome) menandai poin penting. Tanda muncul di transkrip, dan prompt MoM memprioritaskannya.
+* Tombol ▶ pada baris memutar momen itu dari rekaman, selama rekamannya masih tersimpan.
+* **Download** juga menyediakan subtitle `.srt` dan `.vtt`. **MoM type** di Settings menyediakan Standard, Standup, Client call, dan 1-on-1.
+* **Delete meetings older than** di Settings menghapus meeting lama beserta rekamannya saat aplikasi dimulai. Nonaktif secara default, dan salinan di `Documents/Transcripables` tetap ada.
+* Di ekstensi, ikon menampilkan **!** saat caption mati atau hening, atau saat *Meet captions + recorded audio* belum merekam. Arahkan kursor ke ikon untuk melihat alasannya.
 * **Edit transcript** pada meeting yang sudah selesai memungkinkan Anda memperbaiki baris dan mengganti nama pembicara, misalnya **Others** menjadi nama asli, di seluruh meeting. **Retranscribe** mengganti hasil edit teks pada baris dari rekaman itu, dan bertanya dulu. Nama pembicara tetap. Bila satu bagian gagal ditranskrip lagi, baris lamanya dipertahankan.
 * **STT language** kosong secara default, jadi bahasa dideteksi otomatis untuk setiap bagian rekaman. Model Whisper pada mesin bawaan mencakup sekitar 100 bahasa. Bila peserta berganti bahasa dalam satu bagian, isi bahasa utama di Settings, misalnya `id` atau `en`. Layanan STT lain mendukung bahasa sesuai modelnya.
 * Mesin bawaan memakai model kecil (`ggml-base-q5_1`), jadi model lebih besar di server Anda sendiri lebih akurat. Mesin ini memerlukan Microsoft Visual C++ Redistributable, dan aplikasi memberi tahu bila mesin tidak bisa dimulai.

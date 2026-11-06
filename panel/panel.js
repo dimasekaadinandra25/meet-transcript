@@ -110,9 +110,7 @@ async function getMeeting(id) {
 
 const safeName = (s) => s.replace(/[\/\\:*?"<>|]/g, '-');
 
-const promptText = (meeting) => M.fillTemplate(
-  M.momTemplateOf(settingsCache.momTemplate),
-  M.formatTranscript(meeting.segments));
+const promptText = (meeting) => M.momPrompt(meeting, settingsCache);
 
 function download(name, data) {
   const a = document.createElement('a');
@@ -151,6 +149,8 @@ async function downloadMix(meeting, rec, suffix) {
 let renderEpoch = 0;
 let lastRenderedKey = null;
 let editingId = null;
+let asking = null;
+const askAnswers = new Map();
 const EDIT_LINE_CHARS = 40;
 let audioMeta = null;
 let audioMetaKey = null;
@@ -253,6 +253,15 @@ async function renderMeeting(id, live, epoch) {
     if (recState.error) bar.append(el('div', 'err', ' ' + recState.error));
     view.append(bar);
   }
+  if (live && !Host && (recState.recording || status.inCall)) {
+    const markRow = el('div', 'actions');
+    mkBtn('Mark moment', async () => {
+      const res = await chrome.runtime.sendMessage({ type: 'mark-moment' }).catch(() => null);
+      if (!res?.ok) recState.error = res?.error ?? 'Could not reach the service worker.';
+      render();
+    }, markRow);
+    view.append(markRow);
+  }
   if (settingsCache.transcriptSource !== 'audio' && live && status.inCall && !status.captionsOn) {
     view.append(el('p', 'muted',
       'Captions are off. Turn on CC in the Meet toolbar to fill the transcript.'));
@@ -325,6 +334,8 @@ async function renderMeeting(id, live, epoch) {
   dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatTranscript(meeting.segments)));
   dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
   dl.item('Download .docx', async () => download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting)));
+  dl.item('Download .srt', () => download(`${meeting.title}.srt`, M.formatSubtitles(meeting.segments, 'srt')));
+  dl.item('Download .vtt', () => download(`${meeting.title}.vtt`, M.formatSubtitles(meeting.segments, 'vtt')));
   dl.item('Save as PDF', async () => {
     if (!Host) {
       chrome.tabs.create({ url: chrome.runtime.getURL(`panel/print.html?id=${encodeURIComponent(meeting.id)}`) });
@@ -438,8 +449,21 @@ async function renderMeeting(id, live, epoch) {
     view.append(el('p', 'muted', 'Changes save when you leave a field. A new speaker name applies to every line with the old name. Empty a line to delete it.'));
     if (meeting.mom) view.append(el('p', 'muted', 'The existing MoM changes only when you regenerate it.'));
   }
+  if (!editing && meeting.segments.length) view.append(askBox(meeting));
   const list = raw(el('div'));
-  for (const s of meeting.segments) list.append(editing ? segmentEditor(meeting, s) : segmentLine(s));
+  const playable = running ? [] : recs.filter((r) => !r.legacy && (r.count > 0 || r.systemCount > 0 || r.micCount > 0));
+  const recordingAt = (t) => playable.filter((r) => r.baseTime <= t).sort((a, b) => b.baseTime - a.baseTime)[0];
+  if (editing) {
+    for (const s of meeting.segments) list.append(segmentEditor(meeting, s));
+  } else {
+    const lines = meeting.segments.map((s, i) => {
+      const rec = recordingAt(s.t);
+      const next = meeting.segments[i + 1];
+      return { t: s.t, node: segmentLine(s, rec && (() => playLine(meeting, s, next, rec))) };
+    });
+    const marks = (meeting.marks ?? []).map((t) => ({ t, node: markLine(t) }));
+    for (const { node } of [...lines, ...marks].sort((a, b) => a.t - b.t)) list.append(node);
+  }
   if (!meeting.segments.length) view.append(el('p', 'muted', Host?.emptySegmentsText ?? 'No captions yet.'));
   view.append(list);
   if (meeting.mom) {
@@ -450,10 +474,107 @@ async function renderMeeting(id, live, epoch) {
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
 }
 
-function segmentLine(s) {
+const PLAY_MIN_SECONDS = 3;
+const PLAY_MAX_SECONDS = 30;
+let playing = null;
+
+function stopPlaying() {
+  clearTimeout(playing?.timer);
+  playing?.context.close().catch(() => {});
+  playing = null;
+}
+
+async function loadLineAudio(rec, index) {
+  const loads = Host
+    ? [globalThis.MeetAudioStore.loadSystem, globalThis.MeetAudioStore.loadMic]
+    : [globalThis.MeetAudioStore.loadAudio];
+  const saved = await Promise.all(loads.map((load) => load(rec.recId)));
+  return saved.map((s) => s?.blobs[s.indices.indexOf(index)]).filter(Boolean);
+}
+
+async function playLine(meeting, s, next, rec) {
+  const same = playing?.segmentId === s.id;
+  stopPlaying();
+  if (same) return render();
+  const session = { segmentId: s.id, context: new AudioContext() };
+  playing = session;
+  render();
+  try {
+    const { index, offset } = M.locateLine(s.t, rec.baseTime, rec.chunkMs);
+    const blobs = await loadLineAudio(rec, index);
+    if (!blobs.length) throw new Error('no audio');
+    const buffers = await Promise.all(blobs.map(async (b) => session.context.decodeAudioData(await b.arrayBuffer())));
+    if (playing !== session) return undefined;
+    const seconds = Math.min(PLAY_MAX_SECONDS, Math.max(PLAY_MIN_SECONDS, next ? (next.t - s.t) / 1000 + 1 : PLAY_MIN_SECONDS * 3));
+    for (const buffer of buffers) {
+      const source = session.context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(session.context.destination);
+      source.start(0, offset, seconds);
+    }
+    session.timer = setTimeout(() => {
+      if (playing !== session) return;
+      stopPlaying();
+      render();
+    }, seconds * 1000);
+  } catch {
+    if (playing !== session) return undefined;
+    stopPlaying();
+    momErrors.set(meeting.id, 'This line could not be played.');
+    render();
+  }
+  return undefined;
+}
+
+function askBox(meeting) {
+  const box = el('div', 'ask');
+  const row = el('div', 'ask-row');
+  const input = mkEl('input', { placeholder: 'Ask about this meeting' });
+  input.dataset.editKey = 'ask';
+  input.setAttribute('aria-label', 'Ask about this meeting');
+  const send = async () => {
+    const question = input.value.trim();
+    if (!question || asking) return;
+    asking = meeting.id;
+    input.value = '';
+    momErrors.delete(meeting.id);
+    render();
+    const res = await chrome.runtime.sendMessage({ type: 'ask-meeting', id: meeting.id, question }).catch(() => null);
+    asking = null;
+    if (res?.ok) askAnswers.set(meeting.id, [{ question, answer: res.answer }, ...(askAnswers.get(meeting.id) ?? [])]);
+    else momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
+    render();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') send();
+  });
+  row.append(input);
+  mkBtn('Ask', send, row);
+  box.append(row);
+  if (asking === meeting.id) box.append(el('p', 'muted', 'Thinking…'));
+  for (const { question, answer } of askAnswers.get(meeting.id) ?? []) {
+    const item = raw(el('div', 'mom'));
+    item.append(el('strong', null, question), el('div', null, answer));
+    box.append(item);
+  }
+  return box;
+}
+
+function markLine(t) {
+  return raw(el('div', 'mark', `★ ${globalThis.MeetI18n.t('Marked')} ${new Date(t).toLocaleTimeString()}`));
+}
+
+function segmentLine(s, play) {
   const seg = el('div', 'seg');
   const head = el('div');
   head.append(el('span', 'who', s.speaker), el('span', 'time', new Date(s.t).toLocaleTimeString()));
+  if (play) {
+    const isPlaying = playing?.segmentId === s.id;
+    const button = el('button', isPlaying ? 'play playing' : 'play', isPlaying ? '■' : '▶');
+    button.setAttribute('aria-label', globalThis.MeetI18n.t(isPlaying ? 'Stop playing' : 'Play this line'));
+    button.addEventListener('click', play);
+    head.append(button);
+  }
   seg.append(head, el('div', null, s.text));
   return seg;
 }
@@ -589,8 +710,19 @@ async function renderSettings(epoch) {
     mkEl('input', { type: 'password', value: settings.apiKey ?? '' }));
   const model = field('Model',
     mkEl('input', { value: settings.model ?? DEFAULT_MODEL }));
+  const momType = field('MoM type', document.createElement('select'));
+  addOptions(momType, [...M.MOM_PRESETS.map((p) => [p.name, p.name]), ['', 'Custom']]);
   const template = field('MoM template ({{transcript}} = transcript)',
     mkEl('textarea', { value: M.momTemplateOf(settings.momTemplate) }));
+  const matchMomType = () => {
+    momType.value = M.MOM_PRESETS.find((p) => p.template === template.value)?.name ?? '';
+  };
+  matchMomType();
+  template.addEventListener('input', matchMomType);
+  momType.addEventListener('change', () => {
+    const chosen = M.MOM_PRESETS.find((p) => p.name === momType.value);
+    if (chosen) template.value = chosen.template;
+  });
   const autoMomBox = mkEl('input', { type: 'checkbox', checked: !!settings.autoMom });
   const autoMomLabel = el('label');
   autoMomLabel.append(autoMomBox, 'Make MoM automatically when a transcript is ready (sends it to your LLM)');
@@ -777,6 +909,18 @@ async function renderSettings(epoch) {
   const actions = el('div', 'actions');
   actions.append(test, save, note);
   view.append(actions);
+  view.append(el('h3', null, 'Storage'));
+  const keepDays = field('Delete meetings older than this many days (empty = keep them)',
+    mkEl('input', { type: 'number', min: 1, value: settings.deleteAfterDays ?? '' }));
+  keepDays.addEventListener('change', async () => {
+    const days = Number(keepDays.value);
+    if (days > 0 && !confirm(globalThis.MeetI18n.t('Older meetings and their recordings are deleted now, and whenever the app starts. This cannot be undone. Continue?'))) {
+      keepDays.value = settings.deleteAfterDays ?? '';
+      return;
+    }
+    await patchSettings({ deleteAfterDays: days > 0 ? days : null });
+    await chrome.runtime.sendMessage({ type: 'delete-old-meetings' }).catch(() => {});
+  });
   for (const row of Host?.settingsRows(settings) ?? []) view.append(row);
   view.append(el('h3', null, 'Backup'));
   const bnote = el('span', 'muted', '');

@@ -19,7 +19,7 @@ test('tiap tombol mendapat shortcut dari labelnya', () => {
     'Download recording — 14:00': 'R', 'Download audio (3 file)': 'A', 'Download video': 'V', 'Download .docx': 'W', 'Save as PDF': 'P', Delete: 'X',
     'Generate transcript': 'T', Retranscribe: 'T', 'Transcribe audio': 'T', 'Stop recording': 'Q',
     'Mute microphone': 'N', 'Unmute microphone': 'N', 'Record audio': 'R', 'Record audio + video': 'V', 'Got it': 'O',
-    'Open recordings folder': 'O', 'Edit transcript': 'J', 'Done editing': 'J', 'Import audio file': 'I', 'Open Settings': 'K', 'Not now': 'Z', 'Cancel import': 'Q', 'Check for updates': 'U', 'Allow microphone': 'A', 'Test connection': 'T', Save: 'S', 'Export backup (.zip)': 'X', 'Import backup': 'I',
+    'Open recordings folder': 'O', 'Edit transcript': 'J', 'Done editing': 'J', 'Import audio file': 'I', 'Mark moment': 'H', Ask: 'Y', 'Download .srt': 'B', 'Download .vtt': 'K', 'Open Settings': 'K', 'Not now': 'Z', 'Cancel import': 'Q', 'Check for updates': 'U', 'Allow microphone': 'A', 'Test connection': 'T', Save: 'S', 'Export backup (.zip)': 'X', 'Import backup': 'I',
     Record: 'R', 'Audio only': 'A', 'Audio + video': 'V', Microphone: 'M', 'Microphone  ✓': 'M', 'Caption language': 'L',
     Indonesia: 'I', 'Indonesia  ✓': 'I', English: 'N', 'Show details': 'T', 'See all (12)': 'L',
   };

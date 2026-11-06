@@ -3,6 +3,7 @@ const SHORTCUTS = {
   'Alt+Shift+V': 'rec-start-video',
   'Alt+Shift+S': 'rec-stop',
   'Alt+Shift+M': 'mute-toggle',
+  'Alt+Shift+K': 'mark',
 };
 
 const ZOOM_KEYS = { '=': 1, '+': 1, '-': -1, 0: 0 };
@@ -24,6 +25,7 @@ function trayControls({ recording, transcribing, muted }) {
       statusItem(muted ? 'Recording, microphone muted' : 'Recording'),
       commandItem('Stop recording', 'rec-stop'),
       commandItem(muted ? 'Unmute microphone' : 'Mute microphone', 'mute-toggle'),
+      commandItem('Mark moment', 'mark'),
     ];
   }
   return [commandItem('Record audio', 'rec-start'), commandItem('Record audio + video', 'rec-start-video')];

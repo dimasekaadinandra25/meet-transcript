@@ -148,6 +148,7 @@
     } else if (rec.recording) {
       mkBtn('Stop recording', () => send({ type: 'stop-recording' }), box).classList.add('danger');
       mkBtn(rec.muted ? 'Unmute microphone' : 'Mute microphone', () => send({ type: 'set-muted', on: !rec.muted }), box);
+      mkBtn('Mark moment', () => send({ type: 'mark-moment' }), box);
       box.append(el('span', 'recording', rec.muted ? 'recording, microphone muted' : 'recording'));
       box.append(levelBars());
       box.append(el('div', 'muted', 'Muting in the meeting app does not stop the microphone recording. Use the Mute button here.'));
@@ -202,6 +203,7 @@
       const { rec } = await send({ type: 'get-active' });
       await send({ type: 'set-muted', on: !rec.muted });
     },
+    mark: () => send({ type: 'mark-moment' }),
     'quit-after-stop': async () => {
       await send({ type: 'stop-recording', transcribe: false });
       await desktop.quitNow();

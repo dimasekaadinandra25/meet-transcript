@@ -104,6 +104,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Record audio + video | **Record audio + video** | `Alt+Shift+V` |
 | Stop | **Stop recording** | `Alt+Shift+S` |
 | Mute or unmute your microphone | **Mute microphone** | `Alt+Shift+M` |
+| Mark an important moment | **Mark moment** | `Alt+Shift+K` |
 
 * **Language** in Settings switches the app between English and Bahasa Indonesia. Transcripts, MoM, and titles are never translated, and `Alt` shortcut letters stay the same in both languages.
 * **Import audio file** turns an existing audio or video file into a meeting with a transcript. The file stays where it is and is not copied into the app, so **Retranscribe** is not offered for it. Import it again instead.
@@ -124,6 +125,12 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * API keys are encrypted on your computer, but **Export backup** stores them in plain text.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
+* **Ask** on a meeting sends your question and the transcript to your AI service. Answers are not saved.
+* **Mark moment** (`Alt+Shift+K` in the desktop app and Chrome) flags an important point. Marks show in the transcript and the MoM prompt gives them priority.
+* The ▶ on a line plays that moment from the recording, while the recording is still kept.
+* **Download** also offers `.srt` and `.vtt` subtitles. **MoM type** in Settings offers Standard, Standup, Client call, and 1-on-1.
+* **Delete meetings older than** in Settings removes old meetings and their recordings when the app starts. It is off by default, and copies in `Documents/Transcripables` stay.
+* In the extension, the icon shows **!** when captions are off or quiet, or when *Meet captions + recorded audio* has no recording. Hover the icon for the reason.
 * **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay. If a part fails to transcribe again, its old lines are kept.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine uses a small model (`ggml-base-q5_1`), so a larger model on your own server is more accurate. It needs the Microsoft Visual C++ Redistributable, and the app says so if the engine cannot start.

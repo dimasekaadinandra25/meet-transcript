@@ -412,3 +412,78 @@ test('time left follows the speed so far', () => {
   assert.equal(minutesLeft(9, 10, 9000), 1);
   assert.equal(minutesLeft(10, 10, 9000), null);
 });
+
+const subtitleLines = [
+  { id: 'a', speaker: 'Ani', text: 'halo semua', t: 100000 },
+  { id: 'b', speaker: '', text: 'kita mulai sekarang', t: 103500 },
+];
+
+test('SRT numbers each line and uses commas in times', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  assert.equal(formatSubtitles(subtitleLines, 'srt'),
+    '1\n00:00:00,000 --> 00:00:01,000\nAni: halo semua\n\n2\n00:00:03,500 --> 00:00:04,700\nkita mulai sekarang\n');
+});
+
+test('VTT has its header and uses dots in times', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  assert.equal(formatSubtitles(subtitleLines, 'vtt'),
+    'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nAni: halo semua\n\n00:00:03.500 --> 00:00:04.700\nkita mulai sekarang\n');
+});
+
+test('a subtitle ends before the next line starts', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  const out = formatSubtitles([{ speaker: '', text: 'satu dua tiga empat lima enam tujuh', t: 0 }, { speaker: '', text: 'x', t: 1000 }], 'vtt');
+  assert.ok(out.includes('00:00:00.000 --> 00:00:01.000'));
+});
+
+test('subtitles of long meetings count hours', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  const out = formatSubtitles([{ speaker: '', text: 'a', t: 0 }, { speaker: '', text: 'b', t: 3723004 }], 'srt');
+  assert.ok(out.includes('01:02:03,004 --> '));
+});
+
+test('every MoM type has the transcript and the language rule', () => {
+  const { MOM_PRESETS } = globalThis.MeetMerge;
+  assert.equal(MOM_PRESETS[0].template, DEFAULT_MOM_TEMPLATE);
+  assert.ok(MOM_PRESETS.length >= 4);
+  for (const { name, template } of MOM_PRESETS) {
+    assert.ok(template.includes('{{transcript}}'), name);
+    assert.ok(template.includes('main language spoken'), name);
+  }
+});
+
+test('the MoM prompt lists marked moments', () => {
+  const { momPrompt } = globalThis.MeetMerge;
+  const at = new Date(2026, 0, 1, 10, 5, 12).getTime();
+  const plain = momPrompt({ segments: [{ speaker: 'Ani', text: 'halo', t: at }] }, {});
+  assert.ok(plain.includes('Ani: halo'));
+  assert.ok(!plain.includes('marked'));
+  const marked = momPrompt({ segments: [{ speaker: 'Ani', text: 'halo', t: at }], marks: [at] }, {});
+  assert.ok(marked.includes('marked during the meeting'));
+  assert.ok(marked.includes('10:05:12'));
+});
+
+test('the question prompt holds the question and transcript', () => {
+  const { askPrompt } = globalThis.MeetMerge;
+  const prompt = askPrompt({ segments: [{ speaker: 'Ani', text: 'anggaran naik', t: 0 }] }, 'Berapa anggaran?');
+  assert.ok(prompt.includes('Berapa anggaran?'));
+  assert.ok(prompt.includes('anggaran naik'));
+  assert.match(prompt, /only/);
+});
+
+test('a line is found inside its recording part', () => {
+  const { locateLine } = globalThis.MeetMerge;
+  assert.deepEqual(locateLine(1000 + 125000, 1000, 120000), { index: 1, offset: 4.7 });
+  assert.deepEqual(locateLine(1100, 1000, 120000), { index: 0, offset: 0 });
+});
+
+test('only meetings past the limit are expired', () => {
+  const { expiredMeetingIds } = globalThis.MeetMerge;
+  const day = 86400000;
+  const now = 100 * day;
+  const list = [{ id: 'old', endedAt: 89 * day }, { id: 'new', endedAt: 95 * day }, { id: 'running', endedAt: null }];
+  assert.deepEqual(expiredMeetingIds(list, 10, now), ['old']);
+  assert.deepEqual(expiredMeetingIds(list, 0, now), []);
+  assert.deepEqual(expiredMeetingIds(list, 'x', now), []);
+  assert.deepEqual(expiredMeetingIds(list, undefined, now), []);
+});

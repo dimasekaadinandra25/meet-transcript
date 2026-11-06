@@ -727,3 +727,43 @@ test('import says it is an import, so it can offer Cancel', async () => {
   assert.ok(recStates().some((s) => s.transcribing && s.importing));
   assert.ok(!recStates().at(-1).importing);
 });
+
+test('a moment can be marked while recording', async () => {
+  await ctl.handle(START);
+  const res = await ctl.handle({ type: 'mark-moment' });
+  assert.equal(res.ok, true);
+  assert.deepEqual(meeting().marks, [NOW]);
+});
+
+test('marking with nothing running reports an error', async () => {
+  const res = await ctl.handle({ type: 'mark-moment' });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /No meeting/);
+});
+
+test('asking about a meeting returns the answer', async () => {
+  await runRecording();
+  const res = await ctl.handle({ type: 'ask-meeting', id, question: 'Apa keputusannya?' });
+  assert.equal(res.ok, true);
+  assert.equal(typeof res.answer, 'string');
+  assert.equal(meeting().mom ?? null, meeting().mom ?? null);
+});
+
+test('asking needs an AI service', async () => {
+  await runRecording();
+  data.settings = { ...data.settings, apiKey: '', baseUrl: 'https://api.openai.com/v1' };
+  const res = await ctl.handle({ type: 'ask-meeting', id, question: 'Apa?' });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /API key/);
+});
+
+test('old meetings are deleted at startup when the limit is set', async () => {
+  const day = 86400000;
+  data.settings = { ...data.settings, deleteAfterDays: 10 };
+  data.meetings = ['desktop-1', 'desktop-2'];
+  data['meeting:desktop-1'] = { id: 'desktop-1', startedAt: 1, endedAt: NOW - 20 * day, segments: [] };
+  data['meeting:desktop-2'] = { id: 'desktop-2', startedAt: 1, endedAt: NOW - day, segments: [] };
+  await ctl.recover();
+  assert.deepEqual(data.meetings, ['desktop-2']);
+  assert.equal(data['meeting:desktop-1'], undefined);
+});

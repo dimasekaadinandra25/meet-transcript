@@ -305,8 +305,7 @@
       if (!merge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
       const meeting = await readMeeting(id);
       if (!meeting?.segments.length) throw new Error('The transcript is empty.');
-      const prompt = merge.fillTemplate(merge.momTemplateOf(settings.momTemplate),
-        merge.formatTranscript(meeting.segments));
+      const prompt = merge.momPrompt(meeting, settings);
       const mom = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl, prompt,
         model: settings.model || openai.DEFAULT_MODEL });
       await updateMeeting(id, (fresh) => { fresh.mom = mom; });
@@ -402,6 +401,36 @@
       }
     }
 
+    async function markMoment() {
+      if (!rec.recording) return { ok: false, error: 'No meeting is running.' };
+      const at = now();
+      await updateMeeting(rec.meetingId, (meeting) => { meeting.marks = [...(meeting.marks ?? []), at]; });
+      return { ok: true };
+    }
+
+    async function askMeeting({ id, question }) {
+      try {
+        const settings = await readSettings();
+        if (!merge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
+        const meeting = await readMeeting(id);
+        if (!meeting?.segments.length) throw new Error('The transcript is empty.');
+        const answer = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
+          model: settings.model || openai.DEFAULT_MODEL, prompt: merge.askPrompt(meeting, question) });
+        return { ok: true, answer };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+
+    async function deleteOldMeetings() {
+      const settings = await readSettings();
+      if (!(Number(settings.deleteAfterDays) > 0)) return { ok: true };
+      const { meetings = [] } = await storage.get('meetings');
+      const stored = await Promise.all(meetings.map(readMeeting));
+      for (const id of merge.expiredMeetingIds(stored.filter(Boolean), settings.deleteAfterDays, now())) await deleteMeeting({ id });
+      return { ok: true };
+    }
+
     const HANDLERS = {
       'get-active': () => ({ id: activeId, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0,
         rec: { ...rec, autoStt: true, muted: recorder.isMuted() }, panelTab: null, panelMeetingId: null }),
@@ -412,6 +441,9 @@
       'delete-meeting': deleteMeeting,
       'edit-transcript': editTranscript,
       'import-audio': importAudio,
+      'mark-moment': markMoment,
+      'ask-meeting': askMeeting,
+      'delete-old-meetings': deleteOldMeetings,
       'cancel-import': () => {
         if (importRun) importRun.cancelled = true;
       },
@@ -443,6 +475,7 @@
           await updateMeeting(id, (m) => { m.endedAt = merge.lastActivityAt(m); });
         }
       }
+      await deleteOldMeetings();
     }
 
     return { handle, recover, warn, chunkSaved };

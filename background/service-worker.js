@@ -15,12 +15,36 @@ function notifyPanel(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
-chrome.action?.setBadgeBackgroundColor({ color: '#d93025' });
 chrome.action?.setBadgeTextColor?.({ color: '#ffffff' });
-function updateBadge() {
-  const recording = (active.inCall && active.captionsOn) || rec.recording;
-  chrome.action?.setBadgeText({ text: recording ? '●' : '' });
+const QUIET_CAPTIONS_MS = 30000;
+let transcriptSource = 'caption';
+
+function captionProblem() {
+  if (!active.inCall || transcriptSource === 'audio') return null;
+  if (!active.captionsOn) return 'Captions are off';
+  const quietSince = Math.max(active.lastSegmentAt || 0, active.captionsOnAt || 0);
+  if (quietSince && Date.now() - quietSince > QUIET_CAPTIONS_MS) return 'No captions for 30 seconds';
+  return transcriptSource === 'both' && !rec.recording ? 'Not recording yet' : null;
 }
+
+function updateBadge() {
+  const problem = captionProblem();
+  const running = (active.inCall && active.captionsOn) || rec.recording;
+  const t = globalThis.MeetI18n?.t ?? String;
+  chrome.action?.setBadgeBackgroundColor({ color: problem ? '#b45309' : '#d93025' });
+  chrome.action?.setBadgeText({ text: problem ? '!' : running ? '●' : '' });
+  chrome.action?.setTitle?.({ title: problem ? `Transcripables: ${t(problem)}` : 'Transcripables' });
+}
+
+chrome.storage.local.get('settings').then(({ settings }) => {
+  transcriptSource = settings?.transcriptSource ?? 'caption';
+  updateBadge();
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  transcriptSource = changes.settings.newValue?.transcriptSource ?? 'caption';
+  updateBadge();
+});
 
 const REC_IDLE = { recording: false, transcribing: false, meetingId: null };
 let rec = { ...REC_IDLE };
@@ -198,6 +222,7 @@ if (chrome.tabCapture) {
   const runCommand = (id, tab) => {
     if (id === 'rec-start' || id === 'rec-start-video') startFromTab(tab, id === 'rec-start-video');
     else if (id === 'rec-stop') stopRecording();
+    else if (id === 'mark-moment') markMoment().catch((e) => recError(e.message));
   };
   chrome.contextMenus.onClicked.addListener((info, tab) => runCommand(info.menuItemId, tab));
   chrome.commands?.onCommand.addListener(runCommand);
@@ -429,9 +454,7 @@ async function generateMom(id) {
   const data = await chrome.storage.local.get(key);
   const meeting = data[key];
   if (!meeting || !meeting.segments.length) throw new Error('The transcript is empty.');
-  const transcript = globalThis.MeetMerge.formatTranscript(meeting.segments);
-  const prompt = globalThis.MeetMerge.fillTemplate(
-    globalThis.MeetMerge.momTemplateOf(settings.momTemplate), transcript);
+  const prompt = globalThis.MeetMerge.momPrompt(meeting, settings);
   const mom = await globalThis.MeetOpenAI.generateMoM({
     apiKey: settings.apiKey, model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt,
     baseUrl: settings.baseUrl,
@@ -479,9 +502,42 @@ async function removeMeeting(id) {
   notifyPanel({ type: 'meeting-updated', id });
 }
 
-const deleteMeeting = (id) => new Promise((resolve, reject) => {
-  enqueueWrite(() => removeMeeting(id).then(resolve, reject));
+const whenWritten = (work) => new Promise((resolve, reject) => {
+  enqueueWrite(() => work().then(resolve, reject));
 });
+
+const deleteMeeting = (id) => whenWritten(() => removeMeeting(id));
+
+async function deleteOldMeetings() {
+  const { settings = {}, meetings = [] } = await chrome.storage.local.get(['settings', 'meetings']);
+  if (!(Number(settings.deleteAfterDays) > 0)) return;
+  const stored = await chrome.storage.local.get(meetings.map(meetingKey));
+  const old = globalThis.MeetMerge.expiredMeetingIds(Object.values(stored), settings.deleteAfterDays, Date.now());
+  for (const id of old) await deleteMeeting(id).catch(() => {});
+}
+
+async function addMark() {
+  const id = rec.recording ? rec.meetingId : active.inCall && active.id;
+  if (!id) throw new Error('No meeting is running.');
+  const key = meetingKey(id);
+  const data = await chrome.storage.local.get([key, 'meetings']);
+  const meeting = data[key] ?? newMeeting(id, id, Date.now());
+  meeting.marks = [...(meeting.marks ?? []), Date.now()];
+  await storeMeeting(id, meeting, data);
+  notifyPanel({ type: 'meeting-updated', id });
+}
+
+const markMoment = () => whenWritten(addMark);
+
+async function askMeeting(id, question) {
+  const key = meetingKey(id);
+  const { settings = {}, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
+  if (!globalThis.MeetMerge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
+  if (!meeting?.segments.length) throw new Error('The transcript is empty.');
+  const answer = await globalThis.MeetOpenAI.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
+    model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt: globalThis.MeetMerge.askPrompt(meeting, question) });
+  return { answer };
+}
 
 async function saveTranscriptEdit(id, change) {
   if (meetingRunning(id)) throw new Error('This meeting is still running. Stop it before editing.');
@@ -493,9 +549,7 @@ async function saveTranscriptEdit(id, change) {
   notifyPanel({ type: 'meeting-updated', id });
 }
 
-const editTranscript = (id, change) => new Promise((resolve, reject) => {
-  enqueueWrite(() => saveTranscriptEdit(id, change).then(resolve, reject));
-});
+const editTranscript = (id, change) => whenWritten(() => saveTranscriptEdit(id, change));
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'captions') return;
@@ -629,6 +683,9 @@ const HANDLERS = {
     reply(generateMomOnce(msg.id).then((mom) => ({ mom })), sendResponse),
   'delete-meeting': (msg, sender, sendResponse) => reply(deleteMeeting(msg.id), sendResponse),
   'edit-transcript': (msg, sender, sendResponse) => reply(editTranscript(msg.id, msg.change), sendResponse),
+  'mark-moment': (msg, sender, sendResponse) => reply(markMoment(), sendResponse),
+  'ask-meeting': (msg, sender, sendResponse) => reply(askMeeting(msg.id, msg.question), sendResponse),
+  'delete-old-meetings': (msg, sender, sendResponse) => reply(deleteOldMeetings(), sendResponse),
   'stop-recording': () => { stopRecording(); },
   'start-active-tab-recording': (msg) => {
     chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
@@ -699,3 +756,5 @@ const HANDLERS = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) =>
   HANDLERS[msg.type]?.(msg, sender, sendResponse) === true);
+
+deleteOldMeetings().catch((e) => console.warn('[cleanup]', e.message));

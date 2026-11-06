@@ -14,10 +14,12 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   const tabUpdated = [];
   const removedAudio = [];
   let badge = null;
+  let badgeTitle = null;
   const chrome = {
     action: {
       setBadgeBackgroundColor() {}, setBadgeTextColor() {},
       setBadgeText(o) { badge = o.text; },
+      setTitle(o) { badgeTitle = o.title; },
     },
     runtime: {
       onMessage: { addListener: (f) => handlers.push(f) },
@@ -96,7 +98,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
     for (const f of connects) f(port);
     return { send: (m) => port.msgFns.forEach((f) => f(m)), disconnect: () => port.discFns.forEach((f) => f()) };
   };
-  return { ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, meetingIdFromUrl: ctx.meetingIdFromUrl,
+  return { ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, badgeTitle: () => badgeTitle, meetingIdFromUrl: ctx.meetingIdFromUrl,
     autoTranscribe: ctx.autoTranscribe, menus, install: () => installed.forEach((f) => f()), settingsChanged: (settings) => changed.forEach((f) => f({ settings: { newValue: settings } }, 'local')) };
 }
 
@@ -133,7 +135,7 @@ test('offscreen yang idle tidak memalsukan rekaman', async () => {
   const sw = loadSw({ offscreen: { recording: false, transcribing: false, meetingId: null } });
   const a = await sw.ask({ type: 'get-active' });
   assert.deepEqual({ ...a.rec }, { recording: false, transcribing: false, meetingId: null });
-  assert.equal(sw.badge(), null);
+  assert.ok(!sw.badge());
 });
 
 test('STT otomatis hanya untuk Meet bermode audio', () => {
@@ -611,4 +613,102 @@ test('editing a missing meeting reports an error', async () => {
   const sw = loadSw({ offscreen: null, store: editStore() });
   const res = await sw.ask({ type: 'edit-transcript', id: 'nope', change: { segmentId: 'x', text: 'ubah' } });
   assert.equal(res.ok, false);
+});
+
+const inCall = async (sw, captionsOn) => {
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'abc-defg-hij', inCall: true, captionsOn });
+  await wait();
+  return port;
+};
+
+test('the icon warns when captions are off', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'caption' } } });
+  await wait();
+  await inCall(sw, false);
+  assert.equal(sw.badge(), '!');
+  assert.match(sw.badgeTitle(), /Captions are off/);
+});
+
+test('the icon warns when captions + audio has no recording', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'both' } } });
+  await wait();
+  await inCall(sw, true);
+  assert.equal(sw.badge(), '!');
+  assert.match(sw.badgeTitle(), /Not recording/);
+});
+
+test('the icon shows no warning when captions are working', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'caption' } } });
+  await wait();
+  await inCall(sw, true);
+  assert.equal(sw.badge(), '●');
+});
+
+test('the icon warning follows a settings change', async () => {
+  const store = { settings: { transcriptSource: 'caption' } };
+  const sw = loadSw({ offscreen: null, store });
+  await wait();
+  const port = await inCall(sw, true);
+  sw.settingsChanged({ transcriptSource: 'both' });
+  await wait();
+  port.send({ type: 'status', meetingId: 'abc-defg-hij', inCall: true, captionsOn: true });
+  await wait();
+  assert.equal(sw.badge(), '!');
+});
+
+test('a moment can be marked during a call', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'a', inCall: true, captionsOn: true });
+  await wait();
+  const res = await sw.ask({ type: 'mark-moment' });
+  assert.equal(res.ok, true);
+  assert.equal(sw.store['meeting:a'].marks.length, 1);
+});
+
+test('marking with no meeting running reports an error', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const res = await sw.ask({ type: 'mark-moment' });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /No meeting/);
+});
+
+test('asking about a meeting returns the answer without changing it', async () => {
+  const prompts = [];
+  const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } }, generateMoM: async ({ prompt }) => { prompts.push(prompt); return 'jawaban'; } });
+  const res = await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
+  assert.deepEqual([res.ok, res.answer], [true, 'jawaban']);
+  assert.ok(prompts[0].includes('Apa?'));
+  assert.equal(sw.store['meeting:a'].mom, null);
+});
+
+test('asking needs an AI service', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const res = await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /API key/);
+});
+
+test('old meetings are deleted when the limit is set', async () => {
+  const day = 86400000;
+  const store = {
+    settings: { deleteAfterDays: 10 },
+    meetings: ['old', 'new'],
+    'meeting:old': { id: 'old', endedAt: Date.now() - 20 * day, segments: [] },
+    'meeting:new': { id: 'new', endedAt: Date.now() - day, segments: [] },
+  };
+  const sw = loadSw({ offscreen: null, store });
+  await wait();
+  assert.deepEqual(sw.store.meetings, ['new']);
+  assert.equal(sw.store['meeting:old'], undefined);
+  assert.deepEqual(sw.removedAudio, ['old']);
+});
+
+test('no limit deletes nothing', async () => {
+  const store = { meetings: ['old'], 'meeting:old': { id: 'old', endedAt: 1, segments: [] } };
+  const sw = loadSw({ offscreen: null, store });
+  await sw.ask({ type: 'delete-old-meetings' });
+  await wait();
+  assert.deepEqual(sw.store.meetings, ['old']);
 });

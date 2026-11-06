@@ -29,6 +29,7 @@ test('shortcut memakai kombinasi dari plan', () => {
     'Alt+Shift+V': 'rec-start-video',
     'Alt+Shift+S': 'rec-stop',
     'Alt+Shift+M': 'mute-toggle',
+    'Alt+Shift+K': 'mark',
   });
 });
 
@@ -77,7 +78,7 @@ test('tray saat diam bisa mulai merekam', () => {
 
 test('tray saat merekam bisa berhenti dan membisukan', () => {
   const state = { recording: true, transcribing: false, muted: false };
-  assert.deepEqual(labels(state), ['Recording', 'Stop recording', 'Mute microphone', 'Open recordings folder', 'Show', 'Quit']);
+  assert.deepEqual(labels(state), ['Recording', 'Stop recording', 'Mute microphone', 'Mark moment', 'Open recordings folder', 'Show', 'Quit']);
   assert.equal(find(state, 'Recording').enabled, false);
   assert.equal(find(state, 'Stop recording').command, 'rec-stop');
   assert.equal(find(state, 'Mute microphone').command, 'mute-toggle');

@@ -16,7 +16,8 @@
   "commands": {
     "rec-start": { "suggested_key": { "default": "Alt+Shift+R" }, "description": "Record meeting audio" },
     "rec-start-video": { "suggested_key": { "default": "Alt+Shift+V" }, "description": "Record meeting audio + video" },
-    "rec-stop": { "suggested_key": { "default": "Alt+Shift+S" }, "description": "Stop recording" }
+    "rec-stop": { "suggested_key": { "default": "Alt+Shift+S" }, "description": "Stop recording" },
+    "mark-moment": { "suggested_key": { "default": "Alt+Shift+K" }, "description": "Mark moment" }
   },
   "background": { "service_worker": "background/service-worker.js" },
   "content_scripts": [
