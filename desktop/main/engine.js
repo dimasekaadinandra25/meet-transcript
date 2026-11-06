@@ -66,11 +66,13 @@ function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, 
 
   async function url() {
     if (!available()) throw new Error('The built-in speech engine is not installed.');
-    starting ??= start().catch((e) => {
-      starting = undefined;
+    if (starting) return starting;
+    const attempt = start().catch((e) => {
+      if (starting === attempt) starting = undefined;
       throw e;
     });
-    return starting;
+    starting = attempt;
+    return attempt;
   }
 
   return { available, url, stop };

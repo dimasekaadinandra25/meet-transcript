@@ -9,6 +9,7 @@
     page.append(el('p', null, 'Meeting not found.'));
     return;
   }
+  raw(document.querySelector('title'));
   document.title = meeting.title;
   page.append(raw(el('h1', null, meeting.title)), el('p', 'muted', new Date(meeting.startedAt).toLocaleString()));
   if (meeting.mom) page.append(el('h2', null, 'Minutes of Meeting'), raw(el('div', 'mom', meeting.mom)));
@@ -20,5 +21,6 @@
     line.append(head, el('div', null, s.text));
     page.append(line);
   }
+  await new Promise((resolve) => setTimeout(resolve));
   window.print();
 })();

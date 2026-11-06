@@ -55,3 +55,9 @@ test('every page loads the translator before the buttons', () => {
     assert.ok(html.indexOf('lib/i18n.js') < html.indexOf('lib/ui.js'), page);
   }
 });
+
+test('a template with a value keeps that value untranslated', () => {
+  const key = 'Delete "{}" and its recordings? This cannot be undone.';
+  assert.equal(t(key), key);
+  assert.equal(inIndonesian(() => t(key)), 'Hapus "{}" beserta rekamannya? Ini tidak bisa dibatalkan.');
+});

@@ -375,7 +375,8 @@ async function renderMeeting(id, live, epoch) {
   }
   if (!live) {
     const remove = btn('Delete', async () => {
-      if (!confirm(`${t(`Delete "${meeting.title}" and its recordings? This cannot be undone.`)}${t(Host?.deleteNote ?? '')}`)) return;
+      const question = t('Delete "{}" and its recordings? This cannot be undone.').replace('{}', () => meeting.title);
+      if (!confirm(question + t(Host?.deleteNote ?? ''))) return;
       momErrors.delete(meeting.id);
       const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
       if (res?.ok) viewingId = null;
@@ -555,6 +556,7 @@ async function renderSettings(epoch) {
   const urlByMode = { 'whisper-local': ST.WHISPER_DEFAULT, api: '', builtin: '' };
   let urlMode = savedMode;
   urlByMode[urlMode] = initialUrl;
+  if (savedMode === 'builtin' && settings.sttBaseUrl) urlByMode[ST.isLocalUrl(settings.sttBaseUrl) ? 'whisper-local' : 'api'] = settings.sttBaseUrl;
   sttModeSel.addEventListener('change', () => {
     urlByMode[urlMode] = sttBaseUrl.value.trim();
     urlMode = sttModeSel.value;
@@ -645,7 +647,7 @@ async function renderSettings(epoch) {
         sttMode: sttModeSel.value,
         sttModel: sttModel.value.trim() || ST.DEFAULT_API_MODEL,
         sttLanguage: sttLanguage.value.trim(),
-        sttBaseUrl: sttBaseValue(),
+        sttBaseUrl: sttModeSel.value === 'builtin' ? cur.sttBaseUrl ?? '' : sttBaseValue(),
         sttApiKey: sttApiKey.value.trim(),
       },
     });

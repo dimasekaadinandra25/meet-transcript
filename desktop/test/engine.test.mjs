@@ -89,3 +89,17 @@ test('stop ends the engine, and the next request starts a new one', async () => 
   engine.stop();
   assert.equal(started[1].child.killed, 1);
 });
+
+test('a failed start does not forget the engine that replaced it', async () => {
+  let healthy = false;
+  const { engine, started } = setup({ healthy: () => healthy });
+  const first = engine.url();
+  await new Promise((resolve) => setImmediate(resolve));
+  started[0].child.emit('exit', 1);
+  healthy = true;
+  const second = engine.url();
+  await assert.rejects(first, /could not start/);
+  assert.equal(await second, 'http://127.0.0.1:5001/v1');
+  assert.equal(await engine.url(), 'http://127.0.0.1:5001/v1');
+  assert.equal(started.length, 2);
+});

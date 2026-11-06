@@ -41,3 +41,15 @@ test('karakter terlarang di judul diganti', () => {
   assert.ok(safeRecordingName(`${'a'.repeat(400)}.webm`).length <= 150);
   assert.ok(safeRecordingName(`${'a'.repeat(400)}.webm`).endsWith('.webm'));
 });
+
+test('a long title keeps the end of the name, so files stay apart', () => {
+  const title = 'x'.repeat(300);
+  const audio = safeRecordingName(`${title} 1762400000000.webm`);
+  const video = safeRecordingName(`${title} 1762400000000-video.webm`);
+  const other = safeRecordingName(`${title} 1762400999999.webm`);
+  assert.ok(audio.length <= 150);
+  assert.ok(audio.endsWith(' 1762400000000.webm'));
+  assert.ok(video.endsWith(' 1762400000000-video.webm'));
+  assert.notEqual(audio, video);
+  assert.notEqual(audio, other);
+});

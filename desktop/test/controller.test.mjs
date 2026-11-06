@@ -590,3 +590,43 @@ test('a built-in engine that cannot start warns and recording continues', async 
   assert.ok(messages.some((m) => m.error?.startsWith('The built-in speech engine is not installed. Recording continues')));
   assert.equal(meeting().endedAt, null);
 });
+
+test('a folder warning at stop stays on screen', async () => {
+  fakeStore.failSave = 'disk full';
+  await ctl.handle(START);
+  await ctl.handle({ type: 'stop-recording' });
+  assert.match(recStates().at(-1).error, /could not be saved to your folder/);
+});
+
+test('a warning from before stop does not come back', async () => {
+  await ctl.handle(START);
+  ctl.warn('Microphone disconnected.');
+  await ctl.handle({ type: 'stop-recording' });
+  assert.equal(recStates().at(-1).error, null);
+});
+
+test('the live pause message clears after a later part succeeds', async () => {
+  await ctl.handle(START);
+  await settle();
+  fakeOpenAI.fail = new Error('STT off');
+  ctl.chunkSaved();
+  await settle();
+  assert.match(recStates().at(-1).error, /paused/);
+  fakeOpenAI.fail = null;
+  ctl.chunkSaved();
+  await settle();
+  assert.equal(recStates().at(-1).error, null);
+});
+
+test('a newer warning is not cleared by a later live success', async () => {
+  await ctl.handle(START);
+  await settle();
+  fakeOpenAI.fail = new Error('STT off');
+  ctl.chunkSaved();
+  await settle();
+  ctl.warn('Microphone disconnected.');
+  fakeOpenAI.fail = null;
+  ctl.chunkSaved();
+  await settle();
+  assert.equal(recStates().filter((s) => 'error' in s).at(-1).error, 'Microphone disconnected.');
+});

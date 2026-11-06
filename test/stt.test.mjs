@@ -190,3 +190,24 @@ test('a backup from the desktop app falls back to Local Whisper in the extension
   const { sttMode } = globalThis.MeetStt;
   assert.equal(sttMode({ sttMode: 'builtin' }), 'whisper-local');
 });
+
+test('sound markers from Whisper are not transcript lines', () => {
+  const r = parseSttResponse({ segments: [{ start: 0, text: ' [BLANK_AUDIO]' }, { start: 1, text: '(silence) [Music]' }, { start: 2, text: ' ♪ ' }, { start: 3, text: 'halo [tertawa] semua' }] });
+  assert.deepEqual(r.segments.map((s) => s.text), ['halo [tertawa] semua']);
+});
+
+test('a reply with only sound markers has no segments', () => {
+  assert.deepEqual(parseSttResponse({ text: ' [BLANK_AUDIO]\n' }), { segments: [] });
+  assert.deepEqual(parseSttResponse({ segments: [{ start: 0, text: '[BLANK_AUDIO]' }] }), { segments: [] });
+});
+
+test('only a new install starts on the built-in engine', () => {
+  const { neverConfigured } = globalThis.MeetStt;
+  assert.equal(neverConfigured({}), true);
+  assert.equal(neverConfigured({ settings: { uiLang: 'id' }, meetings: [] }), true);
+  assert.equal(neverConfigured({ settings: { apiKey: 'k' } }), false);
+  assert.equal(neverConfigured({ settings: { baseUrl: 'https://x/v1' } }), false);
+  assert.equal(neverConfigured({ settings: { sttMode: 'whisper-local' } }), false);
+  assert.equal(neverConfigured({ settings: { sttBaseUrl: 'http://x/v1' } }), false);
+  assert.equal(neverConfigured({ meetings: ['a'] }), false);
+});

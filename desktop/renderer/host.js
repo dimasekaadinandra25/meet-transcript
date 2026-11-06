@@ -40,8 +40,8 @@
   controller.recover().catch((e) => console.error(e));
 
   async function useEngineByDefault() {
-    const { settings } = await shim.storage.local.get('settings');
-    if (settings?.sttMode || settings?.sttBaseUrl || !await desktop.engine.available()) return;
+    const stored = await shim.storage.local.get(['settings', 'meetings']);
+    if (!globalThis.MeetStt.neverConfigured(stored) || !await desktop.engine.available()) return;
     await globalThis.MeetUi.patchSettings({ sttMode: 'builtin' });
   }
   useEngineByDefault().catch((e) => console.error(e));
@@ -170,13 +170,14 @@
   function updateRow() {
     const box = el('div', 'actions');
     const note = el('span', 'muted');
+    let openPage;
     const button = mkBtn('Check for updates', async () => {
       button.disabled = true;
       note.textContent = 'Checking…';
       const result = await desktop.checkForUpdate();
       button.disabled = false;
       note.textContent = UPDATE_TEXT[result.status](result);
-      if (result.status === 'available') mkBtn('Open download page', () => desktop.openUpdate(), box);
+      if (result.status === 'available') openPage ??= mkBtn('Open download page', () => desktop.openUpdate(), box);
     }, box);
     box.append(note);
     return box;

@@ -10,6 +10,7 @@
     let activeId = null;
     let starting = null;
     let finishing = null;
+    let stopWarning = null;
     let live = null;
     let writes = Promise.resolve();
     const momInFlight = new Map();
@@ -52,6 +53,8 @@
     }
 
     function warn(error) {
+      stopWarning = error;
+      if (live) live.paused = false;
       broadcast({ error });
       onWarning();
     }
@@ -140,13 +143,20 @@
             done.set(index, result);
             changed = true;
           } catch (e) {
-            if (!session.stopped) broadcast({ error: `Live transcript paused (${e.message}). The recording continues, and missing parts are tried again when you stop.` });
+            if (!session.stopped) {
+              session.paused = true;
+              broadcast({ error: `Live transcript paused (${e.message}). The recording continues, and missing parts are tried again when you stop.` });
+            }
             if (changed) await saveLive(session, system ?? mic);
             return;
           }
         }
       }
       if (changed) await saveLive(session, system ?? mic);
+      if (session.paused && !session.stopped) {
+        session.paused = false;
+        broadcast({ error: null });
+      }
     }
 
     async function saveLive(session, source) {
@@ -253,6 +263,7 @@
       live = null;
       if (session) session.stopped = true;
       rec = { ...rec, recording: false, transcribing: true };
+      stopWarning = null;
       broadcast();
       finishing = finishRecording(meetingId, baseTime);
       try {
@@ -260,7 +271,7 @@
         if (runStt) await session?.run;
         const error = runStt ? await transcribe(meetingId, baseTime, false, session?.done) : null;
         rec = { ...IDLE };
-        broadcast({ error });
+        broadcast({ error: [error, stopWarning].filter(Boolean).join(' ') || null });
         if (runStt && !error) autoMom(meetingId).catch((e) => console.error(e));
       } catch (e) {
         rec = { ...IDLE };

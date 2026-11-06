@@ -79,3 +79,8 @@ test('cuplikan panjang dipotong di sekitar kata', () => {
   assert.ok(snippet.includes('anggaran'));
   assert.ok(snippet.length <= 122);
 });
+
+test('docx keeps emoji', async () => {
+  const { xml } = await documentXml(meeting({ mom: 'Selesai \u{1F680} \u{0001}oke' }));
+  assert.ok(xml.includes('Selesai \u{1F680} oke'));
+});
