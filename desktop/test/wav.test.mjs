@@ -47,3 +47,9 @@ test('splitSamples drops a last part shorter than a second', () => {
   assert.deepEqual(splitSamples(new Float32Array(21), 2, 5).map((p) => p.length), [10, 10]);
   assert.deepEqual(splitSamples(new Float32Array(1), 2, 5), []);
 });
+
+test('only very large files need a warning before import', () => {
+  const { isLargeFile } = globalThis.MeetWav;
+  assert.equal(isLargeFile(100 * 1048576), false);
+  assert.equal(isLargeFile(600 * 1048576), true);
+});

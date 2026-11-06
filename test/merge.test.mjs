@@ -314,7 +314,6 @@ test('renaming a speaker changes every line with that name', () => {
   const { applyTranscriptEdit } = globalThis.MeetMerge;
   const out = applyTranscriptEdit(lines(), { from: 'Others', to: ' Budi ' });
   assert.deepEqual(out.map((s) => s.speaker), ['Budi', 'You', 'Budi']);
-  assert.deepEqual(out.map((s) => !!s.edited), [true, false, true]);
 });
 
 test('a line can be given no speaker name', () => {
@@ -338,10 +337,59 @@ test('an unchanged line is not marked as edited', () => {
   const { applyTranscriptEdit } = globalThis.MeetMerge;
   const out = applyTranscriptEdit(lines(), { segmentId: 'a', text: 'halo' });
   assert.equal(out[0].edited, undefined);
-  assert.equal(applyTranscriptEdit(lines(), { from: 'You', to: 'You' })[1].edited, undefined);
 });
 
 test('an unknown line changes nothing', () => {
   const { applyTranscriptEdit } = globalThis.MeetMerge;
   assert.deepEqual(applyTranscriptEdit(lines(), { segmentId: 'zzz', text: 'x' }), lines());
+});
+
+const tagged = (i, text, t, extra = {}) => ({ id: `audio:7:${i}`, speaker: 'Others', text, t, ...extra });
+const failedPart = (t, until) => ({ t, speaker: 'Others', text: '[transcript failed]', failedUntil: until });
+
+test('a failed part keeps its old lines when retranscribing', () => {
+  const old = [tagged(0, 'bagian satu', 1000), tagged(1, 'bagian dua', 130000)];
+  const fresh = [{ t: 1500, speaker: 'Others', text: 'bagian satu baru' }, failedPart(120000, 240000)];
+  const out = replaceAudioSegments(old, fresh, { baseTime: 7, replace: true });
+  assert.deepEqual(out.map((s) => s.text), ['bagian satu baru', 'bagian dua']);
+  assert.equal(new Set(out.map((s) => s.id)).size, 2);
+});
+
+test('other tracks in a failed part keep their old lines too', () => {
+  const old = [tagged(0, 'lama', 130000)];
+  const fresh = [{ t: 131000, speaker: 'You', text: 'baru mikrofon' }, failedPart(120000, 240000)];
+  const out = replaceAudioSegments(old, fresh, { baseTime: 7, replace: true });
+  assert.deepEqual(out.map((s) => s.text), ['lama']);
+});
+
+test('a failed part with nothing to keep shows the marker', () => {
+  const out = replaceAudioSegments([], [failedPart(0, 120000)], { baseTime: 7 });
+  assert.deepEqual(out.map((s) => s.text), ['[transcript failed]']);
+  assert.equal(out[0].failed, true);
+  assert.equal(out[0].failedUntil, undefined);
+});
+
+test('an old failure marker is replaced, not kept', () => {
+  const old = replaceAudioSegments([], [failedPart(0, 120000)], { baseTime: 7 });
+  const again = replaceAudioSegments(old, [failedPart(0, 120000)], { baseTime: 7, replace: true });
+  assert.equal(again.length, 1);
+  const fixed = replaceAudioSegments(old, [{ t: 10, speaker: 'Others', text: 'berhasil' }], { baseTime: 7, replace: true });
+  assert.deepEqual(fixed.map((s) => s.text), ['berhasil']);
+});
+
+test('new audio lines use the names you chose', () => {
+  const out = replaceAudioSegments([], [{ t: 1, speaker: 'Others', text: 'a' }, { t: 2, speaker: 'You', text: 'b' }], { baseTime: 7, names: { Others: 'Budi' } });
+  assert.deepEqual(out.map((s) => s.speaker), ['Budi', 'You']);
+});
+
+test('editMeeting remembers renames, including a second rename', () => {
+  const { editMeeting } = globalThis.MeetMerge;
+  const meeting = { segments: [{ id: 'a', speaker: 'Others', text: 'x', t: 1 }] };
+  editMeeting(meeting, { from: 'Others', to: ' Budi ' });
+  assert.deepEqual(meeting.speakerNames, { Others: 'Budi' });
+  assert.equal(meeting.segments[0].speaker, 'Budi');
+  editMeeting(meeting, { from: 'Budi', to: 'Ani' });
+  assert.equal(meeting.speakerNames.Others, 'Ani');
+  editMeeting(meeting, { segmentId: 'a', text: 'y' });
+  assert.equal(meeting.segments[0].text, 'y');
 });

@@ -701,3 +701,29 @@ test('a file with no sound reports that clearly', async () => {
   assert.equal(res.ok, false);
   assert.match(res.error, /no audio/i);
 });
+
+test('retranscribing keeps a rename', async () => {
+  await runRecording();
+  const speaker = meeting().segments.find((s) => s.speaker === 'Others').speaker;
+  await ctl.handle({ type: 'edit-transcript', id, change: { from: speaker, to: 'Budi' } });
+  await ctl.handle({ type: 'regenerate-transcript', id, recId: NOW });
+  assert.ok(meeting().segments.some((s) => s.speaker === 'Budi'));
+  assert.ok(!meeting().segments.some((s) => s.speaker === 'Others'));
+});
+
+test('import can be cancelled, and makes no meeting', async () => {
+  const running = ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  await ctl.handle({ type: 'cancel-import' });
+  const res = await running;
+  assert.equal(res.ok, false);
+  assert.equal(res.cancelled, true);
+  assert.equal(data.meetings, undefined);
+  assert.equal(fakeOpenAI.transcribeCalls.length, 0);
+  assert.deepEqual([recStates().at(-1).transcribing, recStates().at(-1).error], [false, null]);
+});
+
+test('import says it is an import, so it can offer Cancel', async () => {
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.ok(recStates().some((s) => s.transcribing && s.importing));
+  assert.ok(!recStates().at(-1).importing);
+});

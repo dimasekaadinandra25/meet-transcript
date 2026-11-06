@@ -369,7 +369,7 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
   const meeting = data[key] ?? newMeeting(meetingId, meetingId, baseTime ?? Date.now());
   meeting.source = 'audio';
   meeting.segments = globalThis.MeetMerge.replaceAudioSegments(
-    meeting.segments, segments, { baseTime: baseTime ?? 0, replace: !!replace, legacy: !!legacy });
+    meeting.segments, segments, { baseTime: baseTime ?? 0, replace: !!replace, legacy: !!legacy, names: meeting.speakerNames });
   await storeMeeting(meetingId, meeting, data);
   notifyPanel({ type: 'meeting-updated', id: meetingId });
   const tag = `audio:${baseTime ?? 0}:`;
@@ -488,7 +488,7 @@ async function saveTranscriptEdit(id, change) {
   const key = meetingKey(id);
   const { [key]: meeting } = await chrome.storage.local.get(key);
   if (!meeting) throw new Error('Meeting not found.');
-  meeting.segments = globalThis.MeetMerge.applyTranscriptEdit(meeting.segments, change);
+  globalThis.MeetMerge.editMeeting(meeting, change);
   await chrome.storage.local.set({ [key]: meeting });
   notifyPanel({ type: 'meeting-updated', id });
 }

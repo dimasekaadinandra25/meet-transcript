@@ -3,6 +3,7 @@
   const HEADER_BYTES = 44;
   const BYTES_PER_SAMPLE = 2;
   const MAX_SAMPLE = 32767;
+  const LARGE_FILE_BYTES = 500 * 1048576;
 
   function encodeWav(samples, rate) {
     const size = samples.length * BYTES_PER_SAMPLE;
@@ -60,5 +61,7 @@
     };
   }
 
-  globalThis.MeetWav = { encodeWav, mono, speechWav, splitSamples, speechParts };
+  const isLargeFile = (bytes) => bytes > LARGE_FILE_BYTES;
+
+  globalThis.MeetWav = { encodeWav, mono, speechWav, splitSamples, speechParts, isLargeFile };
 })();

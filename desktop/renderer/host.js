@@ -104,7 +104,9 @@
     const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'audio/*,video/*', hidden: true });
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      if (file) send({ type: 'import-audio', file });
+      if (!file) return;
+      if (globalThis.MeetWav.isLargeFile(file.size) && !confirm(globalThis.MeetI18n.t('This file is very large, and importing it may run out of memory. Continue?'))) return;
+      send({ type: 'import-audio', file });
     });
     mkBtn('Import audio file', () => {
       input.value = '';
@@ -142,6 +144,7 @@
     const box = el('div', 'actions');
     if (rec.transcribing) {
       box.append(el('span', 'muted', busyText));
+      if (rec.importing) mkBtn('Cancel import', () => send({ type: 'cancel-import' }), box);
     } else if (rec.recording) {
       mkBtn('Stop recording', () => send({ type: 'stop-recording' }), box).classList.add('danger');
       mkBtn(rec.muted ? 'Unmute microphone' : 'Mute microphone', () => send({ type: 'set-muted', on: !rec.muted }), box);

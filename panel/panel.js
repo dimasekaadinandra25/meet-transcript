@@ -89,7 +89,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === 'rec-state') {
     const wasActive = recState.recording || recState.transcribing;
     if (wasActive !== (msg.recording || msg.transcribing)) audioMetaKey = null;
-    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted,
+    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, importing: !!msg.importing,
       done: msg.done ?? 0, total: msg.total ?? 0,
       error: 'error' in msg ? msg.error : recState.error };
     if (tab === 'live' || (tab === 'history' && viewingId)) render();

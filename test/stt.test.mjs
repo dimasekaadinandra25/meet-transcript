@@ -38,7 +38,7 @@ test('mergeSttChunks offset antar chunk + baseTime', () => {
 test('mergeSttChunks chunk error → penanda, segmen kosong dilewati', () => {
   const out = mergeSttChunks([{ error: 'gagal' }, { segments: [{ start: 0, text: '' }, { start: 1, text: 'ok' }] }], 600000, 0);
   assert.deepEqual(out, [
-    { t: 0, speaker: '', text: '[transcript failed]' },
+    { t: 0, speaker: '', text: '[transcript failed]', failedUntil: 600000 },
     { t: 601000, speaker: '', text: 'ok' },
   ]);
 });

@@ -12,6 +12,7 @@
     let starting = null;
     let finishing = null;
     let stopWarning = null;
+    let importRun = null;
     let live = null;
     let writes = Promise.resolve();
     const momInFlight = new Map();
@@ -164,7 +165,7 @@
       const segments = tracks.mergeTracks({ system: finishedTrack(session.done.system), mic: finishedTrack(session.done.mic),
         chunkMs: source.chunkMs, baseTime: source.baseTime });
       await updateMeeting(session.meetingId, (meeting) => {
-        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime });
+        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, names: meeting.speakerNames });
       });
     }
 
@@ -216,7 +217,7 @@
       const segments = tracks.mergeTracks({ system: systemTrack, mic: micTrack,
         chunkMs: source.chunkMs, baseTime: source.baseTime });
       await updateMeeting(meetingId, (meeting) => {
-        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, replace });
+        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, replace, names: meeting.speakerNames });
       });
       if (!segments.length) return 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.';
       const failures = [...systemTrack.results, ...micTrack.results].filter((r) => r.error);
@@ -342,17 +343,18 @@
     async function editTranscript({ id, change }) {
       if (rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
       try {
-        await updateMeeting(id, (meeting) => { meeting.segments = merge.applyTranscriptEdit(meeting.segments, change); });
+        await updateMeeting(id, (meeting) => merge.editMeeting(meeting, change));
         return { ok: true };
       } catch (e) {
         return { ok: false, error: e.message };
       }
     }
 
-    async function transcribeParts(parts, endpoint) {
+    async function transcribeParts(parts, endpoint, run) {
       const results = [];
       for (const [i, part] of parts.entries()) {
-        broadcast({ done: i, total: parts.length });
+        if (run.cancelled) break;
+        broadcast({ done: i, total: parts.length, importing: true });
         try {
           results.push(await sendToStt(part, endpoint));
         } catch (e) {
@@ -365,12 +367,22 @@
     async function importAudio({ file }) {
       if (busy()) return { ok: false, error: 'A recording or transcript is still running.' };
       const meetingId = `desktop-${now()}`;
+      const run = { cancelled: false };
+      importRun = run;
+      const stopIfCancelled = () => {
+        if (!run.cancelled) return false;
+        rec = { ...IDLE };
+        broadcast({ error: null });
+        return true;
+      };
       rec = { ...rec, transcribing: true, meetingId };
-      broadcast({ error: null });
+      broadcast({ error: null, importing: true });
       try {
         const { parts, durationMs } = await splitAudio(file, IMPORT_PART_MS / 1000);
+        if (stopIfCancelled()) return { ok: false, cancelled: true };
         if (!parts.length) throw new Error('This file has no audio to transcribe.');
-        const results = await transcribeParts(parts, stt.sttEndpoint(await readSettings()));
+        const results = await transcribeParts(parts, stt.sttEndpoint(await readSettings()), run);
+        if (stopIfCancelled()) return { ok: false, cancelled: true };
         const failures = results.filter((r) => r.error);
         if (!results.some((r) => r.segments?.length)) {
           throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the STT endpoint and model in Settings.');
@@ -400,6 +412,9 @@
       'delete-meeting': deleteMeeting,
       'edit-transcript': editTranscript,
       'import-audio': importAudio,
+      'cancel-import': () => {
+        if (importRun) importRun.cancelled = true;
+      },
       'send-to-ai': ({ target }) => {
         if (Object.hasOwn(AI_URLS, target)) openExternal(AI_URLS[target]);
       },
