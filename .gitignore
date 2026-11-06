@@ -6,3 +6,4 @@ desktop/node_modules/
 desktop/engine/
 
 desktop/native/bin/
+desktop/.model-cache/

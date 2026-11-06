@@ -87,8 +87,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/cache@v4
+        with:
+          path: desktop/.model-cache
+          key: engine-models-${{ runner.os }}-${{ hashFiles('desktop/main/models.js') }}
       - name: Transcribe real speech with the built engine and every model
         run: node scripts/test-engine.js "${{ matrix.engine }}"
+        env:
+          MODEL_CACHE: .model-cache
       - name: Open the built app
         run: node scripts/smoke.js "${{ matrix.app }}"
       - uses: actions/upload-artifact@v4
