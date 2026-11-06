@@ -425,3 +425,25 @@ test('with no app chosen, the whole computer sound is used as before', async () 
   assert.equal(asked, 1);
   assert.equal(app.opened.length, 0);
 });
+
+test('a closed video window stops the recording instead of filming the whole screen', async () => {
+  let filmed = false;
+  deps.getDisplayMedia = async () => { filmed = true; return new FakeStream([fake.systemTrack, fake.videoTrack]); };
+  deps.checkVideoSource = async () => { throw new Error('The window chosen for video is closed.'); };
+  await assert.rejects(createRecorder(deps).start({ ...opts, video: true }), /is closed/);
+  assert.equal(filmed, false);
+});
+
+test('audio-only recording does not care about the video window', async () => {
+  deps.checkVideoSource = async () => { throw new Error('The window chosen for video is closed.'); };
+  await createRecorder(deps).start({ ...opts, video: false });
+});
+
+test('each track part is saved with its own number', async () => {
+  const seen = [];
+  fake.store.appendSystemChunk = async (_blob, _recId, index) => { seen.push(index); };
+  const recorder = createRecorder(deps);
+  await recorder.start({ ...opts, mic: false });
+  await recorder.stop();
+  assert.deepEqual(seen, [0]);
+});

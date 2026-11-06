@@ -22,7 +22,7 @@
   ],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": {
-    "scripts": ["content/session.js", "lib/merge.js", "lib/openai.js", "lib/stt.js", "lib/audiostore.js", "background/service-worker.js"]
+    "scripts": ["lib/i18n.js", "content/session.js", "lib/merge.js", "lib/openai.js", "lib/stt.js", "lib/audiostore.js", "background/service-worker.js"]
   },
   "content_scripts": [
     {

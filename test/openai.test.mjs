@@ -155,3 +155,89 @@ test('AI service presets have an address and a model where one is known', () => 
   }
   assert.ok(LLM_PRESETS.some((p) => p.baseUrl.includes('localhost')));
 });
+
+test('OpenAI transcribe models that only allow json get json', async () => {
+  for (const model of ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'gpt-4o-mini-transcribe-2025-12-15', 'gpt-transcribe']) {
+    const form = await sentForm(model);
+    assert.equal(form.get('response_format'), 'json', model);
+  }
+});
+
+test('gpt-transcribe gets languages instead of language', async () => {
+  const real = globalThis.fetch;
+  const forms = [];
+  globalThis.fetch = async (_url, init) => {
+    forms.push(init.body);
+    return new Response('{"text":"halo"}', { status: 200 });
+  };
+  try {
+    const args = { blob: new Blob(['x']), baseUrl: 'http://127.0.0.1:1/v1', language: 'id' };
+    const result = await globalThis.MeetOpenAI.transcribeAudio({ ...args, model: 'gpt-transcribe' });
+    assert.deepEqual(forms[0].getAll('languages[]'), ['id']);
+    assert.equal(forms[0].get('language'), null);
+    assert.equal(result.segments[0].text, 'halo');
+    await globalThis.MeetOpenAI.transcribeAudio({ ...args, model: 'gpt-4o-transcribe' });
+    assert.equal(forms[1].get('language'), 'id');
+    assert.deepEqual(forms[1].getAll('languages[]'), []);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a streamed reply is asked for only when requested', async () => {
+  const real = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response('data: {"choices":[{"delta":{"content":"ha"}}]}\ndata: {"choices":[{"delta":{"content":"lo"}}]}\ndata: [DONE]\n', { status: 200 });
+  };
+  try {
+    const args = { apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'http://127.0.0.1:1/v1' };
+    assert.equal(await globalThis.MeetOpenAI.generateMoM({ ...args, stream: true }), 'halo');
+    assert.equal(bodies[0].stream, true);
+    await globalThis.MeetOpenAI.generateMoM(args);
+    assert.equal(bodies[1].stream, false);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a streamed reply that reports an error fails with that error', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('data: {"choices":[{"delta":{"content":"ha"}}]}\ndata: {"error":{"message":"provider overloaded"}}\n', { status: 200 });
+  try {
+    await assert.rejects(globalThis.MeetOpenAI.generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'http://127.0.0.1:1/v1', stream: true }), /provider overloaded/);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a streamed reply that stops early is not treated as finished', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('data: {"choices":[{"delta":{"content":"ha"}}]}\n', { status: 200 });
+  try {
+    await assert.rejects(globalThis.MeetOpenAI.generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'http://127.0.0.1:1/v1', stream: true }), /stopped before it finished/);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a stream ending with a finish reason counts as finished', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('data: {"choices":[{"delta":{"content":"halo"},"finish_reason":"stop"}]}\n', { status: 200 });
+  try {
+    assert.equal(await globalThis.MeetOpenAI.generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'http://127.0.0.1:1/v1', stream: true }), 'halo');
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a server that ignores streaming still works', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{"choices":[{"message":{"content":"halo"}}]}', { status: 200 });
+  try {
+    assert.equal(await globalThis.MeetOpenAI.generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'http://127.0.0.1:1/v1', stream: true }), 'halo');
+  } finally {
+    globalThis.fetch = real;
+  }
+});

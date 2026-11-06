@@ -886,3 +886,39 @@ test('a warning during import keeps Cancel available', async () => {
   assert.equal(warned.importing, true);
   assert.ok(!recStates().at(-1).importing);
 });
+
+test('a recording that fails to start brings the window back', async () => {
+  fakeRecorder.start = async () => { throw new Error('That app could not be recorded'); };
+  const before = warned;
+  const res = await ctl.handle({ type: 'start-recording' });
+  assert.equal(res.ok, false);
+  assert.equal(warned, before + 1);
+});
+
+test('recover saves a crashed recording to the folder', async () => {
+  data['meeting:desktop-5'] = { id: 'desktop-5', title: 't', startedAt: 5, endedAt: null, segments: [], mom: null, source: 'audio' };
+  data.meetings = ['desktop-5'];
+  fakeStore.loadMix = async (baseTime) => (baseTime === 5 ? { blobs: [{ track: 'mix-0' }] } : null);
+  fakeStore.loadVideo = async () => null;
+  await ctl.recover();
+  assert.deepEqual(saved.map((s) => [s.blob.track, s.first]), [['mix-0', true]]);
+  assert.match(saved[0].name, /5\.webm$/);
+});
+
+test('recover respects the setting that turns folder saving off', async () => {
+  data['meeting:desktop-5'] = { id: 'desktop-5', title: 't', startedAt: 5, endedAt: null, segments: [], mom: null, source: 'audio' };
+  data.meetings = ['desktop-5'];
+  data.settings = { ...data.settings, autoSave: false };
+  fakeStore.loadMix = async () => ({ blobs: [{ track: 'mix-0' }] });
+  await ctl.recover();
+  assert.deepEqual(saved, []);
+});
+
+test('a folder failure during recovery still closes the meeting and warns', async () => {
+  data['meeting:desktop-5'] = { id: 'desktop-5', title: 't', startedAt: 5, endedAt: null, segments: [], mom: null, source: 'audio' };
+  data.meetings = ['desktop-5'];
+  fakeStore.loadMix = async () => { throw new Error('no disk'); };
+  await ctl.recover();
+  assert.ok(data['meeting:desktop-5'].endedAt);
+  assert.match(recStates().at(-1).error, /could not be saved to your folder/);
+});

@@ -162,3 +162,16 @@ test('restored meetings are protected from auto-delete for now', async () => {
   assert.deepEqual(calls.set.settings, { deleteAfterDays: 5 });
   assert.deepEqual(calls.set.meetings, ['a']);
 });
+
+test('a kept speech key must not follow a blank speech address to another server', () => {
+  const backup = { settings: { baseUrl: 'https://evil.example/v1', sttBaseUrl: '', sttMode: 'api' } };
+  const current = { baseUrl: 'https://api.openai.com/v1', sttBaseUrl: '', sttApiKey: 'SECRET' };
+  const restored = globalThis.MeetBackup.keepCurrentKeys(backup, current);
+  assert.equal(restored.settings.sttApiKey, undefined);
+});
+
+test('a speech key stays when a blank speech address still means the same server', () => {
+  const backup = { settings: { baseUrl: 'https://api.openai.com/v1', sttBaseUrl: '' } };
+  const current = { baseUrl: 'https://api.openai.com/v1', sttBaseUrl: '', sttApiKey: 'SECRET' };
+  assert.equal(globalThis.MeetBackup.keepCurrentKeys(backup, current).settings.sttApiKey, 'SECRET');
+});

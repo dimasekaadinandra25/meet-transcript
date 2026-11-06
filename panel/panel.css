@@ -138,6 +138,8 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .seg .time { color: var(--muted); font-size: 12px; margin-left: 8px; }
 .seg > div:first-child { margin-bottom: 4px; }
 .seg textarea { min-height: 0; resize: vertical; }
+.seg .corrected { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.seg .corrected summary { cursor: pointer; }
 .seg .play { float: right; min-height: 0; padding: 0 8px; line-height: 22px; font-size: 11px; }
 .mark { margin-bottom: var(--gap); color: var(--accent); font-weight: 600; font-size: 13px; }
 .ask { margin-bottom: var(--gap); }

@@ -46,9 +46,10 @@
 
     function startChunk(s, track) {
       const data = [];
+      const index = track.chunk;
       const recorder = new MediaRecorder(track.stream, { mimeType: audioMime });
       recorder.ondataavailable = (e) => { if (e.data.size) data.push(e.data); };
-      recorder.onstop = () => keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId).then(() => deps.onChunkSaved?.()),
+      recorder.onstop = () => keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId, index).then(() => deps.onChunkSaved?.()),
         `A ${track.name} track part could not be saved: `);
       recorder.start();
       track.recorder = recorder;
@@ -135,6 +136,7 @@
 
     async function begin(s, { mic, video, chunkMs, prepare }) {
       const app = deps.chosenApp?.() ?? null;
+      if (video) await deps.checkVideoSource?.();
       if (!app || video) {
         s.display = await withinStartTime(() => deps.getDisplayMedia(DISPLAY_CONSTRAINTS),
           'Computer audio did not start within 15 seconds. Try again, or restart the app.');

@@ -120,3 +120,55 @@ test('a file of the wrong size does not count as installed', () => {
     done();
   }
 });
+
+test('a download that stops sending data fails and leaves nothing behind', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tx-models-'));
+  const models = createModels({
+    dir, catalog, stallMs: 30, onProgress: () => {},
+    request: async (_url, { signal }) => {
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(BYTES.subarray(0, 1));
+          signal.addEventListener('abort', () => controller.error(signal.reason));
+        },
+      });
+      return new Response(body);
+    },
+  });
+  try {
+    await assert.rejects(models.download('small'), /stopped downloading/);
+    assert.deepEqual(readdirSync(dir), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a slow download that keeps sending data is not cut off', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tx-models-'));
+  let signalSeen;
+  const models = createModels({
+    dir, catalog: { small: { ...catalog.small, sha256: createHash('sha256').update(Buffer.from([BYTES[0], BYTES[0], BYTES[0], BYTES[0], BYTES[0]])).digest('hex') } }, stallMs: 60, onProgress: () => {},
+    request: async (_url, { signal }) => {
+      signalSeen = signal;
+      const gaps = [40, 40, 40, 40, 40];
+      const body = new ReadableStream({
+        async start(controller) {
+          for (const gap of gaps) {
+            await new Promise((done) => setTimeout(done, gap));
+            controller.enqueue(BYTES.subarray(0, 1));
+          }
+          controller.close();
+        },
+      });
+      return new Response(body);
+    },
+  });
+  try {
+    await models.download('small');
+    assert.equal(signalSeen.aborted, false);
+    await new Promise((done) => setTimeout(done, 90));
+    assert.equal(signalSeen.aborted, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -512,13 +512,12 @@ test('subtitles line up with the recording when a start is given', () => {
   assert.ok(out.includes('00:00:12.000 --> '));
 });
 
-test('lines before the recording start at zero with valid times', () => {
+test('lines before the recording stay out of the subtitles', () => {
   const { formatSubtitles } = globalThis.MeetMerge;
   const out = formatSubtitles([{ speaker: '', text: 'a', t: 40000 }, { speaker: '', text: 'b', t: 50000 }, { speaker: '', text: 'c', t: 105000 }], 'vtt', 100000);
   const stamps = out.split('\n').filter((line) => line.includes('-->'));
-  assert.equal(stamps.length, 3);
-  assert.ok(stamps[0].startsWith('00:00:00.000 --> 00:00:00.001'), stamps[0]);
-  assert.ok(stamps[2].startsWith('00:00:05.000'), stamps[2]);
+  assert.equal(stamps.length, 1);
+  assert.ok(stamps[0].startsWith('00:00:05.000'), stamps[0]);
 });
 
 test('a blank line inside an edited line does not break the subtitle', () => {

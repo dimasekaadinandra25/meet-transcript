@@ -43,6 +43,10 @@
     onLevels: (levels) => showLevels(levels),
     onChunkSaved: () => controller.chunkSaved(),
     chosenApp: () => chosenApp?.pid ?? null,
+    checkVideoSource: async () => {
+      if (!chosenSource || (await desktop.capture.sources()).some((source) => source.id === chosenSource)) return;
+      throw new Error('The window chosen for video is closed. Choose another one, then record again.');
+    },
     openAppAudio,
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (id) => clearInterval(id),
@@ -67,6 +71,7 @@
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     now: () => Date.now(),
   });
+  desktop.capture.use('');
   controller.recover().catch((e) => console.error(e));
 
   async function useEngineByDefault() {

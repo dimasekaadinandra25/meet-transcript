@@ -21,7 +21,7 @@ The extension's interface is in Indonesian, so UI labels below appear in their o
 ## ✨ Key Features
 
 * **Quick Action Popup:** Clicking the extension icon opens a compact popup with **Record** (record: audio / audio + video), **Microphone** (microphone on/off), **Caption language** (caption language: Indonesia / English), **Show details** (show details, opens the side panel), and **History** (meeting history), which opens the selected meeting directly on its detail page.
-* **Multiple Transcript Sources:** With **Transcript source** (transcript source) set to *Record audio*, Google Meet's built-in captions (with speaker names) and tab audio recording (through STT) are combined into one meeting timeline, sorted by time.
+* **Multiple Transcript Sources:** With **Transcript source** (transcript source) set to *Meet captions + recorded audio*, Google Meet's built-in captions (with speaker names) and tab audio recording (through STT) are combined into one meeting timeline, sorted by time.
 * **Optional Video Recording:** Record the Meet tab as one `.webm` file (720p, VP9, about 250 MB/hour) from the **Record meeting audio + video** right-click menu. In *Meet captions* mode this recording is only an archive: the transcript still comes from captions, and its audio is not sent to STT unless you press **Generate transcript**.
 * **Optional Microphone Recording:** By default, only other participants' voices (tab audio) are recorded. Turn on **Microphone** in the icon popup, or check **Record microphone** in Settings (both control the same setting), to mix your voice into audio and video recordings. Microphone permission is requested once through a small window. You can turn it on **during a recording**: the mic joins without interrupting the recording, and the earlier part stays without mic. You cannot turn it off mid-recording; stop the recording first.
 * **Your Own STT Endpoint:** Point it at a private Whisper server (whisper.cpp, faster-whisper) on your own network, or at any OpenAI-compatible Online speech-to-text service.
@@ -31,7 +31,7 @@ The extension's interface is in Indonesian, so UI labels below appear in their o
 * **Backup & Restore:** The **Export backup (.zip)** button in Settings saves text data (history, MoM, settings) to one ZIP file, **not** recording files: audio and video are excluded because they can reach hundreds of MB per recording, so download them yourself from a history entry with **Download** (download). **Import backup** restores that text data, including after uninstalling or moving to another computer, and **deletes recordings stored at that time**.
 * **Recurring Meeting Awareness:** Recurring meetings use the same link (room code), but each session remains a separate history entry. A gap of more than 30 minutes after a meeting ends counts as a new session; leaving and rejoining briefly stays in the same session.
 * **Smart Audio Recovery:** Audio chunks are saved to IndexedDB during recording. If STT is misconfigured, use **Retranscribe** (re-transcribe) without losing audio.
-* **Manual Audio Transcription:** Recordings that were not transcribed automatically (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, Zoom) show a **Generate transcript** button in history while their audio is still stored. Without stored audio, the button does not appear. Audio lines that nearly repeat a nearby caption are left out, so captions and their speaker names stay. If every line is a repeat, the panel says so and the transcript stays as it was.
+* **Manual Audio Transcription:** Recordings that were not transcribed automatically (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, Zoom) show a **Generate transcript** button in history while their audio is still stored. Without stored audio, the button does not appear. The audio is compared with nearby captions. A caption that was clearly the same sentence but misheard takes the audio's words and keeps its speaker name. Audio lines that repeat a caption are left out. If nothing changes, the panel says so and the transcript stays as it was.
 * **Automatic Lifecycle (Google Meet):** Recording stops automatically when a meeting ends (leaving the call, switching rooms, or closing the recorded tab). Closing another tab that joined the same room does not stop the recording.
 * **Hidden Captions (Default):** Captions are hidden from the Meet screen without turning CC off, so video tiles stay full size while the transcript keeps filling the panel. To see captions again, turn off **Hide captions on the Meet screen** (hide captions on the Meet screen) in Settings.
 * **Caption Language from the Popup:** Meet's language selector sits inside the caption area, so it gets hidden too. Choosing **Indonesia** (default) or **English** in the popup applies it directly to Meet, once per call. Manual changes in Meet's UI are respected.
@@ -63,7 +63,7 @@ The extension runs on **Chrome 116+**, including other Chromium browsers (Edge, 
 ### Method 2: Git Clone (For Developers)
 
 ```bash
-git clone https://github.com/dimasekaadinandra25/transcripables.git
+git clone https://github.com/dimasekaadinandra25/meet-transcript.git
 ```
 
 Open `chrome://extensions`, choose **Load unpacked**, and select the cloned folder. To update, run `git pull`, then click **Reload**.
@@ -84,14 +84,14 @@ Install directly from Mozilla's official Add-ons site: **[Transcripables on Fire
 
 ## 🖥️ Desktop App (Windows)
 
-The desktop app records your computer's audio and your microphone, so it works with any meeting app that plays through your speakers or headset, including Zoom, Teams, Slack, Webex, Discord, and WhatsApp desktop. It produces a transcript labeled **You** and **Others**, MoM, and one recording file per meeting. If your STT service returns speakers, **Others** becomes **Speaker A**, **Speaker B**, and so on. macOS support is not finished: the build settings exist, but it has never run on a Mac.
+The desktop app records your computer's audio and your microphone, so it works with any meeting app that plays through your speakers or headset, including Zoom, Teams, Slack, Webex, Discord, and WhatsApp desktop. It produces a transcript labeled **You** and **Others**, MoM, and one recording file per meeting. If your STT service returns speakers, **Others** becomes **Speaker A**, **Speaker B**, and so on. macOS is less tested: automated tests build and open it and run its speech engine, but nobody has recorded with it on a real Mac.
 
 ### Install
 
 1. Run `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen warns about the unsigned installer. Choose **More info**, then **Run anyway**.
 
-**On a Mac:** download the `.dmg` for your chip (`arm64` for Apple Silicon, `x64` for Intel). Because it is unsigned, macOS blocks the first open: go to **System Settings > Privacy & Security** and choose **Open Anyway**. If macOS says the app is damaged, run `xattr -cr /Applications/Transcripables.app`. Allow the microphone and screen recording when asked. Recording computer sound needs macOS 14.2 or later. Nobody has recorded a real meeting on a Mac yet.
+**On a Mac:** download the `.dmg` for your chip (`arm64` for Apple Silicon, `x64` for Intel). Because it is unsigned, macOS blocks the first open: go to **System Settings > Privacy & Security** and choose **Open Anyway**. If macOS says the app is damaged, run `xattr -cr /Applications/Transcripables.app`. Allow the microphone and screen recording when asked. Recording computer sound needs macOS 14.2 or later. Electron documents it, but nobody has tried it on a real Mac yet, so test it before relying on it. If no computer sound arrives, the app warns you after 1 minute.
 
 3. Open **Settings** and fill in your LLM endpoint for MoM. Speech-to-text uses the built-in engine by default, so it needs no server or internet.
 
@@ -124,7 +124,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 
 ### Limits
 
-* If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes.
+* If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes. What was saved goes to `Documents/Transcripables` the next time the app opens. If only the window crashes, it restarts by itself and tells you.
 * API keys are encrypted on your computer. **Export backup** leaves them out unless you tick **Include API keys**, which stores them in plain text. Restoring a backup without keys keeps a key you have now only if the backup uses the same server address, so a backup can never send your key somewhere else.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
@@ -133,7 +133,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * The ▶ on a line plays that moment from the recording, while the recording is still kept.
 * **Download** also offers `.srt` and `.vtt` subtitles. **MoM type** in Settings offers Standard, Standup, Client call, and 1-on-1.
 * **Delete meetings older than** in Settings removes old meetings and their recordings when the app starts. It is off by default, and copies in `Documents/Transcripables` stay.
-* In the extension, the icon shows **!** when captions are off or quiet, or when *Meet captions + recorded audio* has no recording. Hover the icon for the reason.
+* In the extension, the icon shows **!** when captions are off or quiet, or when *Meet captions + recorded audio* has no recording. Hover the icon for the reason. If you are not recording and captions stay off for 15 seconds or quiet for a minute, the Meet page also warns you and names the record shortcut. Silence can set it off too. Close it to stop it for that call.
 * **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay, but with a diarize model the letters can change, so it asks first and you should check the names afterwards. If a part fails to transcribe again, its old lines are kept.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine starts with a small model (`ggml-base-q5_1`). **Built-in engine accuracy** in Settings downloads a larger one (190 MB or 540 MB), checked against a fixed checksum, and it stays on your computer. The installer includes the Microsoft runtime files the engine needs.
@@ -170,7 +170,7 @@ You can record tab audio and transcribe it through STT, either alone or together
 * Default shortcuts: `Alt+Shift+R` (audio), `Alt+Shift+V` (audio + video), `Alt+Shift+S` (stop). Change them at `chrome://extensions/shortcuts`. They are useful on Discord, which swallows the `contextmenu` event so the browser's right-click menu does not appear (`Shift` + right-click forces it to appear).
 * By default, only other participants' voices (*tab audio*) are recorded. Check **Record microphone** in *Settings* to include your voice, then click **Allow microphone** (allow microphone) once to grant permission. If you have not, a permission window appears automatically when recording starts; tab recording continues and the mic joins once approved. Without a headset, participants' voices from your speakers can also be picked up by the mic (doubled).
 * Every 2 minutes, an audio part is saved to IndexedDB to avoid data loss if the browser closes unexpectedly. **Download audio** gives one `.webm` file, or one `.zip` when there are several parts.
-* **Meet captions + recorded audio** in **Transcript source** keeps captions as the main text, with speaker names. When you stop, the recording is transcribed and only lines the captions missed are added, without speaker names. You still press **Record** in each meeting, because Chrome only allows it after you click. It needs an STT service, and if STT fails the captions stay. Differently worded lines can still appear twice.
+* **Meet captions + recorded audio** in **Transcript source** compares the two when you stop. A caption keeps its speaker name, and takes the audio's words only when both are clearly the same sentence: at least 4 words, within about 8 seconds, with 70% of the words matching in order both ways and the same start and end. The original stays under **Corrected from audio** on that line, and the corrected words go into the MoM and exports. Lines the captions missed are added without speaker names, and anything unclear is left as it was, so differently worded lines can still appear twice. The audio is treated as the better source, which depends on your STT service. A line you edited by hand is never changed. Live captions cannot be corrected as they appear, because the audio is transcribed later. You still press **Record** in each meeting, because Chrome only allows it after you click. It needs an STT service, and if STT fails the captions stay.
 * The **last 5 recordings** are kept by default. Change this with **Recordings to keep** in Settings, up to 100. When a new recording starts, older ones beyond that number are deleted, both audio and video.
 * **Import audio file** in the **History** tab transcribes an existing file in Chrome or Edge, using your speech-to-text service. Keep the panel open until the parts are saved. It cannot be cancelled there.
 

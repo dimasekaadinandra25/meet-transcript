@@ -2,7 +2,7 @@ const { spawn } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const { createServer } = require('node:net');
 const { availableParallelism } = require('node:os');
-const { join } = require('node:path');
+const { join, relative } = require('node:path');
 const { setTimeout: sleep } = require('node:timers/promises');
 
 const serverFile = (platform) => (platform === 'win32' ? 'whisper-server.exe' : 'whisper-server');
@@ -75,7 +75,7 @@ function createEngine({ dir, platform = process.platform, run = spawn, request =
 
   async function start() {
     const port = await findPort();
-    const proc = run(server, engineArgs(model, port, threads), { cwd: dir, stdio: 'ignore', windowsHide: true });
+    const proc = run(server, engineArgs(relative(dir, model), port, threads), { cwd: dir, stdio: 'ignore', windowsHide: true });
     let failure = null;
     const ended = (reason) => {
       failure = reason;
@@ -90,7 +90,7 @@ function createEngine({ dir, platform = process.platform, run = spawn, request =
     for (let waited = 0; waited < READY_TIMEOUT_MS; waited += READY_POLL_MS) {
       const up = await request(`http://${HOST}:${port}/health`, { signal: AbortSignal.timeout(READY_POLL_MS * 4) })
         .then((res) => res.ok, () => false);
-      if (failure) throw new Error(`The built-in speech engine could not start (${failure}). It may need the Microsoft Visual C++ Redistributable.`);
+      if (failure) throw new Error(`The built-in speech engine could not start (${failure}).${platform === 'win32' ? ' It may need the Microsoft Visual C++ Redistributable.' : ''}`);
       if (up) return `http://${HOST}:${port}/v1`;
       await wait(READY_POLL_MS);
     }

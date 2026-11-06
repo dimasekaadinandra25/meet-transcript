@@ -87,6 +87,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     status = msg;
     if (tab === 'live') render();
   } else if (msg.type === 'meeting-updated') {
+    if (msg.movedFrom && viewingId === msg.movedFrom) viewingId = msg.id;
     if (isShowing(msg.id) || (tab === 'history' && !viewingId)) render();
   } else if (msg.type === 'ai-inject') {
     if (msg.ok || !msg.id) return;
@@ -580,6 +581,7 @@ function askBox(meeting) {
     if (!question || asking) return;
     asking = meeting.id;
     input.value = '';
+    input.defaultValue = '';
     askDrafts.delete(meeting.id);
     momErrors.delete(meeting.id);
     render();
@@ -612,6 +614,36 @@ function askBox(meeting) {
   return box;
 }
 
+function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
+  const hostOf = () => {
+    try {
+      return new URL(addressOf()).host;
+    } catch {
+      return '';
+    }
+  };
+  let saved = { host: hostOf(), key: key.value };
+  let cleared = false;
+  const sync = () => {
+    if (paused()) return;
+    const sameHost = hostOf() === saved.host;
+    if (!sameHost && saved.key && key.value === saved.key) {
+      key.value = '';
+      cleared = true;
+    } else if (sameHost && cleared && !key.value) {
+      key.value = saved.key;
+      cleared = false;
+    }
+  };
+  for (const input of fields) input.addEventListener('input', sync);
+  const remember = () => {
+    if (paused()) return;
+    saved = { host: hostOf(), key: key.value };
+    cleared = false;
+  };
+  return { sync, remember };
+}
+
 function segmentLine(s, play) {
   const seg = el('div', 'seg');
   const head = el('div');
@@ -624,6 +656,11 @@ function segmentLine(s, play) {
     head.append(button);
   }
   seg.append(head, el('div', null, s.text));
+  if (s.captionText) {
+    const note = el('details', 'corrected');
+    note.append(el('summary', null, globalThis.MeetI18n.t('Corrected from audio')), raw(el('div', null, s.captionText)));
+    seg.append(note);
+  }
   return seg;
 }
 
@@ -639,6 +676,10 @@ function segmentEditor(meeting, s) {
   who.dataset.editKey = `who:${s.id}`;
   who.setAttribute('aria-label', t('Speaker name'));
   who.addEventListener('change', () => {
+    if (!who.value.trim() && !confirm(t('Remove this speaker name from every line?'))) {
+      who.value = who.defaultValue;
+      return;
+    }
     who.defaultValue = who.value;
     save({ from: s.speaker ?? '', to: who.value });
   });
@@ -705,7 +746,7 @@ function historyActions() {
 }
 
 function historyList(items) {
-  const found = items.filter((m) => M.matchesSearch(m, historyQuery));
+  const found = items.filter((m) => M.matchesSearch(m, historyQuery)).sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   if (!found.length) return [el('p', 'muted', 'No meetings match.')];
   const now = Date.now();
   let group = null;
@@ -796,9 +837,12 @@ async function renderSettings(epoch) {
     if (!chosen) return;
     baseUrl.value = chosen.baseUrl;
     model.value = chosen.model;
+    apiKeyGuard.sync();
+    sttKeyGuard.sync();
   });
   const apiKey = field('API key',
     mkEl('input', { type: 'password', value: settings.apiKey ?? '' }));
+  const apiKeyGuard = keepKeyWithAddress(() => baseUrl.value.trim() || DEFAULT_BASE, [baseUrl], apiKey);
   const model = field('Model',
     mkEl('input', { value: settings.model ?? DEFAULT_MODEL }));
   const modelList = mkEl('datalist', { id: 'llm-models' });
@@ -827,7 +871,7 @@ async function renderSettings(epoch) {
     document.createElement('select'));
   addOptions(source, [['caption', 'Meet captions'], ['both', 'Meet captions + recorded audio'], ['audio', 'Record audio']]);
   source.value = Host ? 'audio' : settings.transcriptSource ?? 'caption';
-  const sourceInfo = el('div', 'muted', 'Captions stay the main text, with speaker names. When you stop, recorded audio adds what they missed. Press Record in each meeting, and turn on Record microphone so your own voice is covered too.');
+  const sourceInfo = el('div', 'muted', 'Captions keep the speaker names. When you stop, recorded audio fixes lines it clearly heard differently and adds what the captions missed. Press Record in each meeting, and turn on Record microphone so your own voice is covered too.');
   rowOf.get(source).append(sourceInfo);
   source.addEventListener('change', () => applyMode());
   const hideBox = mkEl('input', { type: 'checkbox', checked: settings.hideCaptions !== false });
@@ -879,6 +923,7 @@ async function renderSettings(epoch) {
     mkEl('input', { value: initialUrl }));
   const sttApiKey = field('Speech-to-text API key (empty if none)',
     mkEl('input', { type: 'password', value: settings.sttApiKey ?? '' }));
+  const sttKeyGuard = keepKeyWithAddress(() => sttBaseUrl.value.trim() || baseUrl.value.trim() || DEFAULT_BASE, [sttBaseUrl, baseUrl], sttApiKey, () => sttModeSel.value === 'builtin');
   const sttModel = field('Speech-to-text model',
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
   const sttLanguage = field('Speech language (empty = detect automatically, or a code such as id, en, ja)',
@@ -905,6 +950,7 @@ async function renderSettings(epoch) {
     urlByMode[urlMode] = sttBaseUrl.value.trim();
     urlMode = sttModeSel.value;
     sttBaseUrl.value = urlByMode[urlMode];
+    sttKeyGuard.sync();
     applyMode();
   });
   applyMode();
@@ -996,6 +1042,8 @@ async function renderSettings(epoch) {
         sttApiKey: sttApiKey.value.trim(),
       },
     });
+    apiKeyGuard.remember();
+    sttKeyGuard.remember();
     const noPlaceholder = !template.value.includes('{{transcript}}');
     if (warning) setNote('err', `Saved, but ${warning} Requests may fail.`);
     else if (noPlaceholder) setNote('err', 'Saved, but the MoM template has no {{transcript}}, so MoM will be made without the transcript.');
@@ -1007,12 +1055,14 @@ async function renderSettings(epoch) {
   view.append(el('h3', null, 'Storage'));
   const keepDays = field('Delete meetings older than this many days (empty = keep them)',
     mkEl('input', { type: 'number', min: 1, value: settings.deleteAfterDays ?? '' }));
+  let keptDays = settings.deleteAfterDays ?? '';
   keepDays.addEventListener('change', async () => {
     const days = Number(keepDays.value);
     if (days > 0 && !confirm(globalThis.MeetI18n.t('Older meetings and their recordings are deleted now, and whenever the app starts. This cannot be undone. Continue?'))) {
-      keepDays.value = settings.deleteAfterDays ?? '';
+      keepDays.value = keptDays;
       return;
     }
+    keptDays = days > 0 ? days : '';
     await patchSettings({ deleteAfterDays: days > 0 ? days : null });
     await chrome.runtime.sendMessage({ type: 'delete-old-meetings' }).catch(() => {});
   });

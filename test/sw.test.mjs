@@ -60,7 +60,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   const menus = {};
   const patterns = [];
   const commands = [];
-  if (withCommands) chrome.commands = { onCommand: { addListener: (f) => commands.push(f) } };
+  if (withCommands) chrome.commands = { onCommand: { addListener: (f) => commands.push(f) }, getAll: async () => [{ name: 'rec-start', shortcut: 'Alt+Shift+R' }] };
   if (withMenus) {
     chrome.tabCapture = {};
     chrome.contextMenus = {
@@ -96,13 +96,16 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
     resolve(undefined);
   });
   const connect = (tabId) => {
+    const posted = [];
     const port = { name: 'captions', sender: { tab: { id: tabId } }, msgFns: [], discFns: [],
+      postMessage: (m) => posted.push(m),
       onMessage: { addListener: (f) => port.msgFns.push(f) },
       onDisconnect: { addListener: (f) => port.discFns.push(f) } };
     for (const f of connects) f(port);
-    return { send: (m) => port.msgFns.forEach((f) => f(m)), disconnect: () => port.discFns.forEach((f) => f()) };
+    return { posted, send: (m) => port.msgFns.forEach((f) => f(m)), disconnect: () => port.discFns.forEach((f) => f()) };
   };
-  return { ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, badgeTitle: () => badgeTitle, meetingIdFromUrl: ctx.meetingIdFromUrl,
+  const setNow = (now) => vm.runInContext(`Date.now = () => ${now};`, ctx);
+  return { setNow, ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, badgeTitle: () => badgeTitle, meetingIdFromUrl: ctx.meetingIdFromUrl,
     autoTranscribe: ctx.autoTranscribe, saveSegments: ctx.saveSegments, startRecording: ctx.startRecording, menuPatterns: () => patterns, pressCommand: (id) => commands.forEach((f) => f(id)), menus, install: () => installed.forEach((f) => f()), settingsChanged: (settings) => changed.forEach((f) => f({ settings: { newValue: settings } }, 'local')) };
 }
 
@@ -558,7 +561,7 @@ test('automatic MoM runs from captions when a recording was only archived', asyn
 });
 
 test('automatic MoM waits for the transcript when one is coming', async () => {
-  const sw = loadSw({ offscreen: null, withMenus: true, store: recordedMeeting('both') });
+  const sw = loadSw({ offscreen: { recording: true, transcribing: false, meetingId: 'abc-defg-hij', tabId: null, autoStt: true }, withMenus: true, store: recordedMeeting('both') });
   await endCall(sw);
   assert.equal(sw.store['meeting:abc-defg-hij'].mom, null);
 });

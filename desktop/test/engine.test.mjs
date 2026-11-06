@@ -39,11 +39,11 @@ test('on a Mac the engine program has no .exe', async () => {
 test('a chosen model is used from the next start, and the old engine stops', async () => {
   const { engine, started } = setup();
   await engine.url();
-  assert.equal(started[0].args[1], join(DIR, 'ggml-base-q5_1.bin'));
-  engine.useModel('C:/models/small.bin');
+  assert.equal(started[0].args[1], 'ggml-base-q5_1.bin');
+  engine.useModel(join(DIR, '..', 'models', 'small.bin'));
   assert.equal(started[0].child.killed, 1);
   await engine.url();
-  assert.equal(started[1].args[1], 'C:/models/small.bin');
+  assert.equal(started[1].args[1], join('..', 'models', 'small.bin'));
 });
 
 test('choosing the same model again keeps the engine running', async () => {
@@ -187,3 +187,4 @@ test('the guard ends itself when the engine stops first', async () => {
     for (const child of [app, fakeEngine, guard]) child.kill();
   }
 });
+

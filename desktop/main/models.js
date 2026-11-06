@@ -4,13 +4,13 @@ const { pipeline } = require('node:stream/promises');
 const { join } = require('node:path');
 
 const SOURCE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
-const DOWNLOAD_TIMEOUT_MS = 3600000;
+const STALL_MS = 120000;
 const MODELS = {
   small: { file: 'ggml-small-q5_1.bin', url: `${SOURCE}ggml-small-q5_1.bin`, bytes: 190085487, sha256: 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb' },
   medium: { file: 'ggml-medium-q5_0.bin', url: `${SOURCE}ggml-medium-q5_0.bin`, bytes: 539212467, sha256: '19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f' },
 };
 
-function createModels({ dir, onProgress, catalog = MODELS, request = fetch }) {
+function createModels({ dir, onProgress, catalog = MODELS, request = fetch, stallMs = STALL_MS }) {
   const running = new Map();
   const known = (id) => Object.hasOwn(catalog, id);
   const fileOf = (id) => join(dir, catalog[id].file);
@@ -19,8 +19,25 @@ function createModels({ dir, onProgress, catalog = MODELS, request = fetch }) {
   const list = () => Object.keys(catalog).map((id) => ({ id, bytes: catalog[id].bytes, installed: installed(id) }));
 
   async function fetchModel(id) {
+    const stopped = new AbortController();
+    let watchdog;
+    const stillReceiving = () => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => stopped.abort(new Error('The model stopped downloading. Check your connection and try again.')), stallMs);
+    };
+    stillReceiving();
+    try {
+      await saveModel(id, stopped.signal, stillReceiving);
+    } catch (e) {
+      throw stopped.signal.aborted ? stopped.signal.reason : e;
+    } finally {
+      clearTimeout(watchdog);
+    }
+  }
+
+  async function saveModel(id, signal, stillReceiving) {
     const { url, bytes, sha256 } = catalog[id];
-    const res = await request(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    const res = await request(url, { signal });
     if (!res.ok) throw new Error(`The model could not be downloaded (HTTP ${res.status}).`);
     mkdirSync(dir, { recursive: true });
     const temp = `${fileOf(id)}.part`;
@@ -29,6 +46,7 @@ function createModels({ dir, onProgress, catalog = MODELS, request = fetch }) {
     let shown = -1;
     async function* counted(source) {
       for await (const part of source) {
+        stillReceiving();
         hash.update(part);
         received += part.length;
         const percent = Math.min(100, Math.floor((received / bytes) * 100));

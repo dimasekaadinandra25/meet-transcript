@@ -38,8 +38,9 @@ function startChunkRecorder() {
   recorder.ondataavailable = (e) => { if (e.data.size) data.push(e.data); };
   recorder.onstop = () => {
     const blob = new Blob(data, { type: MIME });
+    const index = chunkBlobs.length;
     chunkBlobs.push(blob);
-    trackSave(globalThis.MeetAudioStore.appendChunk(blob, recId),
+    trackSave(globalThis.MeetAudioStore.appendChunk(blob, recId, index),
       'An audio part could not be saved for retranscribing: ');
   };
   recorder.start();

@@ -235,6 +235,19 @@ function createWindow() {
     },
   });
   win.on('close', handleClose);
+  win.webContents.on('render-process-gone', () => {
+    if (quitting) {
+      engine?.stop();
+      app.exit(0);
+      return;
+    }
+    appAudio?.stop();
+    applyRecState({ recording: false, transcribing: false, muted: false });
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.send('main:warn', 'The app window crashed and restarted. Any recording in progress has stopped, and what was saved so far is in History.');
+    });
+    win.webContents.reload();
+  });
   win.webContents.on('before-input-event', (event, input) => {
     const step = zoomStep(input);
     if (step === null) return;
@@ -260,6 +273,7 @@ app.on('will-quit', () => {
 });
 
 app.whenReady().then(() => {
+  globalThis.fetch = (input, init) => net.fetch(input instanceof URL ? input.href : input, init);
   handleAssets();
   limitPermissions();
   serveStore();
@@ -284,7 +298,7 @@ app.whenReady().then(() => {
     if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);
     return undefined;
   });
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]) : null);
   mainWindow = createWindow();
   setupTray();
   registerShortcuts();

@@ -102,6 +102,7 @@
       } catch (e) {
         rec = { ...IDLE };
         broadcast({ error: e.message });
+        onWarning();
         return { ok: false, error: e.message };
       } finally {
         starting = null;
@@ -247,15 +248,17 @@
       if (!result.ok) broadcast({ error: `MoM could not be made automatically: ${result.error}` });
     }
 
+    const keepInFolder = (meetingId, baseTime) => saveToFolder(meetingId, baseTime).catch((e) => {
+      warn(`The recording could not be saved to your folder (${e.message}). It is still available in History.`);
+    });
+
     async function finishRecording(meetingId, baseTime) {
       const { peaks } = await recorder.stop();
       await updateMeeting(meetingId, (meeting) => {
         meeting.endedAt = now();
         meeting.audioPeaks = { ...meeting.audioPeaks, [baseTime]: peaks.mic };
       });
-      await saveToFolder(meetingId, baseTime).catch((e) => {
-        warn(`The recording could not be saved to your folder (${e.message}). It is still available in History.`);
-      });
+      await keepInFolder(meetingId, baseTime);
     }
 
     async function stopRecording({ transcribe: runStt = true } = {}) {
@@ -499,6 +502,7 @@
         const meeting = await readMeeting(id);
         if (meeting && !meeting.endedAt) {
           await updateMeeting(id, (m) => { m.endedAt = merge.lastActivityAt(m); });
+          await keepInFolder(id, Number(String(id).slice('desktop-'.length)));
         }
       }
       await deleteOldMeetings();

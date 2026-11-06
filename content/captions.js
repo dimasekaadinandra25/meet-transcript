@@ -6,9 +6,35 @@
   let port = null;
   let statusTimer = null;
   let flushTimer = null;
+  let recordPrompt = null;
+  let recordPromptSeen = false;
+  function hideRecordPrompt() {
+    recordPrompt?.remove();
+    recordPrompt = null;
+  }
+  function showRecordPrompt(text) {
+    if (!text) return hideRecordPrompt();
+    if (recordPrompt || recordPromptSeen) return;
+    recordPrompt = document.createElement('div');
+    recordPrompt.setAttribute('role', 'alert');
+    recordPrompt.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;gap:12px;align-items:center;max-width:min(560px,90vw);padding:12px 16px;border-radius:8px;background:#b45309;color:#fff;font:14px/1.4 sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)';
+    const message = document.createElement('span');
+    message.textContent = text;
+    const close = document.createElement('button');
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Close');
+    close.style.cssText = 'min-width:32px;min-height:32px;border:0;border-radius:4px;background:transparent;color:inherit;font:20px sans-serif;cursor:pointer';
+    close.addEventListener('click', () => {
+      recordPromptSeen = true;
+      hideRecordPrompt();
+    });
+    recordPrompt.append(message, close);
+    document.body.append(recordPrompt);
+  }
   function connect() {
     const p = chrome.runtime.connect({ name: 'captions' });
     p.onDisconnect.addListener(() => { if (port === p) port = null; });
+    p.onMessage.addListener((msg) => { if (msg.type === 'record-prompt') showRecordPrompt(msg.text); });
     port = p;
   }
   function stopAll() {
@@ -41,6 +67,7 @@
   let ccAttempts = 0;
   let sess = { ...SESS.INITIAL };
   function openSession() {
+    recordPromptSeen = false;
     ccAttempts = 0;
     blockIds = new WeakMap();
     dirty.clear();
@@ -50,6 +77,7 @@
     observedRegion = null;
   }
   function closeSession(endedId, hadJoined) {
+    hideRecordPrompt();
     if (dirty.size && endedId) {
       post({ type: 'segments', meetingId: endedId, title: '', segs: [...dirty.values()] });
     }

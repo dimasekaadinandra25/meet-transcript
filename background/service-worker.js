@@ -6,7 +6,7 @@ if (chrome.sidebarAction) {
   chrome.action?.onClicked.addListener(() => chrome.sidebarAction.toggle());
 }
 
-const ACTIVE_IDLE = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0 };
+const ACTIVE_IDLE = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0, captionsOffAt: 0 };
 let active = { ...ACTIVE_IDLE };
 const meetingKey = (id) => 'meeting:' + id;
 const newMeeting = (id, title, startedAt) => ({ id, title, startedAt, endedAt: null, segments: [], mom: null });
@@ -17,6 +17,8 @@ function notifyPanel(msg) {
 
 chrome.action?.setBadgeTextColor?.({ color: '#ffffff' });
 const QUIET_CAPTIONS_MS = 30000;
+const RECORD_PROMPT_QUIET_MS = 60000;
+const CAPTIONS_OFF_GRACE_MS = 15000;
 let transcriptSource = 'caption';
 
 function captionProblem() {
@@ -25,6 +27,23 @@ function captionProblem() {
   const quietSince = Math.max(active.lastSegmentAt || 0, active.captionsOnAt || 0);
   if (quietSince && Date.now() - quietSince > QUIET_CAPTIONS_MS) return 'No captions for 30 seconds';
   return transcriptSource === 'both' && !rec.recording ? 'Not recording yet' : null;
+}
+
+function captionsFailing() {
+  if (!chrome.tabCapture || !active.inCall || transcriptSource === 'audio' || recBusy()) return false;
+  if (!active.captionsOn) return Date.now() - active.captionsOffAt >= CAPTIONS_OFF_GRACE_MS;
+  const quietSince = Math.max(active.lastSegmentAt || 0, active.captionsOnAt || 0);
+  return !!quietSince && Date.now() - quietSince >= RECORD_PROMPT_QUIET_MS;
+}
+
+async function recordPromptText() {
+  if (!captionsFailing()) return '';
+  const commands = await chrome.commands?.getAll?.().catch(() => []) ?? [];
+  const key = commands.find((command) => command.name === 'rec-start')?.shortcut;
+  const t = globalThis.MeetI18n?.t ?? String;
+  return t(key
+    ? `Captions stopped, so this part of the meeting may not be saved. Press ${key} to record audio.`
+    : 'Captions stopped, so this part of the meeting may not be saved. Press Record on the extension icon.');
 }
 
 function updateBadge() {
@@ -163,6 +182,7 @@ function meetingIdFromUrl(url) {
 }
 
 async function startFromTab(tab, video) {
+  await recRestored;
   if (recBusy() || await hasOffscreen()) {
     recError('A recording is still running.');
     return;
@@ -300,6 +320,7 @@ async function startRecordingInner({ streamId, meetingId, title, baseTime, video
 }
 
 async function regenerateTranscript(meetingId, recId) {
+  await recRestored;
   if (recBusy()) throw new Error('A recording or transcript is still running.');
   if (!Number.isFinite(Number(recId))) {
     throw new Error('No recording was named for retranscribing (empty recId).');
@@ -330,6 +351,7 @@ async function regenerateTranscript(meetingId, recId) {
 }
 
 async function stopRecording() {
+  await recRestored;
   if (startPromise) await startPromise.catch(() => {});
   if (rec.transcribing || (!rec.recording && !(await hasOffscreen()))) return;
   rec.recording = false;
@@ -369,7 +391,7 @@ async function archiveIfStale(meetingId, data) {
   await chrome.storage.local.remove(key);
   delete data[key];
   await globalThis.MeetAudioStore.retagAudioMeta(meetingId, archiveId, lastActivity).catch(() => {});
-  notifyPanel({ type: 'meeting-updated', id: archiveId });
+  notifyPanel({ type: 'meeting-updated', id: archiveId, movedFrom: meetingId });
 }
 
 async function ensureMeeting({ meetingId, title, startedAt }) {
@@ -407,7 +429,8 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
   const tag = `audio:${baseTime ?? 0}:`;
   const { settings = {} } = await chrome.storage.local.get('settings');
   const expected = settings.transcriptSource === 'both' && !replace;
-  if (segments.length && !expected && !meeting.segments.some((s) => String(s.id ?? '').startsWith(tag))) {
+  const changedLines = meeting.segments.some((s) => String(s.id ?? '').startsWith(tag) || s.correctedFrom === (baseTime ?? 0));
+  if (segments.length && !expected && !changedLines) {
     broadcastRec({ error: 'The audio transcript matches the captions, so no new lines were added.' });
   }
   return meetingId;
@@ -448,12 +471,13 @@ async function endMeeting(meetingId, { makeMom = true } = {}) {
     notifyPanel({ type: 'status', ...active });
   }
   const key = meetingKey(meetingId);
-  const { settings = {}, ...data } = await chrome.storage.local.get([key, 'settings']);
+  await recRestored;
+  const data = await chrome.storage.local.get(key);
   if (!data[key]) return;
   data[key].endedAt = Date.now();
   await chrome.storage.local.set({ [key]: data[key] });
   notifyPanel({ type: 'meeting-updated', id: meetingId });
-  const transcriptComing = data[key].source === 'audio' && autoTranscribe(settings.transcriptSource);
+  const transcriptComing = rec.meetingId === meetingId && rec.autoStt && recBusy();
   if (makeMom && !transcriptComing) autoMom(meetingId).catch((e) => console.error(e));
 }
 
@@ -462,6 +486,17 @@ async function finishOtherSite(id) {
   const key = meetingKey(id);
   const { [key]: meeting } = await chrome.storage.local.get(key);
   if (meeting && !meeting.endedAt) await endMeeting(id, { makeMom: false });
+}
+
+const KEEP_AWAKE_MS = 20000;
+function keepAwake(work) {
+  let timer;
+  const ping = () => {
+    chrome.runtime.getPlatformInfo?.().catch(() => {});
+    timer = setTimeout(ping, KEEP_AWAKE_MS);
+  };
+  timer = setTimeout(ping, KEEP_AWAKE_MS);
+  return work.finally(() => clearTimeout(timer));
 }
 
 async function generateMom(id) {
@@ -473,15 +508,15 @@ async function generateMom(id) {
   if (!meeting || !meeting.segments.length) throw new Error('The transcript is empty.');
   const prompt = globalThis.MeetMerge.momPrompt(meeting, settings);
   const momBasedOn = globalThis.MeetMerge.transcriptStamp(meeting);
-  const mom = await globalThis.MeetOpenAI.generateMoM({
-    apiKey: settings.apiKey, model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt,
+  const mom = await keepAwake(globalThis.MeetOpenAI.generateMoM({
+    stream: true, apiKey: settings.apiKey, model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt,
     baseUrl: settings.baseUrl,
-  });
+  }));
   await new Promise((resolve, reject) => {
     enqueueWrite(async () => {
       try {
         const fresh = (await chrome.storage.local.get(key))[key];
-        if (!fresh) throw new Error('Meeting not found.');
+        if (fresh?.startedAt !== meeting.startedAt) throw new Error('Meeting not found.');
         fresh.mom = mom;
         fresh.momBasedOn = momBasedOn;
         await chrome.storage.local.set({ [key]: fresh });
@@ -510,10 +545,21 @@ const enqueueWrite = (fn) => {
   return writeChain;
 };
 
-const openCalls = new Set();
+const openCalls = new Map();
+function joinCall(id, port) {
+  if (!openCalls.has(id)) openCalls.set(id, new Set());
+  openCalls.get(id).add(port);
+}
+function leaveCall(id, port) {
+  const ports = openCalls.get(id);
+  ports?.delete(port);
+  if (ports && !ports.size) openCalls.delete(id);
+  return openCalls.has(id);
+}
 const meetingRunning = (id) => rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`) || (active.inCall && active.id === id) || openCalls.has(id);
 
 async function removeMeeting(id) {
+  await recRestored;
   if (meetingRunning(id)) throw new Error('This meeting is still running. Stop it before deleting.');
   await globalThis.MeetAudioStore.removeRecordings(id);
   const { meetings = [] } = await chrome.storage.local.get('meetings');
@@ -537,6 +583,7 @@ async function deleteOldMeetings() {
 }
 
 async function addMark() {
+  await recRestored;
   const id = rec.recording ? rec.meetingId : active.inCall && active.id;
   if (!id) throw new Error('No meeting is running.');
   const key = meetingKey(id);
@@ -556,8 +603,8 @@ async function askMeeting(id, question) {
   if (!globalThis.MeetMerge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
   if (!meeting?.segments.length) throw new Error('The transcript is empty.');
   const basedOn = globalThis.MeetMerge.transcriptStamp(meeting);
-  const answer = await globalThis.MeetOpenAI.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
-    model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt: globalThis.MeetMerge.askPrompt(meeting, question) });
+  const answer = await keepAwake(globalThis.MeetOpenAI.generateMoM({ stream: true, apiKey: settings.apiKey, baseUrl: settings.baseUrl,
+    model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt: globalThis.MeetMerge.askPrompt(meeting, question) }));
   await whenWritten(async () => {
     const { [key]: current } = await chrome.storage.local.get(key);
     if (current?.startedAt !== meeting.startedAt) throw new Error('Meeting not found.');
@@ -595,6 +642,8 @@ async function saveTitle(id, title) {
 const renameMeeting = (id, title) => whenWritten(() => saveTitle(id, title));
 
 const addImportedMeeting = ({ title, startedAt, endedAt }) => whenWritten(async () => {
+  await recRestored;
+  if (recBusy()) throw new Error('Stop the recording before importing a file.');
   const id = `import-${Date.now()}`;
   const meeting = { ...newMeeting(id, title, startedAt), endedAt, keepFrom: Date.now(), source: 'audio' };
   await storeMeeting(id, meeting, await chrome.storage.local.get('meetings'));
@@ -608,12 +657,16 @@ chrome.runtime.onConnect.addListener((port) => {
   let joined = false;
   let ended = false;
   const finish = () => {
-    openCalls.delete(meetingId);
-    if (ended || !joined || !meetingId) return;
-    ended = true;
-    const fromRecordedTab = rec.tabId == null || port.sender?.tab?.id === rec.tabId;
-    if ((!rec.meetingId || rec.meetingId === meetingId) && fromRecordedTab) stopRecording();
-    enqueueWrite(() => endMeeting(meetingId));
+    const id = meetingId;
+    const stillOpen = leaveCall(id, port);
+    recRestored.then(() => {
+      if (ended || !id) return;
+      const fromRecordedTab = rec.tabId == null || port.sender?.tab?.id === rec.tabId;
+      if (!joined && !(rec.meetingId === id && fromRecordedTab)) return;
+      ended = true;
+      if ((!rec.meetingId || rec.meetingId === id) && fromRecordedTab) stopRecording();
+      if (!stillOpen) enqueueWrite(() => endMeeting(id));
+    });
   };
   port.onMessage.addListener((msg) => {
     meetingId = msg.meetingId;
@@ -625,14 +678,17 @@ chrome.runtime.onConnect.addListener((port) => {
     } else if (msg.type === 'status') {
       if (msg.inCall) {
         joined = true;
-        openCalls.add(msg.meetingId);
+        joinCall(msg.meetingId, port);
       }
       const canClaim = !active.inCall || !active.id || (msg.inCall && active.id === msg.meetingId);
       if (!canClaim) return;
-      if (msg.captionsOn && !active.captionsOn) active.captionsOnAt = Date.now();
+      const joinedNow = msg.inCall && !active.inCall;
+      if (joinedNow || (msg.captionsOn && !active.captionsOn)) active.captionsOnAt = Date.now();
+      if (joinedNow || (!msg.captionsOn && (active.captionsOn || !active.captionsOffAt))) active.captionsOffAt = Date.now();
       active = { ...active, id: msg.meetingId, inCall: msg.inCall, captionsOn: msg.captionsOn };
       updateBadge();
       notifyPanel({ type: 'status', ...active });
+      recRestored.then(recordPromptText).then((text) => port.postMessage({ type: 'record-prompt', text })).catch(() => {});
     }
   });
   port.onDisconnect.addListener(finish);
@@ -685,11 +741,14 @@ function sendToAi(text, target, meetingId) {
   if (!ai) return;
   aiPending?.done();
   chrome.tabs.create({ url: ai.url }).then((tab) => {
+    let release;
+    keepAwake(new Promise((resolve) => { release = resolve; }));
     const finish = (ok, error) => {
       done();
       notifyPanel({ type: 'ai-inject', id: meetingId, ok, error });
     };
     const done = () => {
+      release();
       clearTimeout(giveUp);
       chrome.tabs.onUpdated.removeListener(onUpdated);
       chrome.tabs.onRemoved.removeListener(gone);
