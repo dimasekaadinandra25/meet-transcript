@@ -48,7 +48,8 @@ async function downloadWithRetries(models, id) {
 
 async function fetchModel(models, id, modelsDir) {
   const file = MODELS[id].file;
-  const cached = process.env.MODEL_CACHE ? join(process.env.MODEL_CACHE, file) : null;
+  const cacheDir = process.env.MODEL_CACHE ?? '';
+  const cached = cacheDir && join(cacheDir, file);
   if (cached && existsSync(cached)) {
     mkdirSync(modelsDir, { recursive: true });
     copyFileSync(cached, join(modelsDir, file));
@@ -56,7 +57,7 @@ async function fetchModel(models, id, modelsDir) {
   }
   await downloadWithRetries(models, id);
   if (!cached) return;
-  mkdirSync(process.env.MODEL_CACHE, { recursive: true });
+  mkdirSync(cacheDir, { recursive: true });
   copyFileSync(join(modelsDir, file), cached);
 }
 
