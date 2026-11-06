@@ -218,7 +218,10 @@ async function renderMeeting(id, live, epoch) {
       stop.classList.add('danger');
       bar.append(stop, el('span', 'recording', 'recording'));
     } else {
-      bar.append(el('span', 'muted', 'Start recording from the extension icon → Record.'));
+      const needsRecord = settingsCache.transcriptSource === 'both' && status.inCall;
+      bar.append(needsRecord
+        ? el('div', 'err', 'Not recording yet. Press Record on the extension icon so audio can fill what the captions miss.')
+        : el('span', 'muted', 'Start recording from the extension icon → Record.'));
     }
     if (recState.error) bar.append(el('div', 'err', ' ' + recState.error));
     view.append(bar);
@@ -485,8 +488,11 @@ async function renderSettings(epoch) {
     mkEl('textarea', { value: M.momTemplateOf(settings.momTemplate) }));
   const source = field('Transcript source',
     document.createElement('select'));
-  addOptions(source, [['caption', 'Meet captions'], ['audio', 'Record audio']]);
+  addOptions(source, [['caption', 'Meet captions'], ['both', 'Meet captions + recorded audio'], ['audio', 'Record audio']]);
   source.value = Host ? 'audio' : settings.transcriptSource ?? 'caption';
+  const sourceInfo = el('div', 'muted', 'Captions stay the main text, with speaker names. When you stop, recorded audio adds what they missed. Press Record in each meeting, and turn on Record microphone so your own voice is covered too.');
+  rowOf.get(source).append(sourceInfo);
+  source.addEventListener('change', () => applyMode());
   const hideBox = mkEl('input', { type: 'checkbox', checked: settings.hideCaptions !== false });
   const hideLabel = el('label');
   hideLabel.append(hideBox, 'Hide captions on the Meet screen (transcript keeps running)');
@@ -544,6 +550,7 @@ async function renderSettings(epoch) {
     const audio = HAS_AUDIO;
     const m = sttModeSel.value;
     show(source, HAS_AUDIO && !Host);
+    sourceInfo.hidden = source.value !== 'both';
     show(sttModeSel, audio);
     show(sttBaseUrl, audio && m !== 'builtin');
     show(sttApiKey, audio && m === 'api');
@@ -568,7 +575,7 @@ async function renderSettings(epoch) {
   const setNote = (cls, text) => { note.className = cls; note.textContent = ' ' + text; };
   const normalizedBase = () => (baseUrl.value.trim() || DEFAULT_BASE).replace(/\/+$/, '');
   const sttBaseValue = () => sttBaseUrl.value.trim().replace(/\/+$/, '');
-  const sttBaseForSave = () => (HAS_AUDIO && source.value === 'audio' ? sttBaseValue() : '');
+  const sttBaseForSave = () => (HAS_AUDIO && source.value !== 'caption' ? sttBaseValue() : '');
   const sttBaseForTest = sttBaseForSave;
   async function probeStt(base, key) {
     const host = new URL(base).hostname;

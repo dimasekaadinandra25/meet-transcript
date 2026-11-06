@@ -274,3 +274,23 @@ test('a template you edited is never changed', () => {
   const custom = `${OLD_DEFAULT}\nTulis dalam Bahasa Inggris.`;
   assert.equal(momTemplateOf(custom), custom);
 });
+
+test('recorded audio fills only what the captions missed', () => {
+  const captions = [
+    { id: 'c0', speaker: 'Ani', text: 'kita mulai rapat anggaran hari ini', t: 1000 },
+    { id: 'c1', speaker: 'Budi', text: 'setuju, kita lanjut ke marketing', t: 8000 },
+  ];
+  const audio = [
+    { speaker: '', text: 'kita mulai rapat anggaran hari ini', t: 1200 },
+    { speaker: '', text: 'peluncuran produk pindah ke bulan maret', t: 90000 },
+  ];
+  const merged = replaceAudioSegments(captions, audio, { baseTime: 500 });
+  assert.deepEqual(merged.map((s) => s.text), [captions[0].text, captions[1].text, audio[1].text]);
+  assert.deepEqual(merged.map((s) => s.speaker), ['Ani', 'Budi', '']);
+  assert.equal(merged[2].id, 'audio:500:0');
+});
+
+test('recorded audio becomes the transcript when captions gave nothing', () => {
+  const audio = [{ speaker: '', text: 'halo semua', t: 1000 }];
+  assert.deepEqual(replaceAudioSegments([], audio, { baseTime: 1 }).map((s) => s.text), ['halo semua']);
+});

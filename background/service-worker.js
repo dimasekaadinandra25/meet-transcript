@@ -191,7 +191,7 @@ async function sttConfig() {
 }
 
 function autoTranscribe(meetingId, transcriptSource) {
-  return globalThis.MeetSession.isMeetCode(meetingId) && transcriptSource === 'audio';
+  return globalThis.MeetSession.isMeetCode(meetingId) && (transcriptSource === 'audio' || transcriptSource === 'both');
 }
 
 let micWin = null;
@@ -349,7 +349,9 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
   await storeMeeting(meetingId, meeting, data);
   notifyPanel({ type: 'meeting-updated', id: meetingId });
   const tag = `audio:${baseTime ?? 0}:`;
-  if (segments.length && !meeting.segments.some((s) => String(s.id ?? '').startsWith(tag))) {
+  const { settings = {} } = await chrome.storage.local.get('settings');
+  const expected = settings.transcriptSource === 'both' && !replace;
+  if (segments.length && !expected && !meeting.segments.some((s) => String(s.id ?? '').startsWith(tag))) {
     broadcastRec({ error: 'The audio transcript matches the captions, so no new lines were added.' });
   }
   return meetingId;

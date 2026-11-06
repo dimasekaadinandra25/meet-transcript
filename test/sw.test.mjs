@@ -127,6 +127,8 @@ test('STT otomatis hanya untuk Meet bermode audio', () => {
   const meet = idOf('https://meet.google.com/abc-defg-hij');
   assert.equal(autoTranscribe(meet, 'caption'), false);
   assert.equal(autoTranscribe(meet, 'audio'), true);
+  assert.equal(autoTranscribe(meet, 'both'), true);
+  assert.equal(autoTranscribe(idOf('https://discord.com/channels/123/456'), 'both'), false);
   assert.equal(autoTranscribe(idOf('https://discord.com/channels/123/456'), 'audio'), false);
   assert.equal(autoTranscribe(idOf('https://zoom.us/wc/84787201766/join'), 'audio'), false);
 });
@@ -445,6 +447,22 @@ test('baris audio baru tersimpan tanpa pemberitahuan itu', async () => {
   await flush();
   assert.equal(sw.store['meeting:a'].segments.length, 2);
   assert.ok(!sw.sent.some((m) => m.type === 'rec-state' && /matches the captions/.test(m.error ?? '')));
+});
+
+test('with captions + audio, an automatic run that adds nothing stays quiet', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...captionMeeting(), settings: { transcriptSource: 'both' } } });
+  await sw.ask(finished('halo semuanya mari kita mulai'));
+  await flush();
+  await flush();
+  assert.ok(!sw.sent.some((m) => m.type === 'rec-state' && /matches the captions/.test(m.error ?? '')));
+});
+
+test('with captions + audio, pressing the button still tells you nothing was added', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...captionMeeting(), settings: { transcriptSource: 'both' } } });
+  await sw.ask({ ...finished('halo semuanya mari kita mulai'), replace: true });
+  await flush();
+  await flush();
+  assert.ok(sw.sent.some((m) => m.type === 'rec-state' && /matches the captions/.test(m.error ?? '')));
 });
 
 const wait = () => new Promise((r) => setTimeout(r, 20));
