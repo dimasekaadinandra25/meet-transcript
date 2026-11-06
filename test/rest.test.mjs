@@ -46,3 +46,15 @@ test('Firefox loads every script the worker uses', () => {
   for (const script of imported) assert.ok(firefox.includes(script), script);
   assert.equal(firefox[0], 'lib/i18n.js');
 });
+
+test('without a recording, subtitles start at the first line', () => {
+  const meeting = { startedAt: 1000300, segments: [{ speaker: 'Ani', text: 'pertama', t: 1000000 }, { speaker: 'Ani', text: 'kedua', t: 1002000 }] };
+  const out = formatSubtitles(meeting.segments, 'srt', globalThis.MeetMerge.subtitleOrigin(meeting, []));
+  assert.match(out, /pertama/);
+  assert.match(out, /kedua/);
+});
+
+test('with recordings, subtitles start at the earliest one', () => {
+  const meeting = { startedAt: 100, segments: [{ speaker: '', text: 'x', t: 50 }] };
+  assert.equal(globalThis.MeetMerge.subtitleOrigin(meeting, [900, 700]), 700);
+});

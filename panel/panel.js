@@ -338,7 +338,7 @@ async function renderMeeting(id, live, epoch) {
   dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatWithMarks(meeting)));
   dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
   dl.item('Download .docx', async () => download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting)));
-  const subtitleStart = () => (recs.length ? Math.min(...recs.map((r) => r.baseTime)) : meeting.startedAt);
+  const subtitleStart = () => M.subtitleOrigin(meeting, recs.map((r) => r.baseTime));
   dl.item('Download .srt', () => download(`${meeting.title}.srt`, M.formatSubtitles(meeting.segments, 'srt', subtitleStart())));
   dl.item('Download .vtt', () => download(`${meeting.title}.vtt`, M.formatSubtitles(meeting.segments, 'vtt', subtitleStart())));
   dl.item('Save as PDF', async () => {

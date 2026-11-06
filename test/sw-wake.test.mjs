@@ -12,10 +12,11 @@ function loadSw({ offscreen = null, store = {}, firefox = false, shortcut = 'Alt
   const handlers = [];
   const connects = [];
   const sent = [];
+  const titles = [];
   const stateReply = {};
   stateReply.promise = new Promise((resolve) => { stateReply.resolve = resolve; });
   const chrome = {
-    action: { setBadgeBackgroundColor() {}, setBadgeTextColor() {}, setBadgeText() {}, setTitle() {} },
+    action: { setBadgeBackgroundColor() {}, setBadgeTextColor() {}, setBadgeText() {}, setTitle(o) { titles.push(o.title); } },
     runtime: {
       onMessage: { addListener: (f) => handlers.push(f) },
       onConnect: { addListener: (f) => connects.push(f) },
@@ -48,7 +49,8 @@ function loadSw({ offscreen = null, store = {}, firefox = false, shortcut = 'Alt
   const ctx = vm.createContext({ chrome, console, URL, setTimeout: (f, ms) => { const t = setTimeout(f, ms === 20000 ? 10 : ms); t.unref(); return t; }, clearTimeout });
   vm.runInContext('globalThis.MeetAudioStore = {}; globalThis.MeetStt = {}; globalThis.MeetOpenAI = { DEFAULT_MODEL: "m" };', ctx);
   ctx.removed = [];
-  ctx.MeetAudioStore.listRecordings = async () => [];
+  const recordings = [];
+  ctx.MeetAudioStore.listRecordings = async () => recordings;
   ctx.MeetAudioStore.retagAudioMeta = async () => {};
   ctx.MeetAudioStore.removeRecordings = async (id) => { ctx.removed.push(id); };
   ctx.MeetStt.sttEndpoint = () => ({ mode: 'http', baseUrl: 'http://localhost:1/v1', apiKey: '', model: 'whisper-1', language: '' });
@@ -69,7 +71,7 @@ function loadSw({ offscreen = null, store = {}, firefox = false, shortcut = 'Alt
   const setNow = (now) => vm.runInContext(`Date.now = () => ${now};`, ctx);
   const finishWaking = () => stateReply.resolve(offscreen ? { ok: true, ...offscreen } : { ok: false });
   const useModel = (fn) => { ctx.MeetOpenAI.generateMoM = fn; };
-  return { ask, connect, setNow, finishWaking, store, sent, removed: ctx.removed, useModel, pings: () => pings };
+  return { ask, connect, setNow, finishWaking, store, sent, removed: ctx.removed, useModel, pings: () => pings, titles, recordings };
 }
 
 const RECORDING = { recording: true, transcribing: false, meetingId: 'discord-1-2', tabId: 42, autoStt: false };
@@ -323,4 +325,111 @@ test('an archived meeting tells the panel where it moved', async () => {
   await flush();
   const moved = sw.sent.find((m) => m.type === 'meeting-updated' && m.movedFrom === MEET);
   assert.equal(moved.id, `${MEET}@1000`);
+});
+
+test('an unchanged transcript does not pay for a second MoM', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { settings: { apiKey: 'k', autoMom: true, transcriptSource: 'audio' }, meetings: [MEET], [key]: meetingFor({ source: 'audio' }) } });
+  sw.finishWaking();
+  let made = 0;
+  sw.useModel(async () => { made++; return 'mom'; });
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: true });
+  await sw.ask({ type: 'audio-transcript', meetingId: MEET, baseTime: 500, segments: [{ speaker: '', text: 'peluncuran produk pindah ke bulan maret', t: 90000 }] });
+  await flush();
+  assert.equal(made, 1);
+  tab.send({ type: 'ended', meetingId: MEET, joined: true });
+  await flush();
+  assert.equal(made, 1);
+});
+
+test('new lines after a MoM still make a new one', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { settings: { apiKey: 'k', autoMom: true }, meetings: [MEET], [key]: meetingFor() } });
+  sw.finishWaking();
+  let made = 0;
+  sw.useModel(async () => { made++; return 'mom'; });
+  await sw.ask({ type: 'generate-mom', id: MEET });
+  assert.equal(made, 1);
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: true });
+  sw.store[key].segments.push({ id: 'c', speaker: 'Budi', text: 'baris baru', t: 5 });
+  tab.send({ type: 'ended', meetingId: MEET, joined: true });
+  await flush();
+  assert.equal(made, 2);
+});
+
+test('leaving during a retranscribe waits for it before the MoM', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { settings: { apiKey: 'k', autoMom: true }, meetings: [MEET], [key]: meetingFor() } });
+  sw.finishWaking();
+  let made = 0;
+  sw.useModel(async () => { made++; return 'mom'; });
+  sw.recordings.push({ recId: 500, meetingId: MEET });
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: true });
+  sw.ask({ type: 'regenerate-transcript', id: MEET, recId: 500 });
+  await flush();
+  tab.send({ type: 'ended', meetingId: MEET, joined: true });
+  await flush();
+  assert.equal(made, 0);
+});
+
+test('closing a lobby during a retranscribe leaves the meeting alone', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { meetings: [MEET], [key]: meetingFor({ endedAt: 5 }) } });
+  sw.finishWaking();
+  sw.recordings.push({ recId: 500, meetingId: MEET });
+  await flush();
+  sw.ask({ type: 'regenerate-transcript', id: MEET, recId: 500 });
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'status', meetingId: MEET, inCall: false, captionsOn: false });
+  tab.send({ type: 'ended', meetingId: MEET, joined: false });
+  await flush();
+  assert.equal(sw.store[key].endedAt, 5);
+});
+
+test('a failed audio part still makes the MoM when captions exist', async () => {
+  const sw = loadSw({ store: { settings: { apiKey: 'k', autoMom: true, transcriptSource: 'both' }, meetings: [MEET], [`meeting:${MEET}`]: meetingFor({ source: 'audio' }) } });
+  sw.finishWaking();
+  let made = 0;
+  sw.useModel(async () => { made++; return 'mom'; });
+  await sw.ask({ type: 'audio-transcript', meetingId: MEET, baseTime: 500, error: '1/2 parts failed', segments: [{ speaker: '', text: '[transcript failed]', t: 500, failedUntil: 120500 }] });
+  await flush();
+  assert.equal(made, 1);
+});
+
+test('audio that failed completely still makes the MoM when captions exist', async () => {
+  const sw = loadSw({ store: { settings: { apiKey: 'k', autoMom: true, transcriptSource: 'both' }, meetings: [MEET], [`meeting:${MEET}`]: meetingFor({ source: 'audio' }) } });
+  sw.finishWaking();
+  let made = 0;
+  sw.useModel(async () => { made++; return 'mom'; });
+  await sw.ask({ type: 'audio-error', meetingId: MEET, error: 'no audio' });
+  await flush();
+  assert.equal(made, 1);
+});
+
+test('a failed part with no captions does not make a MoM from nothing', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { settings: { apiKey: 'k', autoMom: true, transcriptSource: 'audio' }, meetings: [MEET], [key]: meetingFor({ source: 'audio', segments: [] }) } });
+  sw.finishWaking();
+  let made = 0;
+  sw.useModel(async () => { made++; return 'mom'; });
+  await sw.ask({ type: 'audio-transcript', meetingId: MEET, baseTime: 500, error: '1/2 parts failed', segments: [{ speaker: '', text: '[transcript failed]', t: 500, failedUntil: 120500 }] });
+  await flush();
+  assert.equal(made, 0);
+});
+
+test('Firefox follows the chosen language in the worker', async () => {
+  const sw = loadSw({ firefox: true, store: { settings: { uiLang: 'id', transcriptSource: 'caption' } } });
+  sw.finishWaking();
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: false });
+  await flush();
+  assert.doesNotMatch(sw.titles.at(-1), /Captions are off/);
 });

@@ -213,6 +213,8 @@ if (!chrome.tabCapture) {
   });
 }
 
+const languageReady = globalThis.MeetI18n?.follow?.() ?? Promise.resolve();
+
 if (chrome.tabCapture) {
   const RECORDABLE = [
     'https://meet.google.com/*', 'https://discord.com/channels/*', 'https://teams.microsoft.com/*', 'https://teams.live.com/*', 'https://teams.cloud.microsoft/*',
@@ -223,8 +225,7 @@ if (chrome.tabCapture) {
     ['rec-start-video', 'Record meeting audio + video'],
     ['rec-stop', 'Stop recording'],
   ];
-  const { t, follow } = globalThis.MeetI18n;
-  const languageReady = follow();
+  const { t } = globalThis.MeetI18n;
   const titleMenus = () => {
     for (const [id, title] of MENU) chrome.contextMenus.update(id, { title: t(title) })?.catch(() => {});
   };
@@ -325,7 +326,7 @@ async function regenerateTranscript(meetingId, recId) {
   if (!Number.isFinite(Number(recId))) {
     throw new Error('No recording was named for retranscribing (empty recId).');
   }
-  rec = { recording: false, transcribing: true, meetingId };
+  rec = { recording: false, transcribing: true, meetingId, autoStt: true };
   updateBadge();
   broadcastRec({ error: null });
   try {
@@ -456,12 +457,20 @@ async function autoMom(id) {
   const key = meetingKey(id);
   const { settings = {}, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
   if (!settings.autoMom || !globalThis.MeetMerge.canMakeMom(settings) || !meeting?.segments.length) return;
+  if (meeting.mom && !globalThis.MeetMerge.changedSince(meeting, meeting.momBasedOn)) return;
   try {
     await generateMomOnce(id);
     notifyPanel({ type: 'meeting-updated', id });
   } catch (e) {
     broadcastRec({ error: `MoM could not be made automatically: ${e.message}` });
   }
+}
+
+async function momFromCaptions(id) {
+  const key = meetingKey(id);
+  const { settings, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
+  if (settings?.transcriptSource !== 'both') return;
+  if (meeting?.segments.some((s) => !String(s.id ?? '').startsWith('audio:'))) await autoMom(id);
 }
 
 async function endMeeting(meetingId, { makeMom = true } = {}) {
@@ -662,7 +671,7 @@ chrome.runtime.onConnect.addListener((port) => {
     recRestored.then(() => {
       if (ended || !id) return;
       const fromRecordedTab = rec.tabId == null || port.sender?.tab?.id === rec.tabId;
-      if (!joined && !(rec.meetingId === id && fromRecordedTab)) return;
+      if (!joined && !(rec.recording && rec.meetingId === id && fromRecordedTab)) return;
       ended = true;
       if ((!rec.meetingId || rec.meetingId === id) && fromRecordedTab) stopRecording();
       if (!stillOpen) enqueueWrite(() => endMeeting(id));
@@ -826,7 +835,7 @@ const HANDLERS = {
     enqueueWrite(async () => {
       const id = await saveAudioTranscript(msg);
       await finishOtherSite(id);
-      if (!msg.error) autoMom(id).catch((e) => console.error(e));
+      (msg.error ? momFromCaptions(id) : autoMom(id)).catch((e) => console.error(e));
     });
     closeOffscreen();
   },
@@ -839,7 +848,12 @@ const HANDLERS = {
   'audio-error': (msg) => {
     resetRec();
     broadcastRec({ error: msg.error });
-    if (msg.meetingId) enqueueWrite(() => finishOtherSite(msg.meetingId));
+    if (msg.meetingId) {
+      enqueueWrite(async () => {
+        await finishOtherSite(msg.meetingId);
+        momFromCaptions(msg.meetingId).catch((e) => console.error(e));
+      });
+    }
     closeOffscreen();
   },
   'audio-warn': (msg) => { broadcastRec({ error: msg.error }); },
