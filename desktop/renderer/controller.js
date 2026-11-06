@@ -6,7 +6,7 @@
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
 
   function createController(deps) {
-    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, splitAudio, saveFile, now } = deps;
+    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, splitAudio, clipAudio, saveFile, now } = deps;
     let rec = { ...IDLE };
     let activeId = null;
     let starting = null;
@@ -106,7 +106,7 @@
       } finally {
         starting = null;
       }
-      live = { meetingId, baseTime, done: { system: new Map(), mic: new Map() }, run: Promise.resolve(), stopped: false };
+      live = { meetingId, baseTime, done: { system: new Map(), mic: new Map() }, voices: stt.createVoiceMemory(), run: Promise.resolve(), stopped: false };
       setActive(meetingId);
       broadcast({ error: null });
       readSettings().then(checkStt).catch((e) => console.error(e));
@@ -115,8 +115,12 @@
 
     const isSilent = (peaks, index) => peaks[index] !== undefined && peaks[index] !== null && peaks[index] < SILENT_PEAK;
 
-    const sendToStt = (blob, endpoint) => openai.transcribeAudio({ blob, baseUrl: endpoint.baseUrl,
-      apiKey: endpoint.apiKey, model: endpoint.model, language: endpoint.language });
+    function sendToStt(blob, endpoint, voices) {
+      const send = (knownSpeakers) => openai.transcribeAudio({ blob, baseUrl: endpoint.baseUrl,
+        apiKey: endpoint.apiKey, model: endpoint.model, language: endpoint.language, ...(knownSpeakers ? { knownSpeakers } : {}) });
+      if (!voices || !stt.isDiarizeModel(endpoint.model)) return send();
+      return stt.sendWithVoices({ send, blob, voices, makeClip: clipAudio });
+    }
 
     function finishedTrack(done) {
       const indices = [...done.keys()].sort((a, b) => a - b);
@@ -130,9 +134,9 @@
       if (!endpoint.baseUrl) return;
       const [system, mic] = await Promise.all([audioStore.loadSystem(session.baseTime), audioStore.loadMic(session.baseTime)]);
       const peaks = recorder.currentPeaks()?.mic ?? [];
-      const jobs = [[system, session.done.system, () => false], [mic, session.done.mic, (index) => isSilent(peaks, index)]];
+      const jobs = [[system, session.done.system, () => false, session.voices], [mic, session.done.mic, (index) => isSilent(peaks, index)]];
       let changed = false;
-      for (const [loaded, done, skip] of jobs) {
+      for (const [loaded, done, skip, voices] of jobs) {
         for (const [i, index] of (loaded?.indices ?? []).entries()) {
           if (done.has(index) || session.stopped) continue;
           if (skip(index)) {
@@ -140,7 +144,7 @@
             continue;
           }
           try {
-            const result = await sendToStt(loaded.blobs[i], endpoint);
+            const result = await sendToStt(loaded.blobs[i], endpoint, voices);
             if (result.error) throw new Error(result.error);
             done.set(index, result);
             changed = true;
@@ -175,7 +179,7 @@
       session.run = session.run.then(() => catchUpLive(session)).catch((e) => console.error(e));
     }
 
-    async function sendChunks(loaded, skip, endpoint, progress, known) {
+    async function sendChunks(loaded, skip, endpoint, progress, known, voices) {
       if (!loaded) return { results: [], indices: [] };
       const results = [];
       for (let i = 0; i < loaded.blobs.length; i++) {
@@ -189,7 +193,7 @@
         }
         progress();
         try {
-          results.push(await sendToStt(loaded.blobs[i], endpoint));
+          results.push(await sendToStt(loaded.blobs[i], endpoint, voices));
         } catch (e) {
           results.push({ error: e.message });
         }
@@ -197,7 +201,7 @@
       return { results, indices: loaded.indices };
     }
 
-    async function transcribe(meetingId, recId, replace, known) {
+    async function transcribe(meetingId, recId, replace, known, voices = stt.createVoiceMemory()) {
       const endpoint = stt.sttEndpoint(await readSettings());
       const [system, mic] = await Promise.all([audioStore.loadSystem(recId), audioStore.loadMic(recId)]);
       const source = system ?? mic;
@@ -208,7 +212,7 @@
       const total = toSend(system, () => false, known?.system) + toSend(mic, silent, known?.mic);
       let done = 0;
       const progress = () => broadcast({ done: done++, total });
-      const systemTrack = await sendChunks(system, () => false, endpoint, progress, known?.system);
+      const systemTrack = await sendChunks(system, () => false, endpoint, progress, known?.system, voices);
       const micTrack = await sendChunks(mic, silent, endpoint, progress, known?.mic);
       if (replace) {
         const blocked = tracks.replaceBlocker({ system: systemTrack, mic: micTrack });
@@ -271,7 +275,7 @@
       try {
         await finishing;
         if (runStt) await session?.run;
-        const error = runStt ? await transcribe(meetingId, baseTime, false, session?.done) : null;
+        const error = runStt ? await transcribe(meetingId, baseTime, false, session?.done, session?.voices) : null;
         rec = { ...IDLE };
         broadcast({ error: [error, stopWarning].filter(Boolean).join(' ') || null });
         if (runStt && !error) autoMom(meetingId).catch((e) => console.error(e));
@@ -355,11 +359,12 @@
 
     async function transcribeParts(parts, endpoint, run) {
       const results = [];
+      const voices = stt.createVoiceMemory();
       for (const [i, part] of parts.entries()) {
         if (run.cancelled) break;
         broadcast({ done: i, total: parts.length });
         try {
-          results.push(await sendToStt(part, endpoint));
+          results.push(await sendToStt(part, endpoint, voices));
         } catch (e) {
           results.push({ error: e.message });
         }

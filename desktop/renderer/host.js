@@ -6,6 +6,32 @@
   const shim = globalThis.createChromeShim({ store: desktop.store, handle: (msg) => controller.handle(msg) });
   globalThis.chrome = shim;
 
+  let chosenApp = null;
+  let appSound = null;
+  desktop.appAudio.onData((bytes) => appSound?.source.push(bytes));
+  desktop.appAudio.onEnded(() => {
+    const ended = appSound?.onEnded;
+    appSound = null;
+    ended?.();
+  });
+
+  async function openAppAudio(pid, ctx, onEnded) {
+    const source = globalThis.MeetAppAudio.createPcmSource(ctx);
+    appSound = { source, onEnded };
+    const started = await desktop.appAudio.start(pid);
+    if (!started.ok) {
+      appSound = null;
+      throw new Error(started.error);
+    }
+    return {
+      node: source.node,
+      close: () => {
+        appSound = null;
+        desktop.appAudio.stop();
+      },
+    };
+  }
+
   const recorder = globalThis.createRecorder({
     AudioContext,
     MediaRecorder,
@@ -16,6 +42,8 @@
     warn: (message) => controller.warn(message),
     onLevels: (levels) => showLevels(levels),
     onChunkSaved: () => controller.chunkSaved(),
+    chosenApp: () => chosenApp?.pid ?? null,
+    openAppAudio,
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (id) => clearInterval(id),
   });
@@ -35,6 +63,7 @@
     probeStt: (url, key) => desktop.net.probe(url, key),
     startEngine: () => desktop.engine.start(),
     splitAudio: (file, seconds) => globalThis.MeetWav.speechParts(file, seconds),
+    clipAudio: (blob, from, to) => globalThis.MeetWav.clipDataUrl(blob, from, to),
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     now: () => Date.now(),
   });
@@ -105,6 +134,35 @@
 
   const meters = { system: null, mic: null };
 
+  const appName = (name) => name.replace(/\.exe$/i, '');
+  let canPickApp = false;
+  desktop.appAudio.available().then((ready) => {
+    canPickApp = ready;
+    if (ready) redrawLive();
+  });
+
+  function appPicker() {
+    const select = el('select');
+    select.setAttribute('aria-label', 'Sound to record');
+    const option = (value, textContent) => Object.assign(document.createElement('option'), { value, textContent });
+    const app = (entry) => raw(option(String(entry.pid), appName(entry.name)));
+    select.append(option('', 'All computer sound'));
+    if (chosenApp) select.append(app(chosenApp));
+    select.value = String(chosenApp?.pid ?? '');
+    select.addEventListener('focus', async () => {
+      const apps = await desktop.appAudio.list();
+      const listed = [...apps].sort((a, b) => Number(b.active) - Number(a.active));
+      select.replaceChildren(option('', 'All computer sound'), ...listed.map(app));
+      if (!listed.some((entry) => entry.pid === chosenApp?.pid)) chosenApp = null;
+      select.value = String(chosenApp?.pid ?? '');
+    });
+    select.addEventListener('change', () => {
+      const pid = Number(select.value);
+      chosenApp = pid ? { pid, name: select.selectedOptions[0].textContent } : null;
+    });
+    return select;
+  }
+
   function levelRow(name, label) {
     const row = el('div', 'level');
     const meter = Object.assign(document.createElement('meter'), { min: 0, max: 1, value: 0 });
@@ -145,6 +203,7 @@
       mkBtn('Record audio', () => send({ type: 'start-recording', video: false }), box).classList.add('primary');
       mkBtn('Record audio + video', () => send({ type: 'start-recording', video: true }), box);
       box.append(sourcePicker());
+      if (canPickApp) box.append(appPicker());
       globalThis.MeetUi.mkImportButton((file) => send({ type: 'import-audio', file }), box);
       box.append(el('div', 'muted', 'Without a headset, other people can leak into your microphone. Repeated lines are removed, but some may stay as "You".'));
     }

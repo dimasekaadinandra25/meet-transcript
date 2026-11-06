@@ -126,6 +126,7 @@ beforeEach(() => {
     onWarning: () => { warned++; },
     probeStt: async (url, key) => { probes.push({ url, key }); return probeAnswer; },
     startEngine: async () => engineAnswer,
+    clipAudio: async () => 'data:audio/wav;base64,AAAA',
     splitAudio: async (file) => {
       if (file.broken) throw new Error('This file could not be read as audio.');
       return { durationMs: 200000, parts: (file.parts ?? ['one', 'two']).map(blob) };
@@ -804,6 +805,30 @@ test('asking about a meeting saves the answer, newest first', async () => {
   assert.deepEqual(meeting().answers.map((a) => [a.question, a.answer]), [['Dua?', 'JAWABAN'], ['Satu?', 'JAWABAN']]);
   assert.equal(typeof meeting().answers[0].basedOn, 'number');
   assert.equal(meeting().mom, momBefore);
+});
+
+test('a diarize model keeps speaker letters across the parts of a recording', async () => {
+  data.settings = { ...data.settings, sttModel: 'gpt-4o-transcribe-diarize' };
+  const seen = [];
+  fakeOpenAI.transcribeAudio = async ({ knownSpeakers = [] }) => {
+    seen.push(knownSpeakers.map((k) => k.name));
+    return { segments: [{ start: 0, end: 4, text: 'halo', speaker: knownSpeakers.length ? 'Voice A' : 'A' }] };
+  };
+  fakeStore.loadSystem = async (recId) => ({ meetingId: id, chunkMs: 120000, baseTime: recId, blobs: [blob('p0'), blob('p1')], indices: [0, 1] });
+  fakeStore.loadMic = async () => null;
+  await runRecording();
+  assert.deepEqual(seen, [[], ['Voice A']]);
+  assert.deepEqual(meeting().segments.map((s) => s.speaker), ['Speaker A', 'Speaker A']);
+});
+
+test('other models send no voice clips', async () => {
+  const seen = [];
+  fakeOpenAI.transcribeAudio = async (args) => {
+    seen.push(args.knownSpeakers);
+    return { segments: [{ start: 0, end: 4, text: 'halo', speaker: 'A' }] };
+  };
+  await runRecording();
+  assert.ok(seen.every((known) => known === undefined));
 });
 
 test('an answer can be deleted during the recording it belongs to', async () => {

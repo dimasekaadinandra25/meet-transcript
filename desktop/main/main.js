@@ -9,6 +9,7 @@ const { createStore } = require('./store');
 const { loadLib, netCall, callChat, callTest, callStt, probe } = require('./net');
 const { createEngine } = require('./engine');
 const { createModels } = require('./models');
+const { createAppAudio } = require('./appaudio');
 const { createRecordingFolder } = require('./recordings');
 const { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep } = require('./lifecycle');
 const { RELEASES_URL, checkForUpdate } = require('./update');
@@ -40,6 +41,7 @@ let quitting = false;
 let sleepBlocker;
 let recordingFolder;
 let engine;
+let appAudio;
 let recState = { recording: false, transcribing: false, muted: false };
 
 const t = (text) => globalThis.MeetI18n.t(text);
@@ -198,6 +200,18 @@ function serveCapture() {
   });
 }
 
+function serveAppAudio() {
+  appAudio = createAppAudio({
+    dir: join(app.isPackaged ? process.resourcesPath : APP_ROOT, 'native', 'bin'),
+    onData: (bytes) => mainWindow?.webContents.send('appaudio:data', bytes),
+    onEnded: () => mainWindow?.webContents.send('appaudio:ended'),
+  });
+  handleFromApp('appaudio:available', () => appAudio.available());
+  handleFromApp('appaudio:list', () => appAudio.list());
+  handleFromApp('appaudio:start', (pid) => netCall(() => appAudio.start(pid)));
+  handleFromApp('appaudio:stop', () => appAudio.stop());
+}
+
 function limitPermissions() {
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
     callback(ALLOWED_PERMISSIONS.has(permission) && isAppUrl(details.requestingUrl));
@@ -242,6 +256,7 @@ app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   engine?.stop();
+  appAudio?.stop();
 });
 
 app.whenReady().then(() => {
@@ -250,6 +265,7 @@ app.whenReady().then(() => {
   serveStore();
   serveNet();
   serveCapture();
+  serveAppAudio();
   serveRecordings();
   handleFromApp('rec:state', applyRecState);
   handleFromApp('window:reveal', revealWindow);

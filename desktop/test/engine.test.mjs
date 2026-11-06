@@ -10,11 +10,12 @@ const { createEngine, engineArgs, GUARD_SCRIPT } = require('../main/engine.js');
 
 const DIR = join('C:', 'engine');
 
-function setup({ exists = () => true, healthy = () => true } = {}) {
+function setup({ exists = () => true, healthy = () => true, platform = 'win32' } = {}) {
   const started = [];
   const guarded = [];
   const engine = createEngine({
     dir: DIR,
+    platform,
     exists,
     guard: (pid) => guarded.push(pid),
     run: (file, args, options) => {
@@ -28,6 +29,12 @@ function setup({ exists = () => true, healthy = () => true } = {}) {
   });
   return { engine, started, guarded };
 }
+
+test('on a Mac the engine program has no .exe', async () => {
+  const { engine, started } = setup({ platform: 'darwin' });
+  await engine.url();
+  assert.equal(started[0].file, join(DIR, 'whisper-server'));
+});
 
 test('a chosen model is used from the next start, and the old engine stops', async () => {
   const { engine, started } = setup();

@@ -1,0 +1,96 @@
+name: Build
+
+on:
+  push:
+    branches: [desktop-app, main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: desktop
+      - run: node --test test/*.test.mjs
+      - run: node --test desktop/test/
+      - run: npm run typecheck
+        working-directory: desktop
+
+  desktop:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist
+            app: dist/win-unpacked/Transcripables.exe
+          - os: macos-latest
+            script: dist:mac
+            app: dist/mac-arm64/Transcripables.app/Contents/MacOS/Transcripables
+          - os: macos-15-intel
+            script: dist:mac
+            app: dist/mac/Transcripables.app/Contents/MacOS/Transcripables
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run fetch-engine
+      - name: Transcribe real speech with every engine model
+        run: node scripts/test-engine.js
+      - name: Build the installer
+        run: npm run "${{ matrix.script }}"
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Open the built app
+        run: node scripts/smoke.js "${{ matrix.app }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            desktop/dist/Transcripables-*.exe
+            desktop/dist/Transcripables-*.dmg
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - run: bash scripts/pack.sh
+      - name: Publish the release
+        run: gh release create "$GITHUB_REF_NAME" installers/* dist/*.zip --prerelease --title "$GITHUB_REF_NAME" --notes-file .github/release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

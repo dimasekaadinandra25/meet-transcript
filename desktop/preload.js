@@ -25,6 +25,14 @@ contextBridge.exposeInMainWorld('desktop', {
     sources: () => ipcRenderer.invoke('capture:sources'),
     use: (id) => ipcRenderer.invoke('capture:use', id),
   },
+  appAudio: {
+    available: () => ipcRenderer.invoke('appaudio:available'),
+    list: () => ipcRenderer.invoke('appaudio:list'),
+    start: (pid) => ipcRenderer.invoke('appaudio:start', pid),
+    stop: () => ipcRenderer.invoke('appaudio:stop'),
+    onData: (listener) => ipcRenderer.on('appaudio:data', (_event, bytes) => listener(bytes)),
+    onEnded: (listener) => ipcRenderer.on('appaudio:ended', () => listener()),
+  },
   engine: {
     available: () => ipcRenderer.invoke('engine:available'),
     start: () => ipcRenderer.invoke('engine:start'),

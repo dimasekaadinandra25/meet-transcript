@@ -158,21 +158,24 @@ async function start(msg) {
   rotateTimer = setInterval(rotateChunk, msg.chunkMs);
 }
 
-function transcribeOne(blob, c) {
-  return globalThis.MeetOpenAI.transcribeAudio({
+function transcribeOne(blob, c, voices) {
+  const send = (knownSpeakers) => globalThis.MeetOpenAI.transcribeAudio({
     blob, baseUrl: c.baseUrl, apiKey: c.apiKey,
-    model: c.sttModel, language: c.sttLanguage,
+    model: c.sttModel, language: c.sttLanguage, knownSpeakers,
   });
+  if (!globalThis.MeetStt.isDiarizeModel(c.sttModel)) return send();
+  return globalThis.MeetStt.sendWithVoices({ send, blob, voices, makeClip: globalThis.MeetWav.clipDataUrl });
 }
 
 async function transcribeChunks(blobs, c, replace) {
   sttRunning = true;
   try {
     const results = [];
+    const voices = globalThis.MeetStt.createVoiceMemory();
     for (let i = 0; i < blobs.length; i++) {
       toSW({ type: 'audio-progress', meetingId: c.meetingId, done: i, total: blobs.length });
       try {
-        results.push(await transcribeOne(blobs[i], c));
+        results.push(await transcribeOne(blobs[i], c, voices));
       } catch (e) {
         results.push({ error: e.message });
       }

@@ -134,20 +134,29 @@
     }
 
     async function begin(s, { mic, video, chunkMs, prepare }) {
-      s.display = await withinStartTime(() => deps.getDisplayMedia(DISPLAY_CONSTRAINTS),
-        'Computer audio did not start within 15 seconds. Try again, or restart the app.');
-      const systemAudio = s.display.getAudioTracks();
-      if (!systemAudio.length) throw new Error('Computer audio is not available.');
-      await prepare?.();
-      if (video) s.display.getVideoTracks().forEach((t) => { t.contentHint = 'detail'; });
-      else s.display.getVideoTracks().forEach((t) => t.stop());
-      systemAudio[0].addEventListener('ended', () =>
-        warn('Computer audio disconnected. The microphone keeps recording.'));
-
+      const app = deps.chosenApp?.() ?? null;
+      if (!app || video) {
+        s.display = await withinStartTime(() => deps.getDisplayMedia(DISPLAY_CONSTRAINTS),
+          'Computer audio did not start within 15 seconds. Try again, or restart the app.');
+      }
+      const systemAudio = s.display?.getAudioTracks() ?? [];
+      if (!app && !systemAudio.length) throw new Error('Computer audio is not available.');
       s.ctx = new deps.AudioContext();
       await s.ctx.resume();
+      if (app) {
+        s.app = await deps.openAppAudio(app, s.ctx, () => warn('The chosen app closed, so its sound is no longer recorded. The microphone keeps recording.'));
+        systemAudio.forEach((t) => t.stop());
+      }
+      await prepare?.();
+      if (video) s.display.getVideoTracks().forEach((t) => { t.contentHint = 'detail'; });
+      else s.display?.getVideoTracks().forEach((t) => t.stop());
+      if (!app) {
+        systemAudio[0].addEventListener('ended', () =>
+          warn('Computer audio disconnected. The microphone keeps recording.'));
+      }
+
       const mix = s.ctx.createMediaStreamDestination();
-      const system = s.ctx.createMediaStreamSource(new MediaStream(systemAudio));
+      const system = app ? s.app.node : s.ctx.createMediaStreamSource(new MediaStream(systemAudio));
       system.connect(mix);
       addTrack(s, 'system', system, store.appendSystemChunk);
       if (mic) {
@@ -167,6 +176,7 @@
 
     async function release(s) {
       for (const timer of s.timers) deps.clearInterval(timer);
+      s.app?.close();
       s.display?.getTracks().forEach((t) => t.stop());
       s.micStream?.getTracks().forEach((t) => t.stop());
       await s.ctx?.close().catch(() => {});

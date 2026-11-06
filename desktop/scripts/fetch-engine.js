@@ -1,6 +1,6 @@
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
@@ -8,6 +8,14 @@ const OUTPUT = process.argv[2] ?? join(__dirname, '..', 'engine');
 const SYSTEM_DIR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
 const WINDOWS_TAR = join(SYSTEM_DIR, 'tar.exe');
 const RUNTIME_FILES = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'vcomp140.dll'];
+const SOURCE = {
+  repo: 'https://github.com/ggml-org/whisper.cpp.git',
+  commit: 'd1be6fde11ac6e0407606b4e42fe72d34add8037',
+};
+const MAC_BUILD_FLAGS = [
+  '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=OFF', '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_EXAMPLES=ON',
+  '-DGGML_NATIVE=OFF', '-DGGML_METAL=ON', '-DGGML_METAL_EMBED_LIBRARY=ON', '-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0',
+];
 const ZIP = {
   url: 'https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip',
   sha256: '6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb',
@@ -46,6 +54,24 @@ async function fetchProgram() {
   }
 }
 
+function buildProgramForMac() {
+  const server = join(OUTPUT, 'whisper-server');
+  if (existsSync(server)) return;
+  const temp = mkdtempSync(join(tmpdir(), 'transcripables-engine-'));
+  const inSource = (command, ...args) => execFileSync(command, args, { cwd: temp, stdio: 'inherit' });
+  try {
+    inSource('git', 'init', '-q');
+    inSource('git', 'fetch', '-q', '--depth', '1', SOURCE.repo, SOURCE.commit);
+    inSource('git', 'checkout', '-q', 'FETCH_HEAD');
+    inSource('cmake', '-S', '.', '-B', 'build', ...MAC_BUILD_FLAGS);
+    inSource('cmake', '--build', 'build', '--target', 'whisper-server', '--parallel');
+    copyFileSync(join(temp, 'build', 'bin', 'whisper-server'), server);
+    chmodSync(server, 0o755);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+}
+
 async function fetchModel() {
   const path = join(OUTPUT, MODEL.file);
   if (existsSync(path) && digestOf(readFileSync(path)) === MODEL.sha256) return;
@@ -61,9 +87,13 @@ function copyRuntime() {
 
 async function main() {
   mkdirSync(OUTPUT, { recursive: true });
-  await fetchProgram();
+  if (process.platform === 'darwin') {
+    buildProgramForMac();
+  } else {
+    await fetchProgram();
+    copyRuntime();
+  }
   await fetchModel();
-  copyRuntime();
   console.log(`Speech engine ready in ${OUTPUT}`);
 }
 

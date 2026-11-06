@@ -7,7 +7,6 @@ cd "$ROOT"
 MODE=chrome
 case "${1:-}" in
   '') ;;
-  --release) MODE=release ;;
   --firefox) MODE=firefox ;;
   *) echo "pack: argumen tak dikenal: $1" >&2; exit 1 ;;
 esac
@@ -63,27 +62,4 @@ build_firefox() {
 case "$MODE" in
   chrome)  build_chrome ;;
   firefox) build_firefox ;;
-  release)
-    build_chrome
-    gh release create "v$VER" \
-      "$ROOT/dist/${NAME}-v${VER}.zip" \
-      --title "v$VER" \
-      --notes "Ekstensi Transcripables untuk tim.
-
-**Chrome / Edge / Brave / Opera (Load unpacked):**
-1. Download \`${NAME}-v${VER}.zip\` di bawah (Assets).
-2. Extract ke folder tetap.
-3. \`chrome://extensions\` (Edge: \`edge://extensions\`, dst) → Developer mode → Load unpacked → pilih folder itu.
-
-**Firefox:**
-Pasang dari halaman resmi (caption-only — tanpa rekam audio/STT):
-https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/
-
-Isi ZIP hanya file ekstensi (tanpa docs/test). Detail di README."
-    echo "pack: rilis v$VER dibuat"
-    ;;
 esac
-
-if [ "$MODE" != release ]; then
-  echo "pack: siap. Untuk publish: ./scripts/pack.sh --release"
-fi

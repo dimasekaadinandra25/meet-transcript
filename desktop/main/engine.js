@@ -5,7 +5,7 @@ const { availableParallelism } = require('node:os');
 const { join } = require('node:path');
 const { setTimeout: sleep } = require('node:timers/promises');
 
-const SERVER_FILE = 'whisper-server.exe';
+const serverFile = (platform) => (platform === 'win32' ? 'whisper-server.exe' : 'whisper-server');
 const MODEL_FILE = 'ggml-base-q5_1.bin';
 const HOST = '127.0.0.1';
 const API_PATH = '/v1/audio/transcriptions';
@@ -50,8 +50,8 @@ function guardEngine(enginePid) {
   }).on('error', (e) => console.error(e));
 }
 
-function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, wait = sleep, exists = existsSync, guard = guardEngine }) {
-  const server = join(dir, SERVER_FILE);
+function createEngine({ dir, platform = process.platform, run = spawn, request = fetch, findPort = freePort, wait = sleep, exists = existsSync, guard = guardEngine }) {
+  const server = join(dir, serverFile(platform));
   const standardModel = join(dir, MODEL_FILE);
   let model = standardModel;
   const threads = Math.max(1, Math.floor(availableParallelism() / 2));

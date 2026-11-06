@@ -363,3 +363,65 @@ test('puncak suara yang berjalan bisa dibaca', async () => {
   fake.fire(500);
   assert.ok(Math.abs(rec.currentPeaks().mic[0] - 0.3) < 1e-6);
 });
+
+const withApp = (over = {}) => {
+  const opened = [];
+  const closed = [];
+  const appNode = { connect(to) { fake.connections.push({ from: appNode, to }); } };
+  deps.chosenApp = () => 42;
+  deps.openAppAudio = async (pid, ctx, onEnded) => {
+    opened.push({ pid, ctx, onEnded });
+    return { node: appNode, close: () => closed.push(pid) };
+  };
+  Object.assign(deps, over);
+  return { opened, closed, appNode, rec: createRecorder(deps) };
+};
+
+test('recording one app does not ask for the whole computer sound', async () => {
+  let asked = 0;
+  const real = deps.getDisplayMedia;
+  deps.getDisplayMedia = (...args) => { asked++; return real(...args); };
+  const app = withApp();
+  await app.rec.start({ ...opts, mic: false });
+  assert.equal(asked, 0);
+  assert.equal(app.opened[0].pid, 42);
+  assert.ok(fake.connections.some((c) => c.from === app.appNode));
+});
+
+test('the helper stops when the recording stops', async () => {
+  const app = withApp();
+  await app.rec.start({ ...opts, mic: false });
+  await app.rec.stop();
+  assert.deepEqual(app.closed, [42]);
+});
+
+test('if the chosen app cannot be recorded, nothing starts', async () => {
+  const app = withApp({ openAppAudio: async () => { throw new Error('That app could not be recorded.'); } });
+  await assert.rejects(app.rec.start({ ...opts, mic: false }), /could not be recorded/);
+  assert.equal(fake.store.calls.appendSystemChunk.length, 0);
+});
+
+test('video of one app takes the picture from the screen but not its sound', async () => {
+  const app = withApp();
+  await app.rec.start({ ...opts, mic: false, video: true });
+  assert.equal(fake.systemTrack.stopped, true);
+  assert.equal(fake.videoTrack.stopped, false);
+  assert.ok(fake.connections.some((c) => c.from === app.appNode));
+});
+
+test('you are warned when the chosen app closes during a recording', async () => {
+  const app = withApp();
+  await app.rec.start({ ...opts, mic: false });
+  app.opened[0].onEnded();
+  assert.match(warnings.at(-1), /chosen app/);
+});
+
+test('with no app chosen, the whole computer sound is used as before', async () => {
+  let asked = 0;
+  const real = deps.getDisplayMedia;
+  deps.getDisplayMedia = (...args) => { asked++; return real(...args); };
+  const app = withApp({ chosenApp: () => null });
+  await app.rec.start({ ...opts, mic: false });
+  assert.equal(asked, 1);
+  assert.equal(app.opened.length, 0);
+});

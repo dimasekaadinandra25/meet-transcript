@@ -90,11 +90,14 @@ The desktop app records your computer's audio and your microphone, so it works w
 
 1. Run `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen warns about the unsigned installer. Choose **More info**, then **Run anyway**.
+
+**On a Mac:** download the `.dmg` for your chip (`arm64` for Apple Silicon, `x64` for Intel). Because it is unsigned, macOS blocks the first open: go to **System Settings > Privacy & Security** and choose **Open Anyway**. If macOS says the app is damaged, run `xattr -cr /Applications/Transcripables.app`. Allow the microphone and screen recording when asked. Nobody has recorded a real meeting on a Mac yet.
+
 3. Open **Settings** and fill in your LLM endpoint for MoM. Speech-to-text uses the built-in engine by default, so it needs no server or internet.
 
-To build the installer yourself: `npm --prefix desktop install`, then `npm --prefix desktop run dist`. It downloads the speech engine, checks its SHA-256, and saves the installer in `desktop/dist/`.
+To build the installer yourself: `npm --prefix desktop install`, then `npm --prefix desktop run dist`. It downloads the speech engine, checks its SHA-256, compiles the per-app sound helper with `g++`, and saves the installer in `desktop/dist/`. On a Mac, use `dist:mac`, which compiles the speech engine and needs `cmake` and Xcode command line tools.
 
-**Code signing:** the installer is unsigned because the project has no certificate. With a `.pfx` file, set `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` before `npm run dist`, and electron-builder signs it. A certificate kept on a hardware token or cloud service needs that provider's signing setup in the `win` build settings.
+**Code signing:** the installers are unsigned for now. See *Creating a release* below for how to add a certificate.
 
 ### Use
 
@@ -115,7 +118,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * The transcript fills in about every 2 minutes during the meeting, and finishes when you stop. Turn this off in Settings to send audio only after the meeting.
 * Each recording is also saved to `Documents/Transcripables`. Deleting a meeting in the app does not delete that copy. Turn this off in Settings.
 * Closing the window while recording or transcribing keeps working in the system tray. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
-* Everything on your computer's speakers gets recorded, including notifications and other apps.
+* By default, everything on your computer's speakers gets recorded, including notifications and other apps. On Windows, the sound menu next to **Record audio** records one app instead, such as Zoom. Apps appear there once they have played sound. This needs a recent Windows version, and macOS always records all computer sound.
 * Without a headset, other people's voices can leak into your microphone. Lines that repeat what the computer played within about 5 seconds are removed. Short replies and differently heard lines can still appear as **You**.
 * Ask meeting participants for permission before recording.
 
@@ -134,7 +137,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay. If a part fails to transcribe again, its old lines are kept.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine starts with a small model (`ggml-base-q5_1`). **Built-in engine accuracy** in Settings downloads a larger one (190 MB or 540 MB), checked against a fixed checksum, and it stays on your computer. The installer includes the Microsoft runtime files the engine needs.
-* Speaker letters come from your STT service, one recording part at a time. **Speaker A** in one 2-minute part may be a different person from **Speaker A** in the next. The `gpt-4o-transcribe-diarize` model is requested with `diarized_json`. Other services must return a `speaker` field in each segment.
+* Speaker letters come from your STT service. With a diarize model such as `gpt-4o-transcribe-diarize`, short voice clips from earlier parts are sent with later parts, so **Speaker A** stays the same person for up to 4 voices. Those clips go to the same service as the audio. OpenAI shuts that model down on February 26, 2027 and names no replacement with speaker labels. With other services, **Speaker A** in one part may be a different person in the next.
 
 ---
 
@@ -237,18 +240,22 @@ node --test test/*.test.mjs
 
 **Creating a release (maintainers only):**
 
-Requires `node` (the script reads the version from `manifest.json`) and a logged-in `gh` CLI.
+1. Set the same `"version"` in `manifest.json`, `manifest.firefox.json`, and `desktop/package.json`.
+2. Commit and push.
+3. Run `git tag vX.Y.Z`, then `git push origin vX.Y.Z`.
 
-1. Update `"version"` in `manifest.json` **and** `manifest.firefox.json` (the script refuses to run if they differ).
-2. Commit and `git push`.
-3. Run the release script:
+GitHub Actions then tests everything, transcribes a real speech sample with each engine model, builds the Windows installer and both macOS apps, opens each built app, and publishes them with the Chrome ZIP as a pre-release. Mark it as the latest release on GitHub when you have tried it. **Check for updates** in the app only sees full releases.
 
-```bash
-./scripts/pack.sh --release
-```
+**Code signing:** builds are unsigned until you add a certificate as GitHub repository secrets. Nothing else changes.
 
-*(The script builds the Chrome ZIP and publishes it to GitHub Releases; that ZIP is for Chrome/Chromium only. Firefox releases are separate and have no GitHub ZIP: run `./scripts/pack.sh --firefox` to build `dist/transcripables-firefox-vX.Y.Z.zip` (checked by `web-ext lint` first), then upload it as a new version in the [AMO Developer Hub](https://addons.mozilla.org/developers/). Firefox users get automatic updates from the [add-on page](https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/).)*
+| System | What you need | Secrets |
+| --- | --- | --- |
+| macOS | An Apple Developer account and a Developer ID certificate | `MAC_CSC_LINK` (the `.p12` file as base64), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` |
+| Windows | A code signing certificate as a `.pfx` file | `WIN_CSC_LINK` (base64), `WIN_CSC_KEY_PASSWORD` |
 
+Most new Windows certificates now live on a hardware token or a cloud service rather than a `.pfx` file, and those need an extra signing step in `.github/workflows/build.yml`.
+
+Firefox is separate: `./scripts/pack.sh --firefox` builds a ZIP to submit to Mozilla.
 ---
 
 ## 📄 License

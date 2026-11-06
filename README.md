@@ -88,6 +88,9 @@ Aplikasi desktop merekam audio komputer dan mikrofon, jadi berfungsi untuk aplik
 
 1. Jalankan `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen memperingatkan installer yang belum ditandatangani. Pilih **More info**, lalu **Run anyway**.
+
+**Di Mac:** unduh `.dmg` sesuai chip Anda (`arm64` untuk Apple Silicon, `x64` untuk Intel). Karena belum ditandatangani, macOS memblokir saat pertama dibuka: buka **System Settings > Privacy & Security** lalu pilih **Open Anyway**. Bila macOS bilang aplikasi rusak, jalankan `xattr -cr /Applications/Transcripables.app`. Izinkan mikrofon dan perekaman layar saat diminta. Belum ada yang merekam rapat sungguhan di Mac.
+
 3. Buka **Settings** dan isi endpoint LLM untuk MoM. Speech-to-text memakai mesin bawaan secara default, jadi tidak perlu server atau internet.
 
 Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --prefix desktop run dist`. Perintah ini mengunduh mesin suara, memeriksa SHA-256-nya, dan menyimpan installer di `desktop/dist/`.
@@ -112,7 +115,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * Transkrip terisi sekitar tiap 2 menit selama meeting, dan selesai saat Stop. Matikan di Settings agar audio hanya dikirim setelah meeting.
 * Setiap rekaman juga disimpan ke `Documents/Transcripables`. Menghapus meeting di aplikasi tidak menghapus salinan itu. Matikan di Settings.
 * Menutup jendela saat merekam atau mentranskrip membuat proses tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan statusnya. Peringatan, misalnya mikrofon terputus, memunculkan jendela lagi.
-* Semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain.
+* Secara bawaan, semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain. Di Windows, menu suara di samping **Record audio** merekam satu aplikasi saja, misalnya Zoom. Aplikasi muncul di sana setelah pernah memutar suara. Fitur ini perlu versi Windows yang baru, dan macOS selalu merekam semua suara komputer.
 * Tanpa headset, suara peserta bisa bocor ke mikrofon. Baris yang mengulang suara komputer dalam sekitar 5 detik dihapus. Jawaban pendek dan baris yang terdengar berbeda masih bisa muncul sebagai **You**.
 * Minta izin peserta meeting sebelum merekam.
 
@@ -131,7 +134,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * **Edit transcript** pada meeting yang sudah selesai memungkinkan Anda memperbaiki baris dan mengganti nama pembicara, misalnya **Others** menjadi nama asli, di seluruh meeting. **Retranscribe** mengganti hasil edit teks pada baris dari rekaman itu, dan bertanya dulu. Nama pembicara tetap. Bila satu bagian gagal ditranskrip lagi, baris lamanya dipertahankan.
 * **STT language** kosong secara default, jadi bahasa dideteksi otomatis untuk setiap bagian rekaman. Model Whisper pada mesin bawaan mencakup sekitar 100 bahasa. Bila peserta berganti bahasa dalam satu bagian, isi bahasa utama di Settings, misalnya `id` atau `en`. Layanan STT lain mendukung bahasa sesuai modelnya.
 * Mesin bawaan dimulai dengan model kecil (`ggml-base-q5_1`). **Built-in engine accuracy** di Settings mengunduh model lebih besar (190 MB atau 540 MB), diperiksa dengan checksum tetap, dan tetap di komputer Anda. Penginstal sudah memuat berkas runtime Microsoft yang dibutuhkan mesin.
-* Huruf pembicara berasal dari layanan STT Anda, per bagian rekaman. **Speaker A** di satu bagian 2 menit bisa jadi orang berbeda dari **Speaker A** di bagian berikutnya. Model `gpt-4o-transcribe-diarize` diminta dengan `diarized_json`. Layanan lain harus mengembalikan kolom `speaker` di setiap segmen.
+* Huruf pembicara berasal dari layanan STT Anda. Dengan model diarize seperti `gpt-4o-transcribe-diarize`, potongan suara pendek dari bagian sebelumnya dikirim bersama bagian berikutnya, jadi **Speaker A** tetap orang yang sama untuk sampai 4 suara. Potongan itu dikirim ke layanan yang sama dengan audionya. OpenAI menghentikan model itu pada 26 Februari 2027 dan belum menyebut pengganti yang memberi label pembicara. Dengan layanan lain, **Speaker A** di satu bagian bisa jadi orang berbeda di bagian berikutnya.
 
 ---
 
@@ -234,18 +237,22 @@ node --test test/*.test.mjs
 
 **Membuat Rilis (Khusus Maintainer):**
 
-Membutuhkan `node` (skrip membaca versi dari `manifest.json`) dan `gh` CLI yang sudah login.
+1. Samakan `"version"` di `manifest.json`, `manifest.firefox.json`, dan `desktop/package.json`.
+2. Commit dan push.
+3. Jalankan `git tag vX.Y.Z`, lalu `git push origin vX.Y.Z`.
 
-1. Perbarui `"version"` di `manifest.json` **dan** `manifest.firefox.json` (skrip menolak jalan bila beda).
-2. Lakukan *commit* dan `git push`.
-3. Jalankan skrip rilis:
+GitHub Actions lalu menguji semuanya, mentranskrip contoh ucapan asli dengan setiap model mesin, membuat penginstal Windows dan kedua aplikasi macOS, membuka setiap aplikasi hasil build, dan menerbitkannya bersama ZIP Chrome sebagai pre-release. Tandai sebagai rilis terbaru di GitHub setelah Anda mencobanya. **Check for updates** di aplikasi hanya melihat rilis penuh.
 
-```bash
-./scripts/pack.sh --release
-```
+**Penandatanganan kode:** build tidak ditandatangani sampai Anda menambahkan sertifikat sebagai secret repositori GitHub. Tidak ada hal lain yang berubah.
 
-*(Skrip membangun ZIP Chrome lalu memublikasikannya ke GitHub Releases — ZIP hanya untuk Chrome/Chromium. Rilis Firefox terpisah dan tanpa ZIP di GitHub: jalankan `./scripts/pack.sh --firefox` untuk membangun `dist/transcripables-firefox-vX.Y.Z.zip` (diperiksa `web-ext lint` dulu), lalu upload sebagai versi baru di [AMO Developer Hub](https://addons.mozilla.org/developers/) — pengguna Firefox mendapat update otomatis dari [halaman add-on](https://addons.mozilla.org/en-US/firefox/addon/meet-transcript/).)*
+| Sistem | Yang dibutuhkan | Secret |
+| --- | --- | --- |
+| macOS | Akun Apple Developer dan sertifikat Developer ID | `MAC_CSC_LINK` (berkas `.p12` dalam base64), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` |
+| Windows | Sertifikat penandatanganan kode berupa berkas `.pfx` | `WIN_CSC_LINK` (base64), `WIN_CSC_KEY_PASSWORD` |
 
+Kebanyakan sertifikat Windows baru kini disimpan di token perangkat keras atau layanan cloud, bukan berkas `.pfx`, dan itu perlu langkah penandatanganan tambahan di `.github/workflows/build.yml`.
+
+Firefox terpisah: `./scripts/pack.sh --firefox` membangun ZIP untuk dikirim ke Mozilla.
 ---
 
 ## 📄 Lisensi

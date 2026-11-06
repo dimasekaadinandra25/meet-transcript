@@ -2,7 +2,7 @@
   "name": "transcripables-desktop",
   "productName": "Transcripables",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Record computer audio and microphone from any meeting app, then make a transcript and MoM.",
   "license": "MIT",
   "main": "main/main.js",
@@ -11,9 +11,10 @@
     "test": "node --test test/",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "fetch-engine": "node scripts/fetch-engine.js",
-    "dist": "node scripts/fetch-engine.js && electron-builder --win --publish never",
+    "build-helper": "node scripts/build-helper.js",
+    "dist": "node scripts/fetch-engine.js && node scripts/build-helper.js && electron-builder --win --publish never",
     "dist:dir": "electron-builder --win dir --publish never",
-    "dist:mac": "electron-builder --mac --publish never"
+    "dist:mac": "node scripts/fetch-engine.js && electron-builder --mac --publish never"
   },
   "devDependencies": {
     "@types/node": "20.19.43",
@@ -54,6 +55,10 @@
         {
           "from": "engine",
           "to": "engine"
+        },
+        {
+          "from": "native/bin",
+          "to": "native/bin"
         }
       ],
       "target": "nsis",
@@ -64,7 +69,16 @@
       "target": "dmg",
       "icon": "assets/icon.png",
       "category": "public.app-category.productivity",
-      "artifactName": "Transcripables-${version}.${ext}",
+      "artifactName": "Transcripables-${version}-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "engine",
+          "to": "engine"
+        }
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Transcripables records your microphone when you start a recording.",
         "NSAudioCaptureUsageDescription": "Transcripables records computer audio when you start a recording.",

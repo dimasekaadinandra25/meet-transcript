@@ -4,3 +4,5 @@ dist/
 .claude/worktrees/
 desktop/node_modules/
 desktop/engine/
+
+desktop/native/bin/
