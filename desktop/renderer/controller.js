@@ -236,7 +236,7 @@
 
     async function autoMom(id) {
       const settings = await readSettings();
-      if (!settings.autoMom || !settings.apiKey) return;
+      if (!settings.autoMom || !merge.canMakeMom(settings)) return;
       const result = await generateMomOnce(id);
       if (!result.ok) broadcast({ error: `MoM could not be made automatically: ${result.error}` });
     }
@@ -300,7 +300,7 @@
 
     async function generateMom(id) {
       const settings = await readSettings();
-      if (!settings.apiKey) throw new Error('Add an API key in the Settings tab first.');
+      if (!merge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
       const meeting = await readMeeting(id);
       if (!meeting?.segments.length) throw new Error('The transcript is empty.');
       const prompt = merge.fillTemplate(merge.momTemplateOf(settings.momTemplate),

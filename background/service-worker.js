@@ -1,5 +1,5 @@
 if (typeof importScripts === 'function') {
-  importScripts('/content/session.js', '/lib/merge.js', '/lib/openai.js', '/lib/stt.js', '/lib/audiostore.js');
+  importScripts('/lib/i18n.js', '/content/session.js', '/lib/merge.js', '/lib/openai.js', '/lib/stt.js', '/lib/audiostore.js');
 }
 
 if (chrome.sidebarAction) {
@@ -157,6 +157,18 @@ async function startFromTab(tab, video) {
   }
 }
 
+if (!chrome.tabCapture) {
+  const useCaptionsOnly = async () => {
+    const { settings } = await chrome.storage.local.get('settings');
+    if (settings?.transcriptSource !== 'audio') return;
+    await chrome.storage.local.set({ settings: { ...settings, transcriptSource: 'caption' } });
+  };
+  useCaptionsOnly();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.settings) useCaptionsOnly();
+  });
+}
+
 if (chrome.tabCapture) {
   const RECORDABLE = ['https://meet.google.com/*', 'https://discord.com/channels/*'];
   const MENU = [
@@ -164,11 +176,23 @@ if (chrome.tabCapture) {
     ['rec-start-video', 'Record meeting audio + video'],
     ['rec-stop', 'Stop recording'],
   ];
+  const { t, follow } = globalThis.MeetI18n;
+  const languageReady = follow();
+  const titleMenus = () => {
+    for (const [id, title] of MENU) chrome.contextMenus.update(id, { title: t(title) })?.catch(() => {});
+  };
+  languageReady.then(() => {
+    titleMenus();
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.settings) titleMenus();
+    });
+  });
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
       for (const [id, title] of MENU) {
         chrome.contextMenus.create({ id, title, contexts: ['page'], documentUrlPatterns: RECORDABLE });
       }
+      languageReady.then(titleMenus);
     });
   });
   const runCommand = (id, tab) => {
@@ -373,7 +397,7 @@ async function saveSegments({ meetingId, title, segs }) {
 async function autoMom(id) {
   const key = meetingKey(id);
   const { settings = {}, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
-  if (!settings.autoMom || !settings.apiKey || !meeting?.segments.length) return;
+  if (!settings.autoMom || !globalThis.MeetMerge.canMakeMom(settings) || !meeting?.segments.length) return;
   try {
     await generateMomOnce(id);
     notifyPanel({ type: 'meeting-updated', id });
@@ -389,17 +413,18 @@ async function endMeeting(meetingId) {
     notifyPanel({ type: 'status', ...active });
   }
   const key = meetingKey(meetingId);
-  const data = await chrome.storage.local.get(key);
+  const { settings = {}, ...data } = await chrome.storage.local.get([key, 'settings']);
   if (!data[key]) return;
   data[key].endedAt = Date.now();
   await chrome.storage.local.set({ [key]: data[key] });
   notifyPanel({ type: 'meeting-updated', id: meetingId });
-  if (data[key].source !== 'audio') autoMom(meetingId).catch((e) => console.error(e));
+  const transcriptComing = data[key].source === 'audio' && autoTranscribe(meetingId, settings.transcriptSource);
+  if (!transcriptComing) autoMom(meetingId).catch((e) => console.error(e));
 }
 
 async function generateMom(id) {
   const { settings = {} } = await chrome.storage.local.get('settings');
-  if (!settings.apiKey) throw new Error('Add an API key in the Settings tab first.');
+  if (!globalThis.MeetMerge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
   const key = meetingKey(id);
   const data = await chrome.storage.local.get(key);
   const meeting = data[key];
@@ -611,7 +636,7 @@ const HANDLERS = {
       : 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.' });
     enqueueWrite(async () => {
       const id = await saveAudioTranscript(msg);
-      if (msg.segments.length && !msg.error) autoMom(id).catch((e) => console.error(e));
+      if (!msg.error) autoMom(id).catch((e) => console.error(e));
     });
     closeOffscreen();
   },

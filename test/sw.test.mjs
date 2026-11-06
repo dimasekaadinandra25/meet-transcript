@@ -6,8 +6,9 @@ import vm from 'node:vm';
 const SRC = readFileSync(new URL('../background/service-worker.js', import.meta.url), 'utf8');
 const SESSION = readFileSync(new URL('../content/session.js', import.meta.url), 'utf8');
 const MERGE = readFileSync(new URL('../lib/merge.js', import.meta.url), 'utf8');
+const I18N = readFileSync(new URL('../lib/i18n.js', import.meta.url), 'utf8');
 
-function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {}, generateMoM = async () => 'MOM OTOMATIS' }) {
+function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {}, generateMoM = async () => 'MOM OTOMATIS', withMenus = false }) {
   const sent = [];
   const scripts = [];
   const tabUpdated = [];
@@ -21,7 +22,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
     runtime: {
       onMessage: { addListener: (f) => handlers.push(f) },
       onConnect: { addListener: (f) => connects.push(f) },
-      onInstalled: { addListener() {} },
+      onInstalled: { addListener: (f) => installed.push(f) },
       getContexts: async () => (offscreen ? [{ contextType: 'OFFSCREEN_DOCUMENT' }] : []),
       async sendMessage(msg) {
         sent.push(msg);
@@ -41,7 +42,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
       },
       set: async (o) => { Object.assign(store, structuredClone(o)); },
       remove: async (k) => { for (const x of [].concat(k)) delete store[x]; },
-    } },
+    }, onChanged: { addListener: (f) => changed.push(f) } },
     offscreen: { closeDocument: async () => {} },
     tabs: {
       create: async () => ({ id: 7 }),
@@ -52,6 +53,18 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   };
   const handlers = [];
   const connects = [];
+  const installed = [];
+  const changed = [];
+  const menus = {};
+  if (withMenus) {
+    chrome.tabCapture = {};
+    chrome.contextMenus = {
+      removeAll: (done) => done(),
+      create: ({ id, title }) => { menus[id] = title; },
+      update: async (id, { title }) => { menus[id] = title; },
+      onClicked: { addListener() {} },
+    };
+  }
   const unrefTimeout = (f, ms) => {
     const timer = setTimeout(f, ms);
     timer.unref();
@@ -70,6 +83,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   ctx.MeetOpenAI.generateMoM = generateMoM;
   vm.runInContext(SESSION, ctx);
   vm.runInContext(MERGE, ctx);
+  vm.runInContext(I18N, ctx);
   vm.runInContext(SRC, ctx);
   const ask = (msg) => new Promise((resolve) => {
     for (const f of handlers) if (f(msg, {}, resolve) === true) return;
@@ -83,7 +97,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
     return { send: (m) => port.msgFns.forEach((f) => f(m)), disconnect: () => port.discFns.forEach((f) => f()) };
   };
   return { ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, meetingIdFromUrl: ctx.meetingIdFromUrl,
-    autoTranscribe: ctx.autoTranscribe };
+    autoTranscribe: ctx.autoTranscribe, menus, install: () => installed.forEach((f) => f()), settingsChanged: (settings) => changed.forEach((f) => f({ settings: { newValue: settings } }, 'local')) };
 }
 
 const idOf = loadSw({ offscreen: null }).meetingIdFromUrl;
@@ -508,4 +522,64 @@ test('MoM otomatis gagal: pengguna diberi tahu', async () => {
   await sw.ask({ type: 'audio-transcript', meetingId: 'a', baseTime: 500, segments: [{ t: 90000, speaker: '', text: 'isi baru' }] });
   await wait();
   assert.ok(sw.sent.some((m) => m.type === 'rec-state' && /LLM down/.test(m.error ?? '')));
+});
+
+test('the right-click menu follows the language setting', async () => {
+  const store = { settings: { uiLang: 'id' } };
+  const sw = loadSw({ offscreen: null, store, withMenus: true });
+  sw.install();
+  await wait();
+  assert.equal(sw.menus['rec-start'], 'Rekam audio rapat');
+  assert.equal(sw.menus['rec-stop'], 'Hentikan rekaman');
+  sw.settingsChanged({ uiLang: 'en' });
+  await wait();
+  assert.equal(sw.menus['rec-start'], 'Record meeting audio');
+});
+
+const recordedMeeting = (source) => ({
+  settings: { apiKey: 'k', autoMom: true, transcriptSource: source },
+  meetings: ['abc-defg-hij'],
+  'meeting:abc-defg-hij': { id: 'abc-defg-hij', title: 'A', startedAt: 0, source: 'audio', segments: [{ id: 'cap-1', speaker: 'Ani', text: 'halo semua', t: 1 }], mom: null },
+});
+
+const endCall = async (sw) => {
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'abc-defg-hij', inCall: true, captionsOn: true });
+  port.disconnect();
+  await wait();
+};
+
+test('automatic MoM runs from captions when a recording was only archived', async () => {
+  const sw = loadSw({ offscreen: null, store: recordedMeeting('caption') });
+  await endCall(sw);
+  assert.equal(sw.store['meeting:abc-defg-hij'].mom, 'MOM OTOMATIS');
+});
+
+test('automatic MoM waits for the transcript when one is coming', async () => {
+  const sw = loadSw({ offscreen: null, store: recordedMeeting('both') });
+  await endCall(sw);
+  assert.equal(sw.store['meeting:abc-defg-hij'].mom, null);
+});
+
+test('automatic MoM uses captions when the audio transcript comes back empty', async () => {
+  const sw = loadSw({ offscreen: null, store: recordedMeeting('both') });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'abc-defg-hij', baseTime: 500, segments: [] });
+  await wait();
+  assert.equal(sw.store['meeting:abc-defg-hij'].mom, 'MOM OTOMATIS');
+});
+
+test('a browser without tab capture cannot stay in audio mode', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'audio', model: 'm' } } });
+  await wait();
+  assert.deepEqual(sw.store.settings, { transcriptSource: 'caption', model: 'm' });
+  sw.store.settings = { transcriptSource: 'audio' };
+  sw.settingsChanged(sw.store.settings);
+  await wait();
+  assert.equal(sw.store.settings.transcriptSource, 'caption');
+});
+
+test('Chrome keeps audio mode', async () => {
+  const sw = loadSw({ offscreen: null, withMenus: true, store: { settings: { transcriptSource: 'audio' } } });
+  await wait();
+  assert.equal(sw.store.settings.transcriptSource, 'audio');
 });

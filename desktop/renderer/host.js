@@ -54,6 +54,7 @@
 
   const send = (msg) => shim.runtime.sendMessage(msg);
   let chosenSource = '';
+  let chosenName = '';
   let consentShown = true;
 
   async function redrawLive() {
@@ -82,7 +83,8 @@
   function sourcePicker() {
     const select = el('select');
     select.setAttribute('aria-label', 'Screen or window for video');
-    select.append(Object.assign(document.createElement('option'), { value: chosenSource, textContent: 'Main screen' }));
+    const current = Object.assign(document.createElement('option'), { value: chosenSource, textContent: chosenName || 'Main screen' });
+    select.append(chosenName ? raw(current) : current);
     select.addEventListener('focus', async () => {
       const sources = await desktop.capture.sources();
       select.replaceChildren(...sources.map(({ id, name }) =>
@@ -91,6 +93,7 @@
     }, { once: true });
     select.addEventListener('change', () => {
       chosenSource = select.value;
+      chosenName = select.selectedOptions[0].textContent;
       desktop.capture.use(chosenSource);
     });
     return select;

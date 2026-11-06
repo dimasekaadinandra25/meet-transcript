@@ -575,7 +575,7 @@ async function renderSettings(epoch) {
   const setNote = (cls, text) => { note.className = cls; note.textContent = ' ' + text; };
   const normalizedBase = () => (baseUrl.value.trim() || DEFAULT_BASE).replace(/\/+$/, '');
   const sttBaseValue = () => sttBaseUrl.value.trim().replace(/\/+$/, '');
-  const sttBaseForSave = () => (HAS_AUDIO && source.value !== 'caption' ? sttBaseValue() : '');
+  const sttBaseForSave = () => (HAS_AUDIO && source.value !== 'caption' && sttModeSel.value !== 'builtin' ? sttBaseValue() : '');
   const sttBaseForTest = sttBaseForSave;
   async function probeStt(base, key) {
     const host = new URL(base).hostname;

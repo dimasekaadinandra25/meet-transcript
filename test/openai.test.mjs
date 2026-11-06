@@ -112,3 +112,34 @@ test('the uploaded file keeps the name it is given', async () => {
     globalThis.fetch = realFetch;
   }
 });
+
+test('no key means no Authorization header', async () => {
+  const realFetch = globalThis.fetch;
+  const headers = [];
+  globalThis.fetch = async (_url, init) => {
+    headers.push(init.headers);
+    return new Response('{"choices":[{"message":{"content":"ok"}}]}', { status: 200 });
+  };
+  try {
+    await generateMoM({ apiKey: '', model: 'm', prompt: 'p', baseUrl: 'http://localhost:11434/v1' });
+    await generateMoM({ apiKey: 'k', model: 'm', prompt: 'p', baseUrl: 'https://x.test/v1' });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(headers[0].Authorization, undefined);
+  assert.equal(headers[1].Authorization, 'Bearer k');
+});
+
+test('streamed replies with Windows line endings are read', () => {
+  const raw = 'data: {"choices":[{"delta":{"content":"hel"}}]}\r\n\r\ndata: {"choices":[{"delta":{"content":"lo"}}]}\r\n\r\ndata: [DONE]\r\n';
+  assert.equal(extractContent(raw), 'hello');
+});
+
+test('a reply made of text parts becomes plain text', () => {
+  const raw = JSON.stringify({ choices: [{ message: { content: [{ type: 'text', text: 'hel' }, { type: 'text', text: 'lo' }] } }] });
+  assert.equal(extractContent(raw), 'hello');
+});
+
+test('a reply with no usable text counts as empty', () => {
+  assert.equal(extractContent(JSON.stringify({ choices: [{ message: { content: { odd: true } } }] })), '');
+});

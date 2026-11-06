@@ -30,6 +30,7 @@ const { importBackup } = globalThis.MeetBackup;
 function stubEnv() {
   const calls = { cleared: 0, set: null, imported: null };
   globalThis.chrome = { storage: { local: {
+    get: async () => ({}),
     clear: async () => { calls.cleared++; },
     set: async (v) => { calls.set = v; },
   } } };
@@ -133,4 +134,22 @@ test('import ZIP lama ber-audio mendarat di key chunk:<recId>:<i>', async () => 
   assert.deepEqual(calls.imported.chunks.map((c) => c.key),
     ['chunk:1700:0', 'chunk:1700:2', 'vchunk:1700:0']);
   assert.equal(calls.imported.meta.baseTime, 1700);
+});
+
+test('a failed import puts the old data back', async () => {
+  const before = { meetings: ['old'], 'meeting:old': { id: 'old' }, settings: { model: 'm' } };
+  let store = structuredClone(before);
+  let writes = 0;
+  globalThis.chrome = { storage: { local: {
+    get: async () => structuredClone(store),
+    clear: async () => { store = {}; },
+    set: async (values) => {
+      writes++;
+      if (writes === 1) throw new Error('API key encryption is not available on this computer.');
+      store = { ...store, ...structuredClone(values) };
+    },
+  } } };
+  const zip = await makeZip([{ name: 'backup.json', data: JSON.stringify({ version: 1, storage: { settings: { apiKey: 'k' } } }) }]);
+  await assert.rejects(importBackup(zip), /encryption/);
+  assert.deepEqual(store, before);
 });

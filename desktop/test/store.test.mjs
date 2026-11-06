@@ -104,3 +104,24 @@ test('onChange memuat nilai baru dan lama dengan key polos', async () => {
   assert.deepEqual(seen[0], { settings: { newValue: { apiKey: 'sk' }, oldValue: undefined } });
   assert.deepEqual(seen[1], { settings: { newValue: { apiKey: 'baru' }, oldValue: { apiKey: 'sk' } } });
 });
+
+test('a key that cannot be read for now survives other settings being saved', async () => {
+  const good = createStore({ dir, cipher });
+  await good.set({ settings: { apiKey: 'rahasia', model: 'a' } });
+  const locked = createStore({ dir, cipher: { ...cipher, decrypt: () => { throw new Error('locked'); } } });
+  const { settings } = await locked.get('settings');
+  assert.equal(settings.apiKey, '');
+  await locked.set({ settings: { ...settings, model: 'b' } });
+  const { settings: after } = await createStore({ dir, cipher }).get('settings');
+  assert.equal(after.apiKey, 'rahasia');
+  assert.equal(after.model, 'b');
+});
+
+test('a new key replaces one that could not be read', async () => {
+  const good = createStore({ dir, cipher });
+  await good.set({ settings: { apiKey: 'lama' } });
+  const locked = createStore({ dir, cipher: { ...cipher, decrypt: () => { throw new Error('locked'); } } });
+  await locked.get('settings');
+  await locked.set({ settings: { apiKey: 'baru' } });
+  assert.equal((await createStore({ dir, cipher }).get('settings')).settings.apiKey, 'baru');
+});

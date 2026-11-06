@@ -12,6 +12,7 @@ function createStore({ dir, cipher, onChange = (_changes) => {} }) {
   mkdirSync(dir, { recursive: true });
   let chain = Promise.resolve();
   let tempId = 0;
+  const unreadable = {};
 
   const enqueue = (work) => {
     const run = chain.then(work);
@@ -24,7 +25,11 @@ function createStore({ dir, cipher, onChange = (_changes) => {} }) {
     const sealed = { ...value };
     const secrets = {};
     for (const field of SECRET_FIELDS) {
-      if (!sealed[field]) continue;
+      if (!sealed[field]) {
+        if (unreadable[field]) secrets[field] = unreadable[field];
+        continue;
+      }
+      delete unreadable[field];
       if (!cipher.available()) throw new Error('API key encryption is not available on this computer.');
       secrets[field] = cipher.encrypt(sealed[field]);
       delete sealed[field];
@@ -38,8 +43,10 @@ function createStore({ dir, cipher, onChange = (_changes) => {} }) {
     for (const [field, data] of Object.entries(secrets)) {
       try {
         open[field] = cipher.decrypt(data);
+        delete unreadable[field];
       } catch {
         open[field] = '';
+        unreadable[field] = data;
       }
     }
     return open;

@@ -61,3 +61,8 @@ test('a template with a value keeps that value untranslated', () => {
   assert.equal(t(key), key);
   assert.equal(inIndonesian(() => t(key)), 'Hapus "{}" beserta rekamannya? Ini tidak bisa dibatalkan.');
 });
+
+test('messages built by the desktop app are translated', () => {
+  const texts = ['no answer within 15 seconds', 'exit code 5', 'API key encryption is not available on this computer.'];
+  for (const text of texts) assert.notEqual(inIndonesian(() => t(text)), text);
+});

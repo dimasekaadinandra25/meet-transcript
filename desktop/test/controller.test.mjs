@@ -261,7 +261,7 @@ test('MoM tersimpan dan klik ganda hanya memanggil sekali', async () => {
 
 test('MoM ditolak tanpa API key', async () => {
   await runRecording();
-  data.settings.apiKey = '';
+  data.settings = { ...data.settings, apiKey: '', baseUrl: 'https://api.openai.com/v1' };
   const res = await ctl.handle({ type: 'generate-mom', id });
   assert.equal(res.ok, false);
   assert.match(res.error, /API key/);

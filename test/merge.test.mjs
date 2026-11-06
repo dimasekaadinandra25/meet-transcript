@@ -294,3 +294,12 @@ test('recorded audio becomes the transcript when captions gave nothing', () => {
   const audio = [{ speaker: '', text: 'halo semua', t: 1000 }];
   assert.deepEqual(replaceAudioSegments([], audio, { baseTime: 1 }).map((s) => s.text), ['halo semua']);
 });
+
+test('MoM needs a key only for the default OpenAI address', () => {
+  const { canMakeMom } = globalThis.MeetMerge;
+  assert.equal(canMakeMom({}), false);
+  assert.equal(canMakeMom({ baseUrl: 'https://api.openai.com/v1' }), false);
+  assert.equal(canMakeMom({ apiKey: 'k' }), true);
+  assert.equal(canMakeMom({ apiKey: 'k', baseUrl: 'https://api.openai.com/v1' }), true);
+  assert.equal(canMakeMom({ baseUrl: 'http://localhost:11434/v1' }), true);
+});
