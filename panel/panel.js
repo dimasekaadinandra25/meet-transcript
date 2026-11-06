@@ -143,6 +143,8 @@ async function downloadMix(meeting, rec, suffix) {
 }
 let renderEpoch = 0;
 let lastRenderedKey = null;
+let editingId = null;
+const EDIT_LINE_CHARS = 40;
 let audioMeta = null;
 let audioMetaKey = null;
 const momErrors = new Map();
@@ -171,12 +173,12 @@ addEventListener('pointerup', endClickHold);
 addEventListener('pointercancel', endClickHold);
 
 view.addEventListener('focusout', (e) => {
-  if (e.target.matches?.('[data-title-editor]')) flushRender();
+  if (e.target.matches?.('[data-title-editor],[data-edit-key]')) flushRender();
 });
 
 async function render() {
   const editing = document.activeElement;
-  const typingTitle = editing?.matches?.('[data-title-editor]') && editing.value !== editing.defaultValue;
+  const typingTitle = editing?.matches?.('[data-title-editor],[data-edit-key]') && editing.value !== editing.defaultValue;
   if (clickHold || typingTitle) {
     renderWaiting = true;
     return;
@@ -203,7 +205,8 @@ async function renderMeeting(id, live, epoch) {
   audioMetaKey = metaKey;
   const sameView = viewKey === lastRenderedKey;
   lastRenderedKey = viewKey;
-  const stickToBottom = live && (!sameView || view.scrollHeight - view.scrollTop - view.clientHeight < 40);
+  const focusKey = document.activeElement?.dataset?.editKey;
+  const stickToBottom = live && editingId !== id && (!sameView || view.scrollHeight - view.scrollTop - view.clientHeight < 40);
   const prevTop = sameView ? view.scrollTop : 0;
   view.replaceChildren();
   if (live && HAS_AUDIO) {
@@ -346,6 +349,12 @@ async function renderMeeting(id, live, epoch) {
     const label = (r) => (transcribed(r) ? 'Retranscribe' : 'Generate transcript');
     if (reable.length) {
       const jalankan = async (r, setLabel) => {
+        const tag = `audio:${r.baseTime}:`;
+        const editedHere = meeting.segments.some((s) => s.edited && String(s.id ?? '').startsWith(tag));
+        if (editedHere && !confirm(t('Retranscribing replaces your edits to the lines from this recording. Continue?'))) {
+          render();
+          return;
+        }
         setLabel('Transcribing…');
         momErrors.delete(meeting.id);
         try {
@@ -376,6 +385,15 @@ async function renderMeeting(id, live, epoch) {
       }
     }
   }
+  const running = recState.recording || recState.transcribing || (status.inCall && status.id === meeting.id);
+  if (running && editingId === meeting.id) editingId = null;
+  const editing = editingId === meeting.id;
+  if (meeting.segments.length && !running) {
+    btn(editing ? 'Done editing' : 'Edit transcript', () => {
+      editingId = editing ? null : meeting.id;
+      render();
+    });
+  }
   if (!live) {
     const remove = btn('Delete', async () => {
       const question = t('Delete "{}" and its recordings? This cannot be undone.').replace('{}', () => meeting.title);
@@ -389,21 +407,60 @@ async function renderMeeting(id, live, epoch) {
     remove.classList.add('danger');
   }
   view.append(actions);
-  const list = raw(el('div'));
-  for (const s of meeting.segments) {
-    const seg = el('div', 'seg');
-    const head = el('div');
-    head.append(el('span', 'who', s.speaker), el('span', 'time', new Date(s.t).toLocaleTimeString()));
-    seg.append(head, el('div', null, s.text));
-    list.append(seg);
+  if (editing) {
+    view.append(el('p', 'muted', 'Changes save when you leave a field. A new speaker name applies to every line with the old name. Empty a line to delete it.'));
+    if (meeting.mom) view.append(el('p', 'muted', 'The existing MoM changes only when you regenerate it.'));
   }
+  const list = raw(el('div'));
+  for (const s of meeting.segments) list.append(editing ? segmentEditor(meeting, s) : segmentLine(s));
   if (!meeting.segments.length) view.append(el('p', 'muted', Host?.emptySegmentsText ?? 'No captions yet.'));
   view.append(list);
   if (meeting.mom) {
     view.append(el('h3', null, 'MoM'));
     view.append(raw(el('div', 'mom', meeting.mom)));
   }
+  if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
+}
+
+function segmentLine(s) {
+  const seg = el('div', 'seg');
+  const head = el('div');
+  head.append(el('span', 'who', s.speaker), el('span', 'time', new Date(s.t).toLocaleTimeString()));
+  seg.append(head, el('div', null, s.text));
+  return seg;
+}
+
+function segmentEditor(meeting, s) {
+  const save = async (change) => {
+    const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change }).catch(() => null);
+    if (res?.ok) return;
+    momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
+    render();
+  };
+  const who = mkEl('input', { value: s.speaker ?? '', placeholder: t('Speaker name') });
+  who.defaultValue = who.value;
+  who.dataset.editKey = `who:${s.id}`;
+  who.setAttribute('aria-label', t('Speaker name'));
+  who.addEventListener('change', () => {
+    who.defaultValue = who.value;
+    save({ from: s.speaker ?? '', to: who.value });
+  });
+  const text = mkEl('textarea', { value: s.text, rows: Math.max(1, Math.ceil(s.text.length / EDIT_LINE_CHARS)), disabled: !s.id });
+  text.defaultValue = s.text;
+  text.dataset.editKey = `text:${s.id}`;
+  text.setAttribute('aria-label', t('Transcript line'));
+  text.addEventListener('change', () => {
+    if (!text.value.trim() && !confirm(t('Delete this line?'))) {
+      text.value = text.defaultValue;
+      return;
+    }
+    text.defaultValue = text.value;
+    save({ segmentId: s.id, text: text.value });
+  });
+  const seg = el('div', 'seg');
+  seg.append(who, el('span', 'time', new Date(s.t).toLocaleTimeString()), text);
+  return seg;
 }
 
 let historyQuery = '';

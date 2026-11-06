@@ -10,8 +10,9 @@
     generateMoM: async (args) => unwrap(await net.chat(args)),
     testConnection: async (args) => unwrap(await net.test(args)),
     transcribeAudio: async ({ blob, ...args }) => {
-      if (args.baseUrl !== globalThis.MeetStt.BUILTIN_URL) return unwrap(await net.stt({ ...args, bytes: await blob.arrayBuffer() }));
-      const wav = await globalThis.MeetWav.speechWav(blob);
+      const isWav = blob.type === 'audio/wav';
+      if (args.baseUrl !== globalThis.MeetStt.BUILTIN_URL && !isWav) return unwrap(await net.stt({ ...args, bytes: await blob.arrayBuffer() }));
+      const wav = isWav ? blob : await globalThis.MeetWav.speechWav(blob);
       return unwrap(await net.stt({ ...args, fileName: 'audio.wav', bytes: await wav.arrayBuffer() }));
     },
   });

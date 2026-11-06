@@ -35,3 +35,15 @@ test('mono averages every channel', () => {
   const audio = { numberOfChannels: 2, length: 2, getChannelData: (i) => (i === 0 ? Float32Array.of(1, 0) : Float32Array.of(0, 0.5)) };
   assert.deepEqual([...mono(audio)], [0.5, 0.25]);
 });
+
+test('splitSamples cuts long audio into equal parts', () => {
+  const { splitSamples } = globalThis.MeetWav;
+  const parts = splitSamples(new Float32Array(25), 2, 5);
+  assert.deepEqual(parts.map((p) => p.length), [10, 10, 5]);
+});
+
+test('splitSamples drops a last part shorter than a second', () => {
+  const { splitSamples } = globalThis.MeetWav;
+  assert.deepEqual(splitSamples(new Float32Array(21), 2, 5).map((p) => p.length), [10, 10]);
+  assert.deepEqual(splitSamples(new Float32Array(1), 2, 5), []);
+});

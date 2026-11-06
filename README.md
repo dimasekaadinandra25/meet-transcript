@@ -104,6 +104,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Bisukan atau nyalakan mikrofon | **Mute microphone** | `Alt+Shift+M` |
 
 * **Language** di Settings mengganti bahasa aplikasi antara English dan Bahasa Indonesia. Transkrip, MoM, dan judul tidak pernah diterjemahkan, dan huruf shortcut `Alt` sama di kedua bahasa.
+* **Import audio file** mengubah berkas audio atau video yang sudah ada menjadi meeting dengan transkrip. Berkas tetap di tempatnya dan tidak disalin ke aplikasi, jadi **Retranscribe** tidak tersedia untuknya. Impor ulang sebagai gantinya.
 * Klik kanan ikon tray untuk merekam, berhenti, membisukan, atau membuka folder rekaman tanpa membuka jendela.
 * **Check for updates** di Settings mencari rilis GitHub baru dan membuka halaman unduhnya. Tidak memasang apa pun sendiri.
 * Setiap tombol juga punya shortcut `Alt` yang berfungsi saat jendela aktif. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol.
@@ -121,6 +122,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.
 * Server LLM lokal seperti Ollama dan LM Studio tidak memerlukan API key. Key hanya wajib untuk alamat default OpenAI.
+* **Edit transcript** pada meeting yang sudah selesai memungkinkan Anda memperbaiki baris dan mengganti nama pembicara, misalnya **Others** menjadi nama asli, di seluruh meeting. **Retranscribe** mengganti hasil edit pada baris dari rekaman itu, dan bertanya dulu.
 * **STT language** kosong secara default, jadi bahasa dideteksi otomatis untuk setiap bagian rekaman. Model Whisper pada mesin bawaan mencakup sekitar 100 bahasa. Bila peserta berganti bahasa dalam satu bagian, isi bahasa utama di Settings, misalnya `id` atau `en`. Layanan STT lain mendukung bahasa sesuai modelnya.
 * Mesin bawaan memakai model kecil (`ggml-base-q5_1`), jadi model lebih besar di server Anda sendiri lebih akurat. Mesin ini memerlukan Microsoft Visual C++ Redistributable, dan aplikasi memberi tahu bila mesin tidak bisa dimulai.
 * Huruf pembicara berasal dari layanan STT Anda, per bagian rekaman. **Speaker A** di satu bagian 2 menit bisa jadi orang berbeda dari **Speaker A** di bagian berikutnya. Model `gpt-4o-transcribe-diarize` diminta dengan `diarized_json`. Layanan lain harus mengembalikan kolom `speaker` di setiap segmen.

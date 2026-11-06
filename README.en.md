@@ -106,6 +106,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Mute or unmute your microphone | **Mute microphone** | `Alt+Shift+M` |
 
 * **Language** in Settings switches the app between English and Bahasa Indonesia. Transcripts, MoM, and titles are never translated, and `Alt` shortcut letters stay the same in both languages.
+* **Import audio file** turns an existing audio or video file into a meeting with a transcript. The file stays where it is and is not copied into the app, so **Retranscribe** is not offered for it. Import it again instead.
 * Right-click the tray icon to record, stop, mute, or open the recordings folder without opening the window.
 * **Check for updates** in Settings looks for a new GitHub release and opens its download page. It does not install anything by itself.
 * Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
@@ -123,6 +124,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * API keys are encrypted on your computer, but **Export backup** stores them in plain text.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
+* **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces edits to lines from that recording, and asks first.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine uses a small model (`ggml-base-q5_1`), so a larger model on your own server is more accurate. It needs the Microsoft Visual C++ Redistributable, and the app says so if the engine cannot start.
 * Speaker letters come from your STT service, one recording part at a time. **Speaker A** in one 2-minute part may be a different person from **Speaker A** in the next. The `gpt-4o-transcribe-diarize` model is requested with `diarized_json`. Other services must return a `speaker` field in each segment.

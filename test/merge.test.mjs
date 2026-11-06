@@ -303,3 +303,45 @@ test('MoM needs a key only for the default OpenAI address', () => {
   assert.equal(canMakeMom({ apiKey: 'k', baseUrl: 'https://api.openai.com/v1' }), true);
   assert.equal(canMakeMom({ baseUrl: 'http://localhost:11434/v1' }), true);
 });
+
+const lines = () => [
+  { id: 'a', speaker: 'Others', text: 'halo', t: 1 },
+  { id: 'b', speaker: 'You', text: 'hai', t: 2 },
+  { id: 'c', speaker: 'Others', text: 'mulai', t: 3 },
+];
+
+test('renaming a speaker changes every line with that name', () => {
+  const { applyTranscriptEdit } = globalThis.MeetMerge;
+  const out = applyTranscriptEdit(lines(), { from: 'Others', to: ' Budi ' });
+  assert.deepEqual(out.map((s) => s.speaker), ['Budi', 'You', 'Budi']);
+  assert.deepEqual(out.map((s) => !!s.edited), [true, false, true]);
+});
+
+test('a line can be given no speaker name', () => {
+  const { applyTranscriptEdit } = globalThis.MeetMerge;
+  assert.equal(applyTranscriptEdit(lines(), { from: 'You', to: '  ' })[1].speaker, '');
+});
+
+test('editing a line changes only that line', () => {
+  const { applyTranscriptEdit } = globalThis.MeetMerge;
+  const out = applyTranscriptEdit(lines(), { segmentId: 'b', text: ' hai semua ' });
+  assert.deepEqual(out.map((s) => s.text), ['halo', 'hai semua', 'mulai']);
+  assert.deepEqual(out.map((s) => !!s.edited), [false, true, false]);
+});
+
+test('emptying a line removes it', () => {
+  const { applyTranscriptEdit } = globalThis.MeetMerge;
+  assert.deepEqual(applyTranscriptEdit(lines(), { segmentId: 'b', text: '  ' }).map((s) => s.id), ['a', 'c']);
+});
+
+test('an unchanged line is not marked as edited', () => {
+  const { applyTranscriptEdit } = globalThis.MeetMerge;
+  const out = applyTranscriptEdit(lines(), { segmentId: 'a', text: 'halo' });
+  assert.equal(out[0].edited, undefined);
+  assert.equal(applyTranscriptEdit(lines(), { from: 'You', to: 'You' })[1].edited, undefined);
+});
+
+test('an unknown line changes nothing', () => {
+  const { applyTranscriptEdit } = globalThis.MeetMerge;
+  assert.deepEqual(applyTranscriptEdit(lines(), { segmentId: 'zzz', text: 'x' }), lines());
+});

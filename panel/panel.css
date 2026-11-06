@@ -137,6 +137,8 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .seg .who { font-weight: 600; color: var(--accent); }
 .seg .time { color: var(--muted); font-size: 12px; margin-left: 8px; }
 .seg > div:first-child { margin-bottom: 4px; }
+.seg textarea { min-height: 0; resize: vertical; }
+.seg > input { width: 60%; margin-top: 0; }
 .item { display: block; width: 100%; text-align: left; margin-bottom: var(--gap); }
 .item .who { font-weight: 600; margin-bottom: 2px; }
 .item .snippet { margin-top: 4px; color: var(--muted); font-style: italic; }

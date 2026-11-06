@@ -111,3 +111,20 @@ test('bridge converts audio to WAV only for the built-in engine', async () => {
   await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['webm-bytes']), baseUrl: 'http://stt/v1', model: 'm' });
   assert.deepEqual(sent.map((args) => [args.fileName, args.bytes.byteLength]), [['audio.wav', 4], [undefined, 10]]);
 });
+
+test('bridge sends WAV parts as they are', async () => {
+  const sent = [];
+  globalThis.window.desktop.net.stt = async (args) => {
+    sent.push(args);
+    return { ok: true, value: {} };
+  };
+  let converted = 0;
+  globalThis.MeetWav = { speechWav: async () => { converted++; return new Blob(['x']); } };
+  delete require.cache[require.resolve('../renderer/openai-bridge.js')];
+  require('../renderer/openai-bridge.js');
+  const wav = new Blob(['wave'], { type: 'audio/wav' });
+  await globalThis.MeetOpenAI.transcribeAudio({ blob: wav, baseUrl: globalThis.MeetStt.BUILTIN_URL, model: 'm' });
+  await globalThis.MeetOpenAI.transcribeAudio({ blob: wav, baseUrl: 'http://stt/v1', model: 'm' });
+  assert.equal(converted, 0);
+  assert.deepEqual(sent.map((args) => args.fileName), ['audio.wav', 'audio.wav']);
+});

@@ -468,9 +468,10 @@ const enqueueWrite = (fn) => {
   return writeChain;
 };
 
+const meetingRunning = (id) => rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`) || (active.inCall && active.id === id);
+
 async function removeMeeting(id) {
-  const recordingHere = rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`);
-  if (recordingHere || (active.inCall && active.id === id)) throw new Error('This meeting is still running. Stop it before deleting.');
+  if (meetingRunning(id)) throw new Error('This meeting is still running. Stop it before deleting.');
   await globalThis.MeetAudioStore.removeRecordings(id);
   const { meetings = [] } = await chrome.storage.local.get('meetings');
   await chrome.storage.local.set({ meetings: meetings.filter((m) => m !== id) });
@@ -480,6 +481,20 @@ async function removeMeeting(id) {
 
 const deleteMeeting = (id) => new Promise((resolve, reject) => {
   enqueueWrite(() => removeMeeting(id).then(resolve, reject));
+});
+
+async function saveTranscriptEdit(id, change) {
+  if (meetingRunning(id)) throw new Error('This meeting is still running. Stop it before editing.');
+  const key = meetingKey(id);
+  const { [key]: meeting } = await chrome.storage.local.get(key);
+  if (!meeting) throw new Error('Meeting not found.');
+  meeting.segments = globalThis.MeetMerge.applyTranscriptEdit(meeting.segments, change);
+  await chrome.storage.local.set({ [key]: meeting });
+  notifyPanel({ type: 'meeting-updated', id });
+}
+
+const editTranscript = (id, change) => new Promise((resolve, reject) => {
+  enqueueWrite(() => saveTranscriptEdit(id, change).then(resolve, reject));
 });
 
 chrome.runtime.onConnect.addListener((port) => {
@@ -613,6 +628,7 @@ const HANDLERS = {
   'generate-mom': (msg, sender, sendResponse) =>
     reply(generateMomOnce(msg.id).then((mom) => ({ mom })), sendResponse),
   'delete-meeting': (msg, sender, sendResponse) => reply(deleteMeeting(msg.id), sendResponse),
+  'edit-transcript': (msg, sender, sendResponse) => reply(editTranscript(msg.id, msg.change), sendResponse),
   'stop-recording': () => { stopRecording(); },
   'start-active-tab-recording': (msg) => {
     chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {

@@ -583,3 +583,32 @@ test('Chrome keeps audio mode', async () => {
   await wait();
   assert.equal(sw.store.settings.transcriptSource, 'audio');
 });
+
+const editStore = () => ({
+  meetings: ['a'],
+  'meeting:a': { id: 'a', title: 'A', startedAt: 0, endedAt: 9, segments: [{ id: 'x', speaker: 'Ani', text: 'halo', t: 1 }], mom: null },
+});
+
+test('editing a finished meeting saves and refreshes the panel', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const res = await sw.ask({ type: 'edit-transcript', id: 'a', change: { from: 'Ani', to: 'Budi' } });
+  assert.equal(res.ok, true);
+  assert.equal(sw.store['meeting:a'].segments[0].speaker, 'Budi');
+  assert.ok(sw.sent.some((m) => m.type === 'meeting-updated' && m.id === 'a'));
+});
+
+test('a running meeting cannot be edited', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'a', inCall: true, captionsOn: true });
+  await wait();
+  const res = await sw.ask({ type: 'edit-transcript', id: 'a', change: { segmentId: 'x', text: 'ubah' } });
+  assert.equal(res.ok, false);
+  assert.equal(sw.store['meeting:a'].segments[0].text, 'halo');
+});
+
+test('editing a missing meeting reports an error', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const res = await sw.ask({ type: 'edit-transcript', id: 'nope', change: { segmentId: 'x', text: 'ubah' } });
+  assert.equal(res.ok, false);
+});

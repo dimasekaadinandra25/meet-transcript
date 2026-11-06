@@ -119,6 +119,10 @@ beforeEach(() => {
     onWarning: () => { warned++; },
     probeStt: async (url, key) => { probes.push({ url, key }); return probeAnswer; },
     startEngine: async () => engineAnswer,
+    splitAudio: async (file) => {
+      if (file.broken) throw new Error('This file could not be read as audio.');
+      return { durationMs: 200000, parts: (file.parts ?? ['one', 'two']).map(blob) };
+    },
     saveFile: async (name, blob, first) => {
       if (fakeStore.failSave) throw new Error(fakeStore.failSave);
       saved.push({ name, blob, first });
@@ -629,4 +633,71 @@ test('a newer warning is not cleared by a later live success', async () => {
   ctl.chunkSaved();
   await settle();
   assert.equal(recStates().filter((s) => 'error' in s).at(-1).error, 'Microphone disconnected.');
+});
+
+test('a finished meeting can be edited', async () => {
+  await runRecording();
+  const segment = meeting().segments[0];
+  const res = await ctl.handle({ type: 'edit-transcript', id, change: { from: segment.speaker, to: 'Budi' } });
+  assert.deepEqual(res, { ok: true });
+  assert.equal(meeting().segments[0].speaker, 'Budi');
+});
+
+test('a meeting being recorded cannot be edited', async () => {
+  await ctl.handle(START);
+  const res = await ctl.handle({ type: 'edit-transcript', id, change: { from: 'Others', to: 'Budi' } });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /still running/);
+});
+
+const AUDIO_FILE = { name: 'Weekly sync.final.mp3', lastModified: NOW };
+const importedId = () => data.meetings[0];
+const imported = () => data[`meeting:${importedId()}`];
+
+test('an imported file becomes a meeting named after the file', async () => {
+  const res = await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.deepEqual(res, { ok: true });
+  assert.equal(imported().title, 'Weekly sync.final');
+  assert.equal(imported().startedAt, NOW - 200000);
+  assert.equal(imported().endedAt, NOW);
+  assert.equal(imported().source, 'audio');
+  assert.equal(fakeOpenAI.transcribeCalls.length, 2);
+  assert.equal(imported().segments.length, 2);
+  assert.ok(imported().segments.every((s) => s.speaker === '' && String(s.id).startsWith('audio:')));
+  assert.equal(imported().segments[1].t - imported().segments[0].t, 120000);
+});
+
+test('import reports progress and finishes idle', async () => {
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.ok(recStates().some((s) => s.transcribing && s.total === 2));
+  assert.deepEqual([recStates().at(-1).recording, recStates().at(-1).transcribing], [false, false]);
+});
+
+test('import is refused while a recording runs', async () => {
+  await ctl.handle(START);
+  const res = await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.equal(res.ok, false);
+  assert.equal(data.meetings.length, 1);
+});
+
+test('a file that cannot be read makes no meeting', async () => {
+  const res = await ctl.handle({ type: 'import-audio', file: { ...AUDIO_FILE, broken: true } });
+  assert.equal(res.ok, false);
+  assert.match(recStates().at(-1).error, /could not be read/);
+  assert.equal(data.meetings, undefined);
+  assert.equal(recStates().at(-1).transcribing, false);
+});
+
+test('when every part fails no meeting is made', async () => {
+  fakeOpenAI.fail = new Error('STT off');
+  const res = await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /STT off/);
+  assert.equal(data.meetings, undefined);
+});
+
+test('a file with no sound reports that clearly', async () => {
+  const res = await ctl.handle({ type: 'import-audio', file: { ...AUDIO_FILE, parts: [] } });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /no audio/i);
 });

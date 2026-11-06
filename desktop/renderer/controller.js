@@ -1,11 +1,12 @@
 (() => {
   const CHUNK_MS = 120000;
+  const IMPORT_PART_MS = 120000;
   const SILENT_PEAK = 0.01;
   const AI_URLS = { gemini: 'https://gemini.google.com/app', chatgpt: 'https://chatgpt.com/' };
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
 
   function createController(deps) {
-    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, saveFile, now } = deps;
+    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, splitAudio, saveFile, now } = deps;
     let rec = { ...IDLE };
     let activeId = null;
     let starting = null;
@@ -338,6 +339,57 @@
       }
     }
 
+    async function editTranscript({ id, change }) {
+      if (rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
+      try {
+        await updateMeeting(id, (meeting) => { meeting.segments = merge.applyTranscriptEdit(meeting.segments, change); });
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+
+    async function transcribeParts(parts, endpoint) {
+      const results = [];
+      for (const [i, part] of parts.entries()) {
+        broadcast({ done: i, total: parts.length });
+        try {
+          results.push(await sendToStt(part, endpoint));
+        } catch (e) {
+          results.push({ error: e.message });
+        }
+      }
+      return results;
+    }
+
+    async function importAudio({ file }) {
+      if (busy()) return { ok: false, error: 'A recording or transcript is still running.' };
+      const meetingId = `desktop-${now()}`;
+      rec = { ...rec, transcribing: true, meetingId };
+      broadcast({ error: null });
+      try {
+        const { parts, durationMs } = await splitAudio(file, IMPORT_PART_MS / 1000);
+        if (!parts.length) throw new Error('This file has no audio to transcribe.');
+        const results = await transcribeParts(parts, stt.sttEndpoint(await readSettings()));
+        const failures = results.filter((r) => r.error);
+        if (!results.some((r) => r.segments?.length)) {
+          throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the STT endpoint and model in Settings.');
+        }
+        const startedAt = file.lastModified - durationMs;
+        await addMeeting({ id: meetingId, title: file.name.replace(/\.[^.]*$/, ''), startedAt, endedAt: file.lastModified, mom: null, source: 'audio',
+          segments: merge.replaceAudioSegments([], stt.mergeSttChunks(results, IMPORT_PART_MS, startedAt), { baseTime: startedAt }) });
+        rec = { ...IDLE };
+        setActive(meetingId);
+        broadcast({ error: failures.length ? `${failures.length}/${parts.length} parts failed to transcribe: ${failures[0].error}` : null });
+        if (!failures.length) autoMom(meetingId).catch((e) => console.error(e));
+        return { ok: true };
+      } catch (e) {
+        rec = { ...IDLE };
+        broadcast({ error: e.message });
+        return { ok: false, error: e.message };
+      }
+    }
+
     const HANDLERS = {
       'get-active': () => ({ id: activeId, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0,
         rec: { ...rec, autoStt: true, muted: recorder.isMuted() }, panelTab: null, panelMeetingId: null }),
@@ -346,6 +398,8 @@
       'regenerate-transcript': regenerate,
       'generate-mom': ({ id }) => generateMomOnce(id),
       'delete-meeting': deleteMeeting,
+      'edit-transcript': editTranscript,
+      'import-audio': importAudio,
       'send-to-ai': ({ target }) => {
         if (Object.hasOwn(AI_URLS, target)) openExternal(AI_URLS[target]);
       },

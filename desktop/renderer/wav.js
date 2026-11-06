@@ -35,11 +35,30 @@
     return out;
   }
 
-  async function speechWav(blob) {
+  const toWav = (samples) => new Blob([encodeWav(samples, SPEECH_RATE)], { type: 'audio/wav' });
+
+  async function speechSamples(blob) {
     const context = new OfflineAudioContext(1, 1, SPEECH_RATE);
-    const audio = await context.decodeAudioData(await blob.arrayBuffer());
-    return new Blob([encodeWav(mono(audio), SPEECH_RATE)], { type: 'audio/wav' });
+    return mono(await context.decodeAudioData(await blob.arrayBuffer()));
   }
 
-  globalThis.MeetWav = { encodeWav, mono, speechWav };
+  const speechWav = async (blob) => toWav(await speechSamples(blob));
+
+  function splitSamples(samples, rate, seconds) {
+    const parts = [];
+    for (let at = 0; at < samples.length; at += rate * seconds) parts.push(samples.subarray(at, at + rate * seconds));
+    return parts.filter((part) => part.length >= rate);
+  }
+
+  async function speechParts(file, seconds) {
+    const samples = await speechSamples(file).catch(() => {
+      throw new Error('This file could not be read as audio.');
+    });
+    return {
+      durationMs: Math.round((samples.length / SPEECH_RATE) * 1000),
+      parts: splitSamples(samples, SPEECH_RATE, seconds).map(toWav),
+    };
+  }
+
+  globalThis.MeetWav = { encodeWav, mono, speechWav, splitSamples, speechParts };
 })();

@@ -34,6 +34,7 @@
     onWarning: () => desktop.revealWindow(),
     probeStt: (url, key) => desktop.net.probe(url, key),
     startEngine: () => desktop.engine.start(),
+    splitAudio: (file, seconds) => globalThis.MeetWav.speechParts(file, seconds),
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     now: () => Date.now(),
   });
@@ -99,6 +100,19 @@
     return select;
   }
 
+  function importButton(box) {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'audio/*,video/*', hidden: true });
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file) send({ type: 'import-audio', file });
+    });
+    mkBtn('Import audio file', () => {
+      input.value = '';
+      input.click();
+    }, box);
+    box.append(input);
+  }
+
   const meters = { system: null, mic: null };
 
   function levelRow(name, label) {
@@ -139,6 +153,7 @@
       mkBtn('Record audio', () => send({ type: 'start-recording', video: false }), box).classList.add('primary');
       mkBtn('Record audio + video', () => send({ type: 'start-recording', video: true }), box);
       box.append(sourcePicker());
+      importButton(box);
       box.append(el('div', 'muted', 'Without a headset, other people can leak into your microphone and appear twice as "You".'));
     }
     return box;
