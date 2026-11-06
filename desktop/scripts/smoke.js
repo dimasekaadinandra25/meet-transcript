@@ -55,7 +55,11 @@ async function main() {
   } finally {
     app.kill();
     await sleep(WAIT_MS * 2);
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+    } catch (e) {
+      console.warn(`Could not remove the temporary profile: ${e.message}`);
+    }
   }
 }
 
