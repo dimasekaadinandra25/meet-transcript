@@ -23,7 +23,7 @@ jobs:
       - run: npm ci
         working-directory: desktop
       - run: node --test test/*.test.mjs
-      - run: node --test desktop/test/
+      - run: node --test desktop/test/*.test.mjs
       - run: npm run typecheck
         working-directory: desktop
 

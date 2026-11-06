@@ -8,7 +8,7 @@
   "main": "main/main.js",
   "scripts": {
     "start": "node scripts/start.js",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "fetch-engine": "node scripts/fetch-engine.js",
     "build-helper": "node scripts/build-helper.js",
