@@ -393,6 +393,11 @@ async function renderMeeting(id, live, epoch) {
           render();
           return;
         }
+        if (globalThis.MeetStt.namesCanMove(meeting, globalThis.MeetStt.sttEndpoint(settingsCache).model)
+          && !confirm(t('Speaker letters can change when retranscribing, so names you gave may land on the wrong person. Continue?'))) {
+          render();
+          return;
+        }
         setLabel('Transcribing…');
         momErrors.delete(meeting.id);
         try {

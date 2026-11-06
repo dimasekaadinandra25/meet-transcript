@@ -166,7 +166,10 @@ int capture(DWORD pid) {
     if (woke == WAIT_OBJECT_0) return 0;
     if (woke == WAIT_OBJECT_0 + 1) return kExitTargetGone;
     UINT32 packet = 0;
-    while (SUCCEEDED(capturer->GetNextPacketSize(&packet)) && packet) {
+    for (;;) {
+      hr = capturer->GetNextPacketSize(&packet);
+      if (FAILED(hr)) return fail("capture stopped", hr);
+      if (!packet) break;
       BYTE* data = nullptr;
       UINT32 frames = 0;
       DWORD state = 0;

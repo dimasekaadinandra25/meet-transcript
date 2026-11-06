@@ -12,8 +12,9 @@ const CHECK = `(async () => JSON.stringify({
   host: typeof PanelHost,
   nav: !!document.querySelector('nav button[data-tab="live"]'),
   engine: await window.desktop.engine.available(),
+  appSound: await window.desktop.appAudio.available(),
 }))()`;
-const EXPECTED = JSON.stringify({ lib: 'object', host: 'object', nav: true, engine: true });
+const EXPECTED = JSON.stringify({ lib: 'object', host: 'object', nav: true, engine: true, appSound: process.platform === 'win32' });
 
 async function appPage() {
   for (let i = 0; i < WAIT_TRIES; i++) {
@@ -30,6 +31,7 @@ function evaluate(page, expression) {
     const socket = new WebSocket(page.webSocketDebuggerUrl);
     socket.onopen = () => socket.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, awaitPromise: true } }));
     socket.onerror = () => fail(new Error('Could not talk to the app.'));
+    socket.onclose = () => fail(new Error('The app closed the connection.'));
     socket.onmessage = ({ data }) => {
       const { result } = JSON.parse(data);
       socket.close();

@@ -9,7 +9,7 @@ const serverFile = (platform) => (platform === 'win32' ? 'whisper-server.exe' : 
 const MODEL_FILE = 'ggml-base-q5_1.bin';
 const HOST = '127.0.0.1';
 const API_PATH = '/v1/audio/transcriptions';
-const READY_TIMEOUT_MS = 60000;
+const READY_TIMEOUT_MS = 300000;
 const READY_POLL_MS = 250;
 const GUARD_POLL_MS = 2000;
 const GUARD_SCRIPT = `
@@ -95,7 +95,7 @@ function createEngine({ dir, platform = process.platform, run = spawn, request =
       await wait(READY_POLL_MS);
     }
     if (child === proc) stop();
-    throw new Error('The built-in speech engine did not start within 60 seconds.');
+    throw new Error('The built-in speech engine did not start within 5 minutes.');
   }
 
   async function url() {

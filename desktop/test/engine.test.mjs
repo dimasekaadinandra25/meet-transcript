@@ -101,7 +101,7 @@ test('a program that cannot run reports why', async () => {
 
 test('an engine that never answers is stopped', async () => {
   const { engine, started } = setup({ healthy: () => false });
-  await assert.rejects(engine.url(), /did not start within 60 seconds/);
+  await assert.rejects(engine.url(), /did not start within 5 minutes/);
   assert.equal(started[0].child.killed, 1);
 });
 

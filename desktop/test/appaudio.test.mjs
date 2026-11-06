@@ -176,6 +176,15 @@ test('parts play one after another without a gap', () => {
   assert.equal(ctx.played[0].to, source.node);
 });
 
+test('a slightly late part joins on without a gap', () => {
+  const ctx = fakeContext();
+  const source = createPcmSource(ctx);
+  source.push(new Uint8Array(4800 * 4));
+  ctx.currentTime = 10.15;
+  source.push(new Uint8Array(4800 * 4));
+  assert.ok(Math.abs(ctx.played[1].at - 10.3) < 1e-9);
+});
+
 test('sound that arrives late catches up instead of drifting', () => {
   const ctx = fakeContext();
   const source = createPcmSource(ctx);
@@ -189,7 +198,8 @@ test('a backlog is dropped so the recording stays in time', () => {
   const ctx = fakeContext();
   const source = createPcmSource(ctx);
   for (let i = 0; i < 40; i++) source.push(new Uint8Array(4800 * 4));
-  assert.ok(ctx.played.at(-1).at <= ctx.currentTime + 1.2);
+  assert.ok(ctx.played.at(-1).at <= ctx.currentTime + 2.2);
+  assert.ok(ctx.played.length < 40);
 });
 
 test('an empty part plays nothing', () => {

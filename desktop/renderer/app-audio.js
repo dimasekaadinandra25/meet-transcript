@@ -4,7 +4,7 @@
   const BYTES_PER_SAMPLE = 2;
   const FULL_SCALE = 32768;
   const LEAD_SECONDS = 0.2;
-  const MAX_BACKLOG_SECONDS = 1;
+  const MAX_BACKLOG_SECONDS = 2;
 
   function createPcmSource(ctx) {
     const node = ctx.createGain();
@@ -23,7 +23,7 @@
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(node);
-      const at = Math.max(next, ctx.currentTime + LEAD_SECONDS);
+      const at = next > ctx.currentTime ? next : ctx.currentTime + LEAD_SECONDS;
       source.start(at);
       next = at + buffer.duration;
     }

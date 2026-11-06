@@ -28,7 +28,7 @@ async function main() {
   if (!res.ok) throw new Error(`Sample: HTTP ${res.status}`);
   const bytes = await res.arrayBuffer();
   const dir = mkdtempSync(join(tmpdir(), 'transcripables-models-'));
-  const engine = createEngine({ dir: join(__dirname, '..', 'engine') });
+  const engine = createEngine({ dir: process.argv[2] ?? join(__dirname, '..', 'engine') });
   const models = createModels({ dir, onProgress: () => {} });
   try {
     if (!engine.available()) throw new Error('The speech engine is not installed.');

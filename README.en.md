@@ -91,7 +91,7 @@ The desktop app records your computer's audio and your microphone, so it works w
 1. Run `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen warns about the unsigned installer. Choose **More info**, then **Run anyway**.
 
-**On a Mac:** download the `.dmg` for your chip (`arm64` for Apple Silicon, `x64` for Intel). Because it is unsigned, macOS blocks the first open: go to **System Settings > Privacy & Security** and choose **Open Anyway**. If macOS says the app is damaged, run `xattr -cr /Applications/Transcripables.app`. Allow the microphone and screen recording when asked. Nobody has recorded a real meeting on a Mac yet.
+**On a Mac:** download the `.dmg` for your chip (`arm64` for Apple Silicon, `x64` for Intel). Because it is unsigned, macOS blocks the first open: go to **System Settings > Privacy & Security** and choose **Open Anyway**. If macOS says the app is damaged, run `xattr -cr /Applications/Transcripables.app`. Allow the microphone and screen recording when asked. Recording computer sound needs macOS 14.2 or later. Nobody has recorded a real meeting on a Mac yet.
 
 3. Open **Settings** and fill in your LLM endpoint for MoM. Speech-to-text uses the built-in engine by default, so it needs no server or internet.
 
@@ -134,7 +134,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * **Download** also offers `.srt` and `.vtt` subtitles. **MoM type** in Settings offers Standard, Standup, Client call, and 1-on-1.
 * **Delete meetings older than** in Settings removes old meetings and their recordings when the app starts. It is off by default, and copies in `Documents/Transcripables` stay.
 * In the extension, the icon shows **!** when captions are off or quiet, or when *Meet captions + recorded audio* has no recording. Hover the icon for the reason.
-* **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay. If a part fails to transcribe again, its old lines are kept.
+* **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay, but with a diarize model the letters can change, so it asks first and you should check the names afterwards. If a part fails to transcribe again, its old lines are kept.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine starts with a small model (`ggml-base-q5_1`). **Built-in engine accuracy** in Settings downloads a larger one (190 MB or 540 MB), checked against a fixed checksum, and it stays on your computer. The installer includes the Microsoft runtime files the engine needs.
 * Speaker letters come from your STT service. With a diarize model such as `gpt-4o-transcribe-diarize`, short voice clips from earlier parts are sent with later parts, so **Speaker A** stays the same person for up to 4 voices. Those clips go to the same service as the audio. OpenAI shuts that model down on February 26, 2027 and names no replacement with speaker labels. With other services, **Speaker A** in one part may be a different person in the next.
@@ -256,6 +256,7 @@ GitHub Actions then tests everything, transcribes a real speech sample with each
 Most new Windows certificates now live on a hardware token or a cloud service rather than a `.pfx` file, and those need an extra signing step in `.github/workflows/build.yml`.
 
 Firefox is separate: `./scripts/pack.sh --firefox` builds a ZIP to submit to Mozilla.
+
 ---
 
 ## 📄 License

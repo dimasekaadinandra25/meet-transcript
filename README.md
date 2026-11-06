@@ -89,11 +89,11 @@ Aplikasi desktop merekam audio komputer dan mikrofon, jadi berfungsi untuk aplik
 1. Jalankan `Transcripables-Setup-X.Y.Z.exe`.
 2. Windows SmartScreen memperingatkan installer yang belum ditandatangani. Pilih **More info**, lalu **Run anyway**.
 
-**Di Mac:** unduh `.dmg` sesuai chip Anda (`arm64` untuk Apple Silicon, `x64` untuk Intel). Karena belum ditandatangani, macOS memblokir saat pertama dibuka: buka **System Settings > Privacy & Security** lalu pilih **Open Anyway**. Bila macOS bilang aplikasi rusak, jalankan `xattr -cr /Applications/Transcripables.app`. Izinkan mikrofon dan perekaman layar saat diminta. Belum ada yang merekam rapat sungguhan di Mac.
+**Di Mac:** unduh `.dmg` sesuai chip Anda (`arm64` untuk Apple Silicon, `x64` untuk Intel). Karena belum ditandatangani, macOS memblokir saat pertama dibuka: buka **System Settings > Privacy & Security** lalu pilih **Open Anyway**. Bila macOS bilang aplikasi rusak, jalankan `xattr -cr /Applications/Transcripables.app`. Izinkan mikrofon dan perekaman layar saat diminta. Merekam suara komputer perlu macOS 14.2 atau lebih baru. Belum ada yang merekam rapat sungguhan di Mac.
 
 3. Buka **Settings** dan isi endpoint LLM untuk MoM. Speech-to-text memakai mesin bawaan secara default, jadi tidak perlu server atau internet.
 
-Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --prefix desktop run dist`. Perintah ini mengunduh mesin suara, memeriksa SHA-256-nya, dan menyimpan installer di `desktop/dist/`.
+Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --prefix desktop run dist`. Perintah ini mengunduh mesin suara, memeriksa SHA-256-nya, mengompilasi pembantu suara per aplikasi dengan `g++`, dan menyimpan installer di `desktop/dist/`. Di Mac, pakai `dist:mac`, yang mengompilasi mesin suara dan memerlukan `cmake` serta Xcode command line tools.
 
 **Code signing:** installer belum ditandatangani karena proyek ini belum punya sertifikat. Dengan file `.pfx`, isi `WIN_CSC_LINK` dan `WIN_CSC_KEY_PASSWORD` sebelum `npm run dist`, lalu electron-builder menandatanganinya. Sertifikat di token perangkat keras atau layanan cloud perlu pengaturan penandatanganan dari penyedianya di pengaturan build `win`.
 
@@ -131,7 +131,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * **Download** juga menyediakan subtitle `.srt` dan `.vtt`. **MoM type** di Settings menyediakan Standard, Standup, Client call, dan 1-on-1.
 * **Delete meetings older than** di Settings menghapus meeting lama beserta rekamannya saat aplikasi dimulai. Nonaktif secara default, dan salinan di `Documents/Transcripables` tetap ada.
 * Di ekstensi, ikon menampilkan **!** saat caption mati atau hening, atau saat *Meet captions + recorded audio* belum merekam. Arahkan kursor ke ikon untuk melihat alasannya.
-* **Edit transcript** pada meeting yang sudah selesai memungkinkan Anda memperbaiki baris dan mengganti nama pembicara, misalnya **Others** menjadi nama asli, di seluruh meeting. **Retranscribe** mengganti hasil edit teks pada baris dari rekaman itu, dan bertanya dulu. Nama pembicara tetap. Bila satu bagian gagal ditranskrip lagi, baris lamanya dipertahankan.
+* **Edit transcript** pada meeting yang sudah selesai memungkinkan Anda memperbaiki baris dan mengganti nama pembicara, misalnya **Others** menjadi nama asli, di seluruh meeting. **Retranscribe** mengganti hasil edit teks pada baris dari rekaman itu, dan bertanya dulu. Nama pembicara tetap, tetapi dengan model diarize hurufnya bisa berubah, jadi aplikasi bertanya dulu dan sebaiknya Anda memeriksa namanya setelah itu. Bila satu bagian gagal ditranskrip lagi, baris lamanya dipertahankan.
 * **STT language** kosong secara default, jadi bahasa dideteksi otomatis untuk setiap bagian rekaman. Model Whisper pada mesin bawaan mencakup sekitar 100 bahasa. Bila peserta berganti bahasa dalam satu bagian, isi bahasa utama di Settings, misalnya `id` atau `en`. Layanan STT lain mendukung bahasa sesuai modelnya.
 * Mesin bawaan dimulai dengan model kecil (`ggml-base-q5_1`). **Built-in engine accuracy** di Settings mengunduh model lebih besar (190 MB atau 540 MB), diperiksa dengan checksum tetap, dan tetap di komputer Anda. Penginstal sudah memuat berkas runtime Microsoft yang dibutuhkan mesin.
 * Huruf pembicara berasal dari layanan STT Anda. Dengan model diarize seperti `gpt-4o-transcribe-diarize`, potongan suara pendek dari bagian sebelumnya dikirim bersama bagian berikutnya, jadi **Speaker A** tetap orang yang sama untuk sampai 4 suara. Potongan itu dikirim ke layanan yang sama dengan audionya. OpenAI menghentikan model itu pada 26 Februari 2027 dan belum menyebut pengganti yang memberi label pembicara. Dengan layanan lain, **Speaker A** di satu bagian bisa jadi orang berbeda di bagian berikutnya.
@@ -253,6 +253,7 @@ GitHub Actions lalu menguji semuanya, mentranskrip contoh ucapan asli dengan set
 Kebanyakan sertifikat Windows baru kini disimpan di token perangkat keras atau layanan cloud, bukan berkas `.pfx`, dan itu perlu langkah penandatanganan tambahan di `.github/workflows/build.yml`.
 
 Firefox terpisah: `./scripts/pack.sh --firefox` membangun ZIP untuk dikirim ke Mozilla.
+
 ---
 
 ## 📄 Lisensi

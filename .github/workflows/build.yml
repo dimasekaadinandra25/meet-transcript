@@ -12,6 +12,7 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -26,10 +27,21 @@ jobs:
       - run: node --test desktop/test/*.test.mjs
       - run: npm run typecheck
         working-directory: desktop
+      - name: Check the tag matches every version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          for file in manifest.json manifest.firefox.json desktop/package.json; do
+            version="$(node -p "require('./$file').version")"
+            if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+              echo "$file says $version, but the tag is $GITHUB_REF_NAME"
+              exit 1
+            fi
+          done
 
   desktop:
     needs: test
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -37,12 +49,15 @@ jobs:
           - os: windows-latest
             script: dist
             app: dist/win-unpacked/Transcripables.exe
+            engine: dist/win-unpacked/resources/engine
           - os: macos-latest
             script: dist:mac
             app: dist/mac-arm64/Transcripables.app/Contents/MacOS/Transcripables
+            engine: dist/mac-arm64/Transcripables.app/Contents/Resources/engine
           - os: macos-15-intel
             script: dist:mac
             app: dist/mac/Transcripables.app/Contents/MacOS/Transcripables
+            engine: dist/mac/Transcripables.app/Contents/Resources/engine
     defaults:
       run:
         shell: bash
@@ -53,20 +68,27 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npm run fetch-engine
-      - name: Transcribe real speech with every engine model
-        run: node scripts/test-engine.js
       - name: Build the installer
-        run: npm run "${{ matrix.script }}"
+        run: |
+          if [ "$RUNNER_OS" = macOS ] && [ -n "$MAC_CSC_LINK" ]; then
+            export CSC_LINK="$MAC_CSC_LINK" CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+          else
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+          if [ -z "$WIN_CSC_LINK" ]; then
+            unset WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
+          fi
+          npm run "${{ matrix.script }}"
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Transcribe real speech with the built engine and every model
+        run: node scripts/test-engine.js "${{ matrix.engine }}"
       - name: Open the built app
         run: node scripts/smoke.js "${{ matrix.app }}"
       - uses: actions/upload-artifact@v4
@@ -81,6 +103,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: desktop
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 await import('../lib/stt.js');
 await import('../lib/openai.js');
-const { createVoiceMemory, sendWithVoices, isDiarizeModel, parseSttResponse } = globalThis.MeetStt;
+const { createVoiceMemory, sendWithVoices, isDiarizeModel, parseSttResponse, namesCanMove } = globalThis.MeetStt;
 
 const line = (speaker, start, end, text = 'halo') => ({ speaker, start, end, text });
 const clips = () => {
@@ -86,12 +86,48 @@ test('if the service rejects the voice clips, the part is sent again without the
   const sent = [];
   const send = async (known) => {
     sent.push(known.length);
-    if (known.length) throw new Error('HTTP 400');
+    if (known.length) throw Object.assign(new Error('HTTP 400'), { name: 'RequestRejected' });
     return { segments: [line('A', 0, 3)] };
   };
   const result = await sendWithVoices({ send, blob: {}, voices, makeClip: async () => 'clip' });
   assert.deepEqual(sent, [1, 0]);
   assert.equal(result.segments[0].speaker, 'B');
+});
+
+test('a timeout or dead server is not sent a second time', async () => {
+  const voices = createVoiceMemory();
+  const { makeClip } = clips();
+  await voices.learn({ segments: [line('A', 0, 3)] }, makeClip);
+  let sent = 0;
+  const send = async () => {
+    sent++;
+    throw new Error('Request timed out');
+  };
+  await assert.rejects(sendWithVoices({ send, blob: {}, voices, makeClip: async () => 'clip' }), /timed out/);
+  assert.equal(sent, 1);
+});
+
+test('only a bad request counts as the service rejecting it', async () => {
+  const real = globalThis.fetch;
+  const failWith = async (status) => {
+    globalThis.fetch = async () => new Response('{"error":{"message":"no"}}', { status });
+    return globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x']), baseUrl: 'http://127.0.0.1:1/v1', model: 'm' }).catch((e) => e);
+  };
+  try {
+    assert.equal((await failWith(400)).name, 'RequestRejected');
+    assert.equal((await failWith(422)).name, 'RequestRejected');
+    assert.equal((await failWith(401)).name, 'Error');
+    assert.equal((await failWith(500)).name, 'Error');
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('renamed speakers can move only when a diarize model retranscribes', () => {
+  assert.equal(namesCanMove({ speakerNames: { 'Speaker A': 'Ani' } }, 'gpt-4o-transcribe-diarize'), true);
+  assert.equal(namesCanMove({ speakerNames: {} }, 'gpt-4o-transcribe-diarize'), false);
+  assert.equal(namesCanMove({}, 'gpt-4o-transcribe-diarize'), false);
+  assert.equal(namesCanMove({ speakerNames: { Others: 'Ani' } }, 'whisper-1'), false);
 });
 
 test('a failure with nothing to retry is reported', async () => {
