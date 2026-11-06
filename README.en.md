@@ -122,7 +122,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 ### Limits
 
 * If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes.
-* API keys are encrypted on your computer. **Export backup** leaves them out unless you tick **Include API keys**, which stores them in plain text. Restoring a backup without keys keeps the keys you have now.
+* API keys are encrypted on your computer. **Export backup** leaves them out unless you tick **Include API keys**, which stores them in plain text. Restoring a backup without keys keeps a key you have now only if the backup uses the same server address, so a backup can never send your key somewhere else.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
 * **Ask** on a meeting sends your question and the transcript to your AI service. Answers are saved with the meeting, can be deleted one at a time, are found by History search, and stay out of exports. An answer or MoM says so if the transcript changed after it was made.

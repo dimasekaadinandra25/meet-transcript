@@ -344,7 +344,7 @@
     }
 
     async function editTranscript({ id, change }) {
-      if (rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
+      if (change.deleteAnswer === undefined && rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
       try {
         await updateMeeting(id, (meeting) => merge.editMeeting(meeting, change));
         return { ok: true };

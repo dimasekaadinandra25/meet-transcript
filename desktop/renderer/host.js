@@ -178,6 +178,7 @@
     let current = settings.engineModel ?? 'base';
     const fill = async () => {
       const models = await desktop.engine.models();
+      if (!models.some((model) => model.id === current && model.installed)) current = 'base';
       select.replaceChildren(modelOption({ id: 'base', installed: true }), ...models.map(modelOption));
       select.value = current;
       return models;
@@ -185,13 +186,16 @@
     desktop.engine.available().then((ready) => {
       if (!ready) return;
       row.hidden = false;
-      fill().catch((e) => console.error(e));
+      fill().then(() => desktop.engine.useModel(current)).catch((e) => console.error(e));
     });
     select.addEventListener('change', async () => {
       const { t } = globalThis.MeetI18n;
       const id = select.value;
-      const { rec } = await send({ type: 'get-active' });
-      if (rec.recording || rec.transcribing) {
+      const busy = async () => {
+        const { rec } = await send({ type: 'get-active' });
+        return rec.recording || rec.transcribing;
+      };
+      if (await busy()) {
         select.value = current;
         note.textContent = 'Wait until the recording or transcript finishes.';
         return;
@@ -210,6 +214,11 @@
         if (!res.ok) {
           select.value = current;
           note.textContent = res.error;
+          return;
+        }
+        if (await busy()) {
+          await fill();
+          note.textContent = 'Downloaded. Choose it again when the recording or transcript finishes.';
           return;
         }
       }

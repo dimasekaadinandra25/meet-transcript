@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -69,6 +69,20 @@ test('a failed request leaves nothing behind', async () => {
   try {
     await assert.rejects(models.download('small'), /503/);
     assert.deepEqual(readdirSync(dir), []);
+  } finally {
+    done();
+  }
+});
+
+test('a failed disk write ends the download, and it can be tried again', async () => {
+  const { dir, asked, models, done } = setup();
+  try {
+    mkdirSync(join(dir, 'small.bin.part'));
+    await assert.rejects(models.download('small'));
+    assert.deepEqual(readdirSync(dir), []);
+    await models.download('small');
+    assert.equal(asked.length, 2);
+    assert.deepEqual(readFileSync(join(dir, 'small.bin')), BYTES);
   } finally {
     done();
   }

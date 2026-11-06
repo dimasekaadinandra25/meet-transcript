@@ -806,6 +806,15 @@ test('asking about a meeting saves the answer, newest first', async () => {
   assert.equal(meeting().mom, momBefore);
 });
 
+test('an answer can be deleted during the recording it belongs to', async () => {
+  await ctl.handle(START);
+  await ctl.handle({ type: 'ask-meeting', id, question: 'Apa?' }).catch(() => null);
+  data[`meeting:${id}`].answers = [{ question: 'Apa?', answer: 'x' }];
+  const res = await ctl.handle({ type: 'edit-transcript', id, change: { deleteAnswer: { question: 'Apa?', answer: 'x' } } });
+  assert.equal(res.ok, true);
+  assert.equal(meeting().answers.length, 0);
+});
+
 test('an answer does not bring back a deleted meeting', async () => {
   await runRecording();
   fakeOpenAI.generateMoM = async () => {

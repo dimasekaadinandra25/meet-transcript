@@ -795,6 +795,19 @@ test('a Meet recording stays open for the call page to finish', async () => {
   assert.equal(sw.store['meeting:abc-defg-hij'].endedAt, null);
 });
 
+test('an answer can be deleted while its meeting is still running', async () => {
+  const store = editStore();
+  store['meeting:a'].endedAt = Date.now();
+  store['meeting:a'].answers = [{ question: 'Apa?', answer: 'x' }];
+  const sw = loadSw({ offscreen: null, store });
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'a', inCall: true, captionsOn: true });
+  await wait();
+  const res = await sw.ask({ type: 'edit-transcript', id: 'a', change: { deleteAnswer: { question: 'Apa?', answer: 'x' } } });
+  assert.equal(res.ok, true);
+  assert.equal(sw.store['meeting:a'].answers.length, 0);
+});
+
 test('an imported file becomes a finished meeting, safe from auto-delete for now', async () => {
   const sw = loadSw({ offscreen: null, store: { meetings: ['lama'] } });
   const res = await sw.ask({ type: 'add-imported-meeting', title: 'Rapat', startedAt: 1000, endedAt: 5000 });

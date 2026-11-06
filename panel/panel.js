@@ -539,8 +539,13 @@ async function playLine(meeting, s, next, rec) {
 function titleEditor(meeting) {
   const input = mkEl('input', { value: meeting.title, defaultValue: meeting.title });
   input.dataset.titleEditor = '';
+  input.dataset.editKey = 'title';
   input.setAttribute('aria-label', 'Meeting title');
   input.addEventListener('change', () => {
+    if (!input.value.trim()) {
+      input.value = input.defaultValue;
+      return;
+    }
     input.defaultValue = input.value;
     chrome.runtime.sendMessage({ type: 'rename-meeting', id: meeting.id, title: input.value }).catch(() => {});
   });
@@ -585,12 +590,12 @@ function askBox(meeting) {
   mkBtn('Ask', send, row);
   box.append(row);
   if (asking === meeting.id) box.append(el('p', 'muted', 'Thinking…'));
-  for (const [index, { question, answer, basedOn }] of (meeting.answers ?? []).entries()) {
+  for (const { question, answer, basedOn } of meeting.answers ?? []) {
     const item = el('div', 'mom');
     item.append(raw(el('strong', null, question)), raw(el('div', null, answer)));
     if (M.changedSince(meeting, basedOn)) item.append(el('p', 'muted', 'The transcript changed after this answer.'));
     const remove = mkBtn('Delete answer', async () => {
-      const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change: { deleteAnswer: index } }).catch(() => null);
+      const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change: { deleteAnswer: { question, answer } } }).catch(() => null);
       if (!res?.ok) {
         momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
         render();

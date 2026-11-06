@@ -119,7 +119,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 ### Keterbatasan
 
 * Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir.
-* API key dienkripsi di komputer. **Export backup** tidak menyertakannya kecuali Anda mencentang **Include API keys**, yang menyimpannya dalam teks polos. Memulihkan cadangan tanpa key mempertahankan key yang Anda punya sekarang.
+* API key dienkripsi di komputer. **Export backup** tidak menyertakannya kecuali Anda mencentang **Include API keys**, yang menyimpannya dalam teks polos. Memulihkan cadangan tanpa key mempertahankan key yang Anda punya sekarang hanya bila cadangan memakai alamat server yang sama, jadi cadangan tidak pernah bisa mengirim key Anda ke tempat lain.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.
 * Server LLM lokal seperti Ollama dan LM Studio tidak memerlukan API key. Key hanya wajib untuk alamat default OpenAI.
 * **Ask** pada meeting mengirim pertanyaan dan transkrip ke layanan AI Anda. Jawaban disimpan bersama meeting, dan tidak ikut diekspor.

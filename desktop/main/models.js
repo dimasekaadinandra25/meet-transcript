@@ -1,6 +1,6 @@
 const { createHash } = require('node:crypto');
 const { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } = require('node:fs');
-const { once } = require('node:events');
+const { pipeline } = require('node:stream/promises');
 const { join } = require('node:path');
 
 const SOURCE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
@@ -24,26 +24,25 @@ function createModels({ dir, onProgress, catalog = MODELS, request = fetch }) {
     if (!res.ok) throw new Error(`The model could not be downloaded (HTTP ${res.status}).`);
     mkdirSync(dir, { recursive: true });
     const temp = `${fileOf(id)}.part`;
-    const out = createWriteStream(temp);
     const hash = createHash('sha256');
     let received = 0;
     let shown = -1;
-    try {
-      for await (const part of res.body ?? []) {
+    async function* counted(source) {
+      for await (const part of source) {
         hash.update(part);
         received += part.length;
-        if (!out.write(part)) await once(out, 'drain');
         const percent = Math.min(100, Math.floor((received / bytes) * 100));
         if (percent !== shown) onProgress({ id, percent });
         shown = percent;
+        yield part;
       }
-      out.end();
-      await once(out, 'finish');
+    }
+    try {
+      await pipeline(res.body ?? [], counted, createWriteStream(temp));
       if (hash.digest('hex') !== sha256) throw new Error('The downloaded model failed its checksum, so it was not used.');
       renameSync(temp, fileOf(id));
     } catch (e) {
-      out.destroy();
-      rmSync(temp, { force: true });
+      rmSync(temp, { recursive: true, force: true });
       throw e;
     }
   }

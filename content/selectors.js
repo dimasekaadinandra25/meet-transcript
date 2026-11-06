@@ -49,7 +49,7 @@
   const LANG_PATTERN = {
     id: /^(bahasa\s+)?indonesian?\b/i,
     en: /^(english|inggris)\b/i,
-    ms: named('malay', 'melayu', 'bahasa melayu'),
+    ms: named('malay\\b', 'melayu', 'bahasa melayu'),
     zh: named('chinese', 'mandarin', 'tionghoa', 'cina', '中文'),
     ja: named('japanese', 'jepang', '日本語'),
     ko: named('korean', 'korea', '한국어'),

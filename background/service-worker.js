@@ -569,7 +569,7 @@ async function askMeeting(id, question) {
 }
 
 async function saveTranscriptEdit(id, change) {
-  if (meetingRunning(id)) throw new Error('This meeting is still running. Stop it before editing.');
+  if (change.deleteAnswer === undefined && meetingRunning(id)) throw new Error('This meeting is still running. Stop it before editing.');
   const key = meetingKey(id);
   const { [key]: meeting } = await chrome.storage.local.get(key);
   if (!meeting) throw new Error('Meeting not found.');
