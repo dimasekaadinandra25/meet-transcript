@@ -24,7 +24,7 @@ The extension's interface is in Indonesian, so UI labels below appear in their o
 * **Multiple Transcript Sources:** With **Transcript source** (transcript source) set to *Record audio*, Google Meet's built-in captions (with speaker names) and tab audio recording (through STT) are combined into one meeting timeline, sorted by time.
 * **Optional Video Recording:** Record the Meet tab as one `.webm` file (720p, VP9, about 250 MB/hour) from the **Record meeting audio + video** right-click menu. In *Meet captions* mode this recording is only an archive: the transcript still comes from captions, and its audio is not sent to STT unless you press **Generate transcript**.
 * **Optional Microphone Recording:** By default, only other participants' voices (tab audio) are recorded. Turn on **Microphone** in the icon popup, or check **Record microphone** in Settings (both control the same setting), to mix your voice into audio and video recordings. Microphone permission is requested once through a small window. You can turn it on **during a recording**: the mic joins without interrupting the recording, and the earlier part stays without mic. You cannot turn it off mid-recording; stop the recording first.
-* **Your Own STT Endpoint:** Point it at a private Whisper server (whisper.cpp, faster-whisper) on your own network, or at any OpenAI-compatible STT API.
+* **Your Own STT Endpoint:** Point it at a private Whisper server (whisper.cpp, faster-whisper) on your own network, or at any OpenAI-compatible Online speech-to-text service.
 * **Automatic MoM:** Generates context, discussion, participants, and action items using an OpenAI-compatible LLM endpoint (for example `gpt-4o-mini`). The template is customizable.
 * **No API Key Option:** Copy the prompt and transcript to your clipboard, or automatically send them to Google Gemini or ChatGPT in a new tab without an API integration.
 * **Local History:** Transcripts, MoM, and settings are stored in `chrome.storage.local`; audio chunks are stored in IndexedDB. Export history to `.txt` or `.md` at any time.
@@ -139,7 +139,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 4. **Generate MoM:** After the meeting, open the **History** tab, choose the meeting, open the **Generate MoM** dropdown, then choose **Generate MoM** (or **Paste into Gemini** / **Paste into ChatGPT** without an API key; you review the prompt and press send yourself). The **Copy** dropdown contains *Copy transcript* / *Copy prompt + transcript*; the **Download** dropdown contains *.txt*, *.md*, and audio/video recordings when available.
 
 **Initial setup (Settings):**
-Before first use, fill in *Settings*: enter your LLM API key, choose a model, and adjust the MoM template (it must contain the `{{transcript}}` variable; saving warns you if it is missing). The **STT mode** block is used for audio transcripts, both automatic (Meet in *Record audio* mode) and through **Generate transcript** (Chrome/Chromium only; this block does not exist on Firefox). **Test connection** (test connection) tests the LLM endpoint, plus the STT endpoint when **Transcript source** is *Record audio*. Permission to access the STT address is requested when saving in *Record audio* mode, or when first pressing **Generate transcript** in other modes.
+Before first use, fill in *Settings*: enter your LLM API key, choose a model, and adjust the MoM template (it must contain the `{{transcript}}` variable; saving warns you if it is missing). The **Speech-to-text engine** block is used for audio transcripts, both automatic (Meet in *Record audio* mode) and through **Generate transcript** (Chrome/Chromium only; this block does not exist on Firefox). **Test connection** (test connection) tests the LLM endpoint, plus the STT endpoint when **Transcript source** is *Record audio*. Permission to access the STT address is requested when saving in *Record audio* mode, or when first pressing **Generate transcript** in other modes.
 
 ---
 
@@ -149,7 +149,7 @@ You can record tab audio and transcribe it through STT, either alone or together
 
 ### How to Record Audio
 
-1. Open **Settings** and configure **STT mode**. Automatic transcription on Stop only runs for Google Meet with **Transcript source** set to *Record audio*. Other recordings (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, and Zoom) are stored as audio/video archives; open the entry in **History** and click **Generate transcript** if you need a transcript of its audio (the button only appears while its audio is stored).
+1. Open **Settings** and configure **Speech-to-text engine**. Automatic transcription on Stop only runs for Google Meet with **Transcript source** set to *Record audio*. Other recordings (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, and Zoom) are stored as audio/video archives; open the entry in **History** and click **Generate transcript** if you need a transcript of its audio (the button only appears while its audio is stored).
 2. During a call, start recording through one of three paths: the **extension icon popup** then *Record*, **right-click** on the page, or a keyboard shortcut. *Audio + video* also records the tab's picture (720p VP9, about 250 MB/hour, downloaded as one `.webm` file with **Download video** in history).
 3. On Google Meet, recording stops automatically when you leave the call. **On Teams, Webex, Slack, Discord, and Zoom it does not**: there is no session tracking there, so it only stops by itself if the recorded tab closes. Otherwise stop it yourself through the popup, panel, the `Alt+Shift+S` shortcut, or right-click then **Stop recording** (Meet/Discord only). After stopping, **Saving recording…** (for archives) or **Transcribing…** (for automatic transcripts) appears until processing finishes.
 
@@ -168,11 +168,11 @@ You can record tab audio and transcribe it through STT, either alone or together
 | Mode (UI label) | Requirements | Audio is sent to | Description |
 | --- | --- | --- | --- |
 | **Built-in (on this computer)** | Desktop app only | Nowhere: it stays on your computer | **[Desktop default]** Uses the bundled whisper.cpp engine |
-| **Local Whisper (your own server)** | OpenAI-compatible Whisper server | The URL **you** enter | **[Default]** Pre-filled with `http://localhost:8080/v1` |
-| **STT API** | URL + API key (**required**) | 🌐 That endpoint | Fastest. Offers STT model and language options. |
+| **Your own Whisper server** | OpenAI-compatible Whisper server | The URL **you** enter | **[Default]** Pre-filled with `http://localhost:8080/v1` |
+| **Online speech-to-text service** | URL + API key (**required**) | 🌐 That endpoint | Fastest. Offers Speech-to-text enginel and language options. |
 
 > [!WARNING]
-> In **STT API** mode, if **STT Base URL** is left empty, the extension falls back to your LLM *Base URL* and uses your **LLM API key**, so meeting audio is sent to the chat endpoint (default `https://api.openai.com/v1`). Fill in STT Base URL explicitly.
+> In **Online speech-to-text service** mode, if **Speech-to-text address** is left empty, the extension falls back to your LLM *Base URL* and uses your **LLM API key**, so meeting audio is sent to the chat endpoint (default `https://api.openai.com/v1`). Fill in Speech-to-text address explicitly.
 
 ---
 
@@ -181,7 +181,7 @@ You can record tab audio and transcribe it through STT, either alone or together
 This extension is designed to be *privacy-first*:
 
 * **Local storage:** Your API key is stored only in `chrome.storage.local` on your device and is never committed to the repository. The extension has no telemetry or analytics.
-* **Local Whisper:** Audio is sent to the URL **you** enter in *STT Base URL* (default `http://localhost:8080/v1`). The extension **does not** force that URL to actually be local, so make sure it really is your server. If an *STT API key* was ever entered, it is still sent as the `Authorization` header even though the field is hidden in this mode.
+* **Local Whisper:** Audio is sent to the URL **you** enter in *Speech-to-text address* (default `http://localhost:8080/v1`). The extension **does not** force that URL to actually be local, so make sure it really is your server. If an *Online speech-to-text service key* was ever entered, it is still sent as the `Authorization` header even though the field is hidden in this mode.
 * **Endpoint transparency:** MoM is generated through the endpoint you choose. Make sure your configured endpoint fits your company's or team's data security policy.
 * **Search:** **History** has a search box that looks through titles, transcripts, and MoM.
 * **Word and PDF:** The **Download** menu saves a `.docx` or a PDF of a meeting.
@@ -197,7 +197,7 @@ This extension is designed to be *privacy-first*:
 * **Transcript does not appear even though Meet's CC button is on:** (Captions themselves do not show on screen because they are hidden by default; turn off **Hide captions on the Meet screen** in Settings to confirm visually.) Google may have changed Meet's DOM structure. The extension shows a warning when captions are on but no text is read for 30 seconds. (Developers: update the selectors in `content/selectors.js`.)
 * **Live tab points to an old meeting, or recording does not stop by itself:** Google Meet is a SPA: switching rooms and leaving a call only change the URL in the same document. Session tracking is handled by `content/session.js` (pure logic, tested in `test/session.test.mjs`). Meet rooms are recognized as `meet.google.com/<code>`, `/meet/<code>`, and `/_meet/<code>`.
 * **Record button refuses with "Buka halaman ruang … dulu" (open the room page first):** The tab URL was not recognized as a meeting page. The message shows the tab URL; send that URL so its shape can be added (see the URL list under *Key Features*).
-* **Audio transcript is empty or contains `[transcript failed]`:** The panel shows a summary of the cause, for example *"3/14 parts failed to transcribe: HTTP 404 …"* (3 of 14 chunks failed). Check the endpoint URL or STT model in your settings, and make sure the address really is an STT server, not another service on the same port. After fixing it, click **Retranscribe** (or **Generate transcript** for recordings never transcribed) on that meeting's history entry; the original audio is still stored.
+* **Audio transcript is empty or contains `[transcript failed]`:** The panel shows a summary of the cause, for example *"3/14 parts failed to transcribe: HTTP 404 …"* (3 of 14 chunks failed). Check the endpoint URL or Speech-to-text enginel in your settings, and make sure the address really is an STT server, not another service on the same port. After fixing it, click **Retranscribe** (or **Generate transcript** for recordings never transcribed) on that meeting's history entry; the original audio is still stored.
 * **Captions still show after the extension is reloaded:** Content scripts in already open tabs become orphaned when the extension reloads, and they intentionally remove their own caption-hiding style (otherwise captions stay locked hidden and out of reach of Settings). Reload the Meet tab.
 * **Caption language does not change:** The extension tries at most 3 times per call, then stops. If Google changes the language selector's structure, fix `langCombobox()`/`langOption()` in `content/selectors.js`.
 * **"Belum ada suara masuk" (no sound yet) warning:** Without **Record microphone**, the system only captures other participants' voices. If nobody else is talking, there is no audio to process.

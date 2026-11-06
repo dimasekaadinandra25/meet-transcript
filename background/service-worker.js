@@ -649,7 +649,7 @@ const HANDLERS = {
     resetRec();
     broadcastRec({ error: msg.segments.length
       ? msg.error ?? null
-      : 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.' });
+      : 'Empty transcript. STT returned no text, so check the speech-to-text address and model in Settings.' });
     enqueueWrite(async () => {
       const id = await saveAudioTranscript(msg);
       if (!msg.error) autoMom(id).catch((e) => console.error(e));

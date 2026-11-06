@@ -393,3 +393,22 @@ test('editMeeting remembers renames, including a second rename', () => {
   editMeeting(meeting, { segmentId: 'a', text: 'y' });
   assert.equal(meeting.segments[0].text, 'y');
 });
+
+test('meetings are grouped by how long ago they were', () => {
+  const { dateGroup } = globalThis.MeetMerge;
+  const now = new Date(2026, 10, 6, 15, 0).getTime();
+  const at = (day, hour = 9) => new Date(2026, 10, day, hour).getTime();
+  assert.equal(dateGroup(at(6), now), 'Today');
+  assert.equal(dateGroup(at(5, 23), now), 'Yesterday');
+  assert.equal(dateGroup(at(1), now), 'This week');
+  assert.equal(dateGroup(at(30 - 25), now), 'Yesterday');
+  assert.equal(dateGroup(new Date(2026, 9, 20).getTime(), now), 'Earlier');
+});
+
+test('time left follows the speed so far', () => {
+  const { minutesLeft } = globalThis.MeetMerge;
+  assert.equal(minutesLeft(0, 10, 5000), null);
+  assert.equal(minutesLeft(5, 10, 300000), 5);
+  assert.equal(minutesLeft(9, 10, 9000), 1);
+  assert.equal(minutesLeft(10, 10, 9000), null);
+});

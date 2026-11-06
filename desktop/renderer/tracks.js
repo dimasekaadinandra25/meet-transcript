@@ -20,7 +20,7 @@
       }
     }
     if (!hasText(system) && !hasText(mic)) {
-      return 'Transcription returned no text, so the existing transcript was not changed. Check the STT endpoint and model in Settings.';
+      return 'Transcription returned no text, so the existing transcript was not changed. Check the speech-to-text address and model in Settings.';
     }
     return null;
   }

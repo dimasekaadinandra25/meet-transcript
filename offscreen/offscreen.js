@@ -181,7 +181,7 @@ async function transcribeChunks(blobs, c, replace) {
     const errSummary = errs.length ? `${errs.length}/${blobs.length} parts failed to transcribe: ${errs[0]}` : null;
     if (replace && !results.some((r) => r && !r.error && r.segments?.length)) {
       throw new Error('Transcription returned no text, so the existing transcript was not changed.'
-        + (errs.length ? ` STT error: ${errs[0]}` : ' Check the STT endpoint and model in Settings.'));
+        + (errs.length ? ` STT error: ${errs[0]}` : ' Check the speech-to-text address and model in Settings.'));
     }
     const segments = globalThis.MeetStt.mergeSttChunks(results, c.chunkMs, c.baseTime, c.indices);
     toSW({ type: 'audio-transcript', meetingId: c.meetingId, segments, baseTime: c.baseTime,

@@ -143,3 +143,13 @@ test('a reply made of text parts becomes plain text', () => {
 test('a reply with no usable text counts as empty', () => {
   assert.equal(extractContent(JSON.stringify({ choices: [{ message: { content: { odd: true } } }] })), '');
 });
+
+test('AI service presets have an address and a model where one is known', () => {
+  const { LLM_PRESETS, DEFAULT_BASE_URL } = globalThis.MeetOpenAI;
+  assert.ok(LLM_PRESETS.some((p) => p.baseUrl === DEFAULT_BASE_URL));
+  for (const preset of LLM_PRESETS) {
+    assert.ok(preset.name && /^https?:\/\//.test(preset.baseUrl), preset.name);
+    assert.ok(!preset.baseUrl.endsWith('/'), preset.name);
+  }
+  assert.ok(LLM_PRESETS.some((p) => p.baseUrl.includes('localhost')));
+});

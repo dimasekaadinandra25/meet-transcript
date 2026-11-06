@@ -219,7 +219,7 @@
       await updateMeeting(meetingId, (meeting) => {
         meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, replace, names: meeting.speakerNames });
       });
-      if (!segments.length) return 'Empty transcript. STT returned no text, so check the STT endpoint and model in Settings.';
+      if (!segments.length) return 'Empty transcript. STT returned no text, so check the speech-to-text address and model in Settings.';
       const failures = [...systemTrack.results, ...micTrack.results].filter((r) => r.error);
       return failures.length ? `${failures.length}/${total} parts failed to transcribe: ${failures[0].error}` : null;
     }
@@ -385,7 +385,7 @@
         if (stopIfCancelled()) return { ok: false, cancelled: true };
         const failures = results.filter((r) => r.error);
         if (!results.some((r) => r.segments?.length)) {
-          throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the STT endpoint and model in Settings.');
+          throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the speech-to-text address and model in Settings.');
         }
         const startedAt = file.lastModified - durationMs;
         await addMeeting({ id: meetingId, title: file.name.replace(/\.[^.]*$/, ''), startedAt, endedAt: file.lastModified, mom: null, source: 'audio',

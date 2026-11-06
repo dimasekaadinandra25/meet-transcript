@@ -5,8 +5,14 @@ let viewingId = null;
 let status = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0 };
 let recState = { recording: false, transcribing: false, saving: false, done: 0, total: 0, error: null };
 
-const busyLabel = () => (recState.saving ? 'Saving recording…'
-  : recState.total ? `Transcribing… ${recState.done}/${recState.total}` : 'Transcribing…');
+let progressStart = 0;
+const busyLabel = () => {
+  if (recState.saving) return 'Saving recording…';
+  if (!recState.total) return 'Transcribing…';
+  const left = M.minutesLeft(recState.done, recState.total, Date.now() - progressStart);
+  const count = `Transcribing… ${recState.done}/${recState.total}`;
+  return left ? `${count}, about ${left} min left` : count;
+};
 
 const HAS_AUDIO = !!chrome.tabCapture;
 const Host = globalThis.PanelHost;
@@ -89,6 +95,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === 'rec-state') {
     const wasActive = recState.recording || recState.transcribing;
     if (wasActive !== (msg.recording || msg.transcribing)) audioMetaKey = null;
+    if (msg.total && !msg.done) progressStart = Date.now();
     recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, importing: !!msg.importing,
       done: msg.done ?? 0, total: msg.total ?? 0,
       error: 'error' in msg ? msg.error : recState.error };
@@ -189,9 +196,26 @@ async function render() {
   return renderSettings(epoch);
 }
 
+function setupCard(engineReady) {
+  const speechReady = Host ? !!engineReady || !!settingsCache.sttMode : true;
+  const aiReady = M.canMakeMom(settingsCache);
+  if (settingsCache.setupDone || (speechReady && aiReady)) return [];
+  const box = el('div', 'info');
+  box.append(el('strong', null, 'Get started'));
+  const speechText = Host ? (speechReady ? 'Speech-to-text is ready.' : 'Speech-to-text: choose a service in Settings.') : 'Google Meet captions work with no setup.';
+  box.append(el('div', null, `${speechReady ? '✓' : '○'} ${speechText}`));
+  box.append(el('div', null, aiReady ? '✓ AI service is ready.' : '○ Minutes of meeting: add an AI service in Settings, or paste the prompt into Gemini or ChatGPT.'));
+  const row = el('div', 'actions');
+  mkBtn('Open Settings', () => { selectTab('settings'); render(); }, row);
+  mkBtn('Not now', () => patchSettings({ setupDone: true }).then(render), row);
+  box.append(row);
+  return [box];
+}
+
 async function renderMeeting(id, live, epoch) {
   const meeting = id ? await getMeeting(id) : null;
   const viewKey = `${id}|${live}`;
+  const engineReady = !meeting && await Host?.hasEngine();
   let meta = audioMeta;
   let metaKey = audioMetaKey;
   if (meeting?.source !== 'audio') { meta = null; metaKey = null; }
@@ -239,6 +263,7 @@ async function renderMeeting(id, live, epoch) {
       'Captions are on, but no text arrived in the last 30 seconds. If someone is speaking, Meet may have changed its page: update content/selectors.js.'));
   }
   if (!meeting) {
+    if (live) view.append(...setupCard(engineReady));
     view.append(el('p', 'muted',
       !live ? 'Meeting not found.'
         : Host?.emptyLiveText ?? 'No active Meet meeting. Recordings from other tabs, such as Discord, go to History.'));
@@ -360,7 +385,7 @@ async function renderMeeting(id, live, epoch) {
         try {
           await ensureOrigins([globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl].filter((url) => url && url !== globalThis.MeetStt.BUILTIN_URL));
         } catch (e) {
-          momErrors.set(meeting.id, e.message + ' Transcription did not run. Check the STT Base URL in Settings.');
+          momErrors.set(meeting.id, e.message + ' Transcription did not run. Check the Speech-to-text address in Settings.');
           render();
           return;
         }
@@ -388,11 +413,12 @@ async function renderMeeting(id, live, epoch) {
   const running = recState.recording || recState.transcribing || (status.inCall && status.id === meeting.id);
   if (running && editingId === meeting.id) editingId = null;
   const editing = editingId === meeting.id;
+  const more = el('div', 'actions secondary');
   if (meeting.segments.length && !running) {
     btn(editing ? 'Done editing' : 'Edit transcript', () => {
       editingId = editing ? null : meeting.id;
       render();
-    });
+    }, more);
   }
   if (!live) {
     const remove = btn('Delete', async () => {
@@ -403,10 +429,11 @@ async function renderMeeting(id, live, epoch) {
       if (res?.ok) viewingId = null;
       else momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
       render();
-    });
+    }, more);
     remove.classList.add('danger');
   }
   view.append(actions);
+  if (more.childElementCount) view.append(more);
   if (editing) {
     view.append(el('p', 'muted', 'Changes save when you leave a field. A new speaker name applies to every line with the old name. Empty a line to delete it.'));
     if (meeting.mom) view.append(el('p', 'muted', 'The existing MoM changes only when you regenerate it.'));
@@ -468,7 +495,12 @@ let historyQuery = '';
 function historyList(items) {
   const found = items.filter((m) => M.matchesSearch(m, historyQuery));
   if (!found.length) return [el('p', 'muted', 'No meetings match.')];
-  return found.map((m) => {
+  const now = Date.now();
+  let group = null;
+  return found.flatMap((m) => {
+    const heading = M.dateGroup(m.startedAt, now);
+    const headed = heading === group ? [] : [el('h3', 'group', heading)];
+    group = heading;
     const item = el('button', 'item');
     item.append(
       raw(el('div', 'who', m.title)),
@@ -478,7 +510,7 @@ function historyList(items) {
     const snippet = M.searchSnippet(m, historyQuery);
     if (snippet) item.append(raw(el('div', 'snippet', snippet)));
     item.addEventListener('click', () => { viewingId = m.id; render(); });
-    return item;
+    return [...headed, item];
   });
 }
 
@@ -535,14 +567,36 @@ async function renderSettings(epoch) {
   };
   const show = (input, on) => { rowOf.get(input).hidden = !on; };
   const { DEFAULT_BASE_URL: DEFAULT_BASE, DEFAULT_MODEL } = globalThis.MeetOpenAI;
-  const baseUrl = field('Base URL (OpenAI-compatible)',
+  view.append(el('h3', null, 'AI for minutes of meeting'));
+  const preset = field('AI service', document.createElement('select'));
+  const { LLM_PRESETS } = globalThis.MeetOpenAI;
+  addOptions(preset, [...LLM_PRESETS.map((p) => [p.baseUrl, p.name]), ['', 'Other']]);
+  const baseUrl = field('AI service address (OpenAI-compatible)',
     mkEl('input', { value: settings.baseUrl ?? DEFAULT_BASE }));
+  const matchPreset = () => {
+    const typed = baseUrl.value.trim().replace(/\/+$/, '');
+    preset.value = LLM_PRESETS.some((p) => p.baseUrl === typed) ? typed : '';
+  };
+  matchPreset();
+  baseUrl.addEventListener('input', matchPreset);
+  preset.addEventListener('change', () => {
+    const chosen = LLM_PRESETS.find((p) => p.baseUrl === preset.value);
+    if (!chosen) return;
+    baseUrl.value = chosen.baseUrl;
+    model.value = chosen.model;
+  });
   const apiKey = field('API key',
     mkEl('input', { type: 'password', value: settings.apiKey ?? '' }));
   const model = field('Model',
     mkEl('input', { value: settings.model ?? DEFAULT_MODEL }));
   const template = field('MoM template ({{transcript}} = transcript)',
     mkEl('textarea', { value: M.momTemplateOf(settings.momTemplate) }));
+  const autoMomBox = mkEl('input', { type: 'checkbox', checked: !!settings.autoMom });
+  const autoMomLabel = el('label');
+  autoMomLabel.append(autoMomBox, 'Make MoM automatically when a transcript is ready (sends it to your LLM)');
+  autoMomBox.addEventListener('change', () => patchSettings({ autoMom: autoMomBox.checked }));
+  view.append(autoMomLabel);
+  view.append(el('h3', null, 'Transcript'));
   const source = field('Transcript source',
     document.createElement('select'));
   addOptions(source, [['caption', 'Meet captions'], ['both', 'Meet captions + recorded audio'], ['audio', 'Record audio']]);
@@ -578,11 +632,11 @@ async function renderSettings(epoch) {
   micWrap.hidden = !HAS_AUDIO;
   view.append(micWrap);
   const ST = globalThis.MeetStt;
-  const sttModeSel = field('STT mode',
+  const sttModeSel = field('Speech-to-text engine',
     document.createElement('select'));
   const engineSaved = ST.sttMode(settings) === 'builtin';
   if (hasEngine || engineSaved) addOptions(sttModeSel, [['builtin', 'Built-in (on this computer)']]);
-  addOptions(sttModeSel, [['whisper-local', 'Local Whisper (your own server)'], ['api', 'STT API']]);
+  addOptions(sttModeSel, [['whisper-local', 'Your own Whisper server'], ['api', 'Online speech-to-text service']]);
   sttModeSel.value = ST.sttMode(settings);
   const INFO = {
     builtin: 'Audio stays on this computer, and no server or internet is needed. Speed depends on your computer, and accuracy is lower than larger models on your own server.',
@@ -595,13 +649,13 @@ async function renderSettings(epoch) {
   view.append(sttInfo);
   const savedMode = ST.sttMode(settings);
   const initialUrl = settings.sttBaseUrl || (savedMode === 'whisper-local' ? ST.WHISPER_DEFAULT : '');
-  const sttBaseUrl = field('STT Base URL',
+  const sttBaseUrl = field('Speech-to-text address',
     mkEl('input', { value: initialUrl }));
-  const sttApiKey = field('STT API key (empty = no auth)',
+  const sttApiKey = field('Speech-to-text API key (empty if none)',
     mkEl('input', { type: 'password', value: settings.sttApiKey ?? '' }));
-  const sttModel = field('STT model',
+  const sttModel = field('Speech-to-text enginel',
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
-  const sttLanguage = field('STT language (empty = detect automatically, or a code such as id, en, ja)',
+  const sttLanguage = field('Speech language (empty = detect automatically, or a code such as id, en, ja)',
     mkEl('input', { value: settings.sttLanguage ?? ST.DEFAULT_LANGUAGE }));
   function applyMode() {
     const audio = HAS_AUDIO;
@@ -647,7 +701,7 @@ async function renderSettings(epoch) {
       throw new Error(`Could not connect to STT ${host}.`);
     }
     if (res.status === 401 || res.status === 403) {
-      throw new Error(`STT ${host}: HTTP ${res.status} (wrong or empty STT API key?)`);
+      throw new Error(`STT ${host}: HTTP ${res.status} (wrong or empty Online speech-to-text service key?)`);
     }
     if (res.status === 404 || res.status === 405 || res.status === 501) {
       return ` (STT ${host}: the server does not support /models, HTTP ${res.status}. Check it yourself.)`;
@@ -723,11 +777,6 @@ async function renderSettings(epoch) {
   const actions = el('div', 'actions');
   actions.append(test, save, note);
   view.append(actions);
-  const autoMomBox = mkEl('input', { type: 'checkbox', checked: !!settings.autoMom });
-  const autoMomLabel = el('label');
-  autoMomLabel.append(autoMomBox, 'Make MoM automatically when a transcript is ready (sends it to your LLM)');
-  autoMomBox.addEventListener('change', () => patchSettings({ autoMom: autoMomBox.checked }));
-  view.append(autoMomLabel);
   for (const row of Host?.settingsRows(settings) ?? []) view.append(row);
   view.append(el('h3', null, 'Backup'));
   const bnote = el('span', 'muted', '');

@@ -22,7 +22,7 @@ Seluruh data rapat disimpan secara lokal di peramban (*browser*) Anda. Tanpa ser
 * **Multi-Sumber Transkripsi:** Dengan **Transcript source** = *Record audio*, *caption* bawaan Google Meet (menyertakan nama pembicara) dan rekaman audio *tab* (via STT) digabung dalam satu linimasa rapat, diurutkan menurut waktu.
 * **Rekam Video (Opsional):** Rekam isi *tab* Meet sebagai satu fail `.webm` (720p, VP9, ±250 MB/jam) lewat menu klik kanan **Record meeting audio + video**. Di mode *Meet captions* rekaman ini hanya arsip — transkrip tetap dari caption, audionya tidak dikirim ke STT kecuali Anda menekan **Generate transcript**.
 * **Rekam Mikrofon (Opsional):** Bawaan hanya suara peserta lain (audio *tab*) yang terekam. Nyalakan **Microphone** dari popup ikon — atau centang **Record microphone** di Settings, keduanya kunci yang sama — agar suara Anda ikut dicampur ke rekaman audio dan video; izin mikrofon diminta sekali lewat jendela kecil. Dapat dinyalakan **di tengah rekaman**: mic langsung bergabung tanpa memutus rekaman yang sedang jalan (bagian sebelum itu tetap tanpa mic). Mematikannya di tengah rekaman tidak bisa — hentikan rekamannya dulu.
-* **Endpoint STT Milik Anda:** Arahkan ke *server* Whisper pribadi (whisper.cpp, faster-whisper) di jaringan sendiri, atau ke *endpoint* STT API mana pun yang OpenAI-compatible.
+* **Endpoint STT Milik Anda:** Arahkan ke *server* Whisper pribadi (whisper.cpp, faster-whisper) di jaringan sendiri, atau ke *endpoint* Online speech-to-text service mana pun yang OpenAI-compatible.
 * **Pembuatan MoM Otomatis:** Menghasilkan *context*, *discussion*, peserta, dan *action items* menggunakan *endpoint* LLM yang kompatibel dengan OpenAI (misal: `gpt-4o-mini`). *Template* dapat dikustomisasi.
 * **Fleksibilitas Tanpa API Key:** Anda dapat menyalin *prompt* beserta transkrip ke *clipboard*, atau mengirimkannya secara otomatis ke Google Gemini atau ChatGPT di *tab* baru tanpa memerlukan integrasi API.
 * **Manajemen Riwayat Lokal:** Transkrip, MoM, dan setelan tersimpan di `chrome.storage.local`; potongan audio di IndexedDB. Ekspor riwayat ke `.txt` atau `.md` kapan saja.
@@ -137,7 +137,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 4. **Hasilkan MoM:** Setelah rapat selesai, buka *tab* **History** → pilih rapat → buka dropdown **Generate MoM** → **Generate MoM** (atau **Paste into Gemini** / **Paste into ChatGPT** tanpa API key; Anda memeriksa prompt dan menekan kirim sendiri). Dropdown **Copy** berisi *Copy transcript* / *Copy prompt + transcript*; dropdown **Download** berisi *.txt*, *.md*, dan audio/video rekaman bila ada.
 
 **Konfigurasi Awal (Settings):**
-Sebelum penggunaan pertama, isi menu *Settings*: masukkan API Key LLM, pilih Model, dan sesuaikan *Template* MoM (wajib memuat variabel `{{transcript}}` — Simpan memperingatkan bila hilang). Blok **STT mode** dipakai untuk transkrip audio — otomatis (Meet bermode *Record audio*) maupun lewat **Generate transcript** (Chrome/Chromium saja — di Firefox blok ini tidak ada). Tombol **Test connection** menguji endpoint LLM, ditambah endpoint STT bila **Transcript source** = *Record audio*. Izin akses ke alamat STT diminta saat Simpan di mode *Record audio*, atau saat pertama kali menekan **Generate transcript** di mode lain.
+Sebelum penggunaan pertama, isi menu *Settings*: masukkan API Key LLM, pilih Model, dan sesuaikan *Template* MoM (wajib memuat variabel `{{transcript}}` — Simpan memperingatkan bila hilang). Blok **Speech-to-text engine** dipakai untuk transkrip audio — otomatis (Meet bermode *Record audio*) maupun lewat **Generate transcript** (Chrome/Chromium saja — di Firefox blok ini tidak ada). Tombol **Test connection** menguji endpoint LLM, ditambah endpoint STT bila **Transcript source** = *Record audio*. Izin akses ke alamat STT diminta saat Simpan di mode *Record audio*, atau saat pertama kali menekan **Generate transcript** di mode lain.
 
 ---
 
@@ -147,7 +147,7 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 
 ### Cara Merekam Audio
 
-1. Buka menu **Settings** → konfigurasikan **STT mode**. Transkrip otomatis saat Stop hanya berjalan untuk Google Meet dengan **Transcript source** = *Record audio*. Rekaman lain — Meet bermode *Meet captions*, Teams, Webex, Slack, Discord, dan Zoom — disimpan sebagai arsip audio/video; buka entrinya di **History** lalu klik **Generate transcript** bila butuh transkrip audionya (tombol hanya muncul selama audionya masih tersimpan).
+1. Buka menu **Settings** → konfigurasikan **Speech-to-text engine**. Transkrip otomatis saat Stop hanya berjalan untuk Google Meet dengan **Transcript source** = *Record audio*. Rekaman lain — Meet bermode *Meet captions*, Teams, Webex, Slack, Discord, dan Zoom — disimpan sebagai arsip audio/video; buka entrinya di **History** lalu klik **Generate transcript** bila butuh transkrip audionya (tombol hanya muncul selama audionya masih tersimpan).
 2. Di dalam panggilan, mulai rekam lewat salah satu dari tiga jalur: **popup ikon ekstensi** → *Record*, **klik kanan** di halaman, atau pintasan keyboard. Pilihan *Audio + video* ikut merekam tampilan *tab* (720p VP9, ±250 MB/jam, diunduh sebagai satu fail `.webm` lewat tombol **Download video** di Riwayat).
 3. Di Google Meet, perekaman berhenti otomatis saat Anda keluar panggilan. **Di Teams, Webex, Slack, Discord, dan Zoom tidak** — tidak ada pelacak sesi di sana, jadi rekaman hanya berhenti sendiri bila tab yang direkam ditutup. Selain itu, hentikan sendiri lewat popup, panel, pintasan `Alt+Shift+S`, atau klik kanan → **Stop recording** (Meet/Discord saja). Setelah Stop, status **Saving recording…** (arsip) atau **Transcribing…** (transkrip otomatis) tampil sampai rekaman selesai diproses.
 
@@ -166,11 +166,11 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 | Mode (label di UI) | Kebutuhan | Audio dikirim ke | Deskripsi |
 | --- | --- | --- | --- |
 | **Built-in (on this computer)** | Hanya aplikasi desktop | Tidak ke mana pun: tetap di komputer Anda | **[Default desktop]** Memakai mesin whisper.cpp bawaan |
-| **Local Whisper (your own server)** | Server Whisper OpenAI-compatible | URL yang **Anda** isi | **[Default]** Terisi `http://localhost:8080/v1` |
-| **STT API** | URL + API Key (**wajib diisi**) | 🌐 Endpoint tersebut | Tercepat. Menyediakan opsi Model & Bahasa STT. |
+| **Your own Whisper server** | Server Whisper OpenAI-compatible | URL yang **Anda** isi | **[Default]** Terisi `http://localhost:8080/v1` |
+| **Online speech-to-text service** | URL + API Key (**wajib diisi**) | 🌐 Endpoint tersebut | Tercepat. Menyediakan opsi Model & Bahasa STT. |
 
 > [!WARNING]
-> Pada mode **STT API**, kalau **STT Base URL** dibiarkan kosong, ekstensi jatuh ke *Base URL* LLM Anda dan memakai **API key LLM** — audio rapat akan dikirim ke endpoint chat (default `https://api.openai.com/v1`). Isi STT Base URL secara eksplisit.
+> Pada mode **Online speech-to-text service**, kalau **Speech-to-text address** dibiarkan kosong, ekstensi jatuh ke *Base URL* LLM Anda dan memakai **API key LLM** — audio rapat akan dikirim ke endpoint chat (default `https://api.openai.com/v1`). Isi Speech-to-text address secara eksplisit.
 
 ---
 
@@ -179,7 +179,7 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 Ekstensi ini dirancang dengan pendekatan *privacy-first*:
 
 * **Penyimpanan Lokal:** API Key Anda disimpan secara eksklusif di `chrome.storage.local` perangkat Anda dan tidak pernah dikomit ke repositori. Tidak ada telemetri maupun analitik di dalam ekstensi ini.
-* **Whisper Lokal:** audio dikirim ke URL yang **Anda sendiri** isi di *STT Base URL* (default `http://localhost:8080/v1`). Ekstensi **tidak** memaksa URL itu benar-benar lokal — pastikan isinya memang server Anda. Bila *STT API key* pernah diisi, nilainya tetap ikut sebagai header `Authorization` walaupun field-nya tersembunyi di mode ini.
+* **Whisper Lokal:** audio dikirim ke URL yang **Anda sendiri** isi di *Speech-to-text address* (default `http://localhost:8080/v1`). Ekstensi **tidak** memaksa URL itu benar-benar lokal — pastikan isinya memang server Anda. Bila *Online speech-to-text service key* pernah diisi, nilainya tetap ikut sebagai header `Authorization` walaupun field-nya tersembunyi di mode ini.
 * **Transparansi Endpoint:** MoM dihasilkan melalui *endpoint* pilihan Anda. Pastikan *endpoint* yang Anda konfigurasikan sesuai dengan kebijakan keamanan data perusahaan atau tim Anda.
 * **Cari:** **History** punya kotak cari untuk judul, transkrip, dan MoM.
 * **Word dan PDF:** Menu **Download** menyimpan `.docx` atau PDF sebuah meeting.
