@@ -75,6 +75,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   const ctx = vm.createContext({ chrome, console, URL, setTimeout: unrefTimeout, clearTimeout });
   vm.runInContext('globalThis.MeetAudioStore = {}; globalThis.MeetStt = {};', ctx);
   ctx.MeetAudioStore.listRecordings = async () => recordings;
+  ctx.MeetAudioStore.retagAudioMeta = async () => {};
   ctx.MeetAudioStore.removeRecordings = async (id) => {
     removedAudio.push(id);
     await removeRecordings(id);
@@ -466,7 +467,7 @@ test('baris audio baru tersimpan tanpa pemberitahuan itu', async () => {
 });
 
 test('with captions + audio, an automatic run that adds nothing stays quiet', async () => {
-  const sw = loadSw({ offscreen: null, store: { ...captionMeeting(), settings: { transcriptSource: 'both' } } });
+  const sw = loadSw({ offscreen: null, withMenus: true, store: { ...captionMeeting(), settings: { transcriptSource: 'both' } } });
   await sw.ask(finished('halo semuanya mari kita mulai'));
   await flush();
   await flush();
@@ -474,7 +475,7 @@ test('with captions + audio, an automatic run that adds nothing stays quiet', as
 });
 
 test('with captions + audio, pressing the button still tells you nothing was added', async () => {
-  const sw = loadSw({ offscreen: null, store: { ...captionMeeting(), settings: { transcriptSource: 'both' } } });
+  const sw = loadSw({ offscreen: null, withMenus: true, store: { ...captionMeeting(), settings: { transcriptSource: 'both' } } });
   await sw.ask({ ...finished('halo semuanya mari kita mulai'), replace: true });
   await flush();
   await flush();
@@ -558,13 +559,13 @@ test('automatic MoM runs from captions when a recording was only archived', asyn
 });
 
 test('automatic MoM waits for the transcript when one is coming', async () => {
-  const sw = loadSw({ offscreen: null, store: recordedMeeting('both') });
+  const sw = loadSw({ offscreen: null, withMenus: true, store: recordedMeeting('both') });
   await endCall(sw);
   assert.equal(sw.store['meeting:abc-defg-hij'].mom, null);
 });
 
 test('automatic MoM uses captions when the audio transcript comes back empty', async () => {
-  const sw = loadSw({ offscreen: null, store: recordedMeeting('both') });
+  const sw = loadSw({ offscreen: null, withMenus: true, store: recordedMeeting('both') });
   await sw.ask({ type: 'audio-transcript', meetingId: 'abc-defg-hij', baseTime: 500, segments: [] });
   await wait();
   assert.equal(sw.store['meeting:abc-defg-hij'].mom, 'MOM OTOMATIS');
@@ -631,7 +632,7 @@ test('the icon warns when captions are off', async () => {
 });
 
 test('the icon warns when captions + audio has no recording', async () => {
-  const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'both' } } });
+  const sw = loadSw({ offscreen: null, withMenus: true, store: { settings: { transcriptSource: 'both' } } });
   await wait();
   await inCall(sw, true);
   assert.equal(sw.badge(), '!');
@@ -711,4 +712,52 @@ test('no limit deletes nothing', async () => {
   await sw.ask({ type: 'delete-old-meetings' });
   await wait();
   assert.deepEqual(sw.store.meetings, ['old']);
+});
+
+test('a mark in a recurring Meet code goes on the new meeting', async () => {
+  const old = Date.now() - 7 * 86400000;
+  const sw = loadSw({ offscreen: null, store: {
+    meetings: ['abc-defg-hij'],
+    'meeting:abc-defg-hij': { id: 'abc-defg-hij', title: 'Last week', startedAt: old, endedAt: old, segments: [{ id: 'x', speaker: 'Ani', text: 'lama', t: old }], mom: null },
+  } });
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'abc-defg-hij', inCall: true, captionsOn: true });
+  await wait();
+  await sw.ask({ type: 'mark-moment' });
+  await wait();
+  const today = sw.store['meeting:abc-defg-hij'];
+  assert.equal(today.marks.length, 1);
+  assert.equal(today.segments.length, 0);
+  assert.equal(sw.store.meetings.length, 2);
+});
+
+test('a meeting running in a second tab cannot be deleted or edited', async () => {
+  const sw = loadSw({ offscreen: null, store: { meetings: ['aaa-aaaa-aaa', 'bbb-bbbb-bbb'],
+    'meeting:aaa-aaaa-aaa': { id: 'aaa-aaaa-aaa', startedAt: Date.now(), segments: [] },
+    'meeting:bbb-bbbb-bbb': { id: 'bbb-bbbb-bbb', startedAt: Date.now(), segments: [{ id: 'x', speaker: 'A', text: 'a', t: 1 }] } } });
+  const first = sw.connect(1);
+  first.send({ type: 'status', meetingId: 'aaa-aaaa-aaa', inCall: true, captionsOn: true });
+  const second = sw.connect(2);
+  second.send({ type: 'status', meetingId: 'bbb-bbbb-bbb', inCall: true, captionsOn: true });
+  await wait();
+  assert.equal((await sw.ask({ type: 'delete-meeting', id: 'bbb-bbbb-bbb' })).ok, false);
+  assert.equal((await sw.ask({ type: 'edit-transcript', id: 'bbb-bbbb-bbb', change: { segmentId: 'x', text: 'y' } })).ok, false);
+  second.disconnect();
+  await wait();
+  assert.equal((await sw.ask({ type: 'edit-transcript', id: 'bbb-bbbb-bbb', change: { segmentId: 'x', text: 'y' } })).ok, true);
+});
+
+test('new captions keep a name you chose', async () => {
+  const sw = loadSw({ offscreen: null, store: { meetings: ['abc-defg-hij'],
+    'meeting:abc-defg-hij': { id: 'abc-defg-hij', startedAt: Date.now(), speakerNames: { You: 'Dimas' }, segments: [] } } });
+  const port = sw.connect(1);
+  port.send({ type: 'segments', meetingId: 'abc-defg-hij', title: '', segs: [{ id: 'n', speaker: 'You', text: 'halo', t: Date.now() }] });
+  await wait();
+  assert.equal(sw.store['meeting:abc-defg-hij'].segments[0].speaker, 'Dimas');
+});
+
+test('Firefox leaves captions + audio too, since it cannot record', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'both' } } });
+  await wait();
+  assert.equal(sw.store.settings.transcriptSource, 'caption');
 });

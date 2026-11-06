@@ -71,6 +71,7 @@ beforeEach(() => {
     transcribeCalls: [],
     async transcribeAudio(args) {
       this.transcribeCalls.push(args);
+      this.onTranscribe?.();
       if (this.fail) throw this.fail;
       if (this.failFor === args.blob.track) throw new Error(`STT ${args.blob.track} mati`);
       return { segments: [{ start: 0, text: `teks ${args.blob.track}` }] };
@@ -766,4 +767,21 @@ test('old meetings are deleted at startup when the limit is set', async () => {
   await ctl.recover();
   assert.deepEqual(data.meetings, ['desktop-2']);
   assert.equal(data['meeting:desktop-1'], undefined);
+});
+
+test('an old file just imported survives auto-delete', async () => {
+  data.settings = { ...data.settings, deleteAfterDays: 30 };
+  await ctl.handle({ type: 'import-audio', file: { name: 'old.mp3', lastModified: NOW - 90 * 86400000 } });
+  await ctl.recover();
+  assert.equal(data.meetings.length, 1);
+  assert.equal(imported().keepFrom, NOW);
+});
+
+test('a warning during import keeps Cancel available', async () => {
+  fakeOpenAI.onTranscribe = () => ctl.warn('Peringatan');
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  fakeOpenAI.onTranscribe = null;
+  const warned = recStates().find((s) => s.error === 'Peringatan');
+  assert.equal(warned.importing, true);
+  assert.ok(!recStates().at(-1).importing);
 });

@@ -153,3 +153,12 @@ test('a failed import puts the old data back', async () => {
   await assert.rejects(importBackup(zip), /encryption/);
   assert.deepEqual(store, before);
 });
+
+test('restored meetings are protected from auto-delete for now', async () => {
+  const calls = stubEnv();
+  const before = Date.now();
+  await importBackup(await zipOf({ version: 1, storage: { meetings: ['a'], 'meeting:a': { id: 'a', endedAt: 1 }, settings: { deleteAfterDays: 5 } } }));
+  assert.ok(calls.set['meeting:a'].keepFrom >= before);
+  assert.deepEqual(calls.set.settings, { deleteAfterDays: 5 });
+  assert.deepEqual(calls.set.meetings, ['a']);
+});

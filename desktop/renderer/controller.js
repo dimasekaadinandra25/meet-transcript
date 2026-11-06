@@ -40,7 +40,7 @@
     function broadcast(extra = {}) {
       publishState();
       notify({ type: 'rec-state', recording: rec.recording, transcribing: rec.transcribing,
-        saving: false, muted: recorder.isMuted(), ...extra });
+        saving: false, muted: recorder.isMuted(), importing: !!importRun, ...extra });
     }
 
     const addMeeting = (meeting) => enqueue(async () => {
@@ -165,7 +165,7 @@
       const segments = tracks.mergeTracks({ system: finishedTrack(session.done.system), mic: finishedTrack(session.done.mic),
         chunkMs: source.chunkMs, baseTime: source.baseTime });
       await updateMeeting(session.meetingId, (meeting) => {
-        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, names: meeting.speakerNames });
+        merge.replaceMeetingAudio(meeting, segments, { baseTime: source.baseTime });
       });
     }
 
@@ -217,7 +217,7 @@
       const segments = tracks.mergeTracks({ system: systemTrack, mic: micTrack,
         chunkMs: source.chunkMs, baseTime: source.baseTime });
       await updateMeeting(meetingId, (meeting) => {
-        meeting.segments = merge.replaceAudioSegments(meeting.segments, segments, { baseTime: source.baseTime, replace, names: meeting.speakerNames });
+        merge.replaceMeetingAudio(meeting, segments, { baseTime: source.baseTime, replace });
       });
       if (!segments.length) return 'Empty transcript. STT returned no text, so check the speech-to-text address and model in Settings.';
       const failures = [...systemTrack.results, ...micTrack.results].filter((r) => r.error);
@@ -353,7 +353,7 @@
       const results = [];
       for (const [i, part] of parts.entries()) {
         if (run.cancelled) break;
-        broadcast({ done: i, total: parts.length, importing: true });
+        broadcast({ done: i, total: parts.length });
         try {
           results.push(await sendToStt(part, endpoint));
         } catch (e) {
@@ -368,14 +368,17 @@
       const meetingId = `desktop-${now()}`;
       const run = { cancelled: false };
       importRun = run;
-      const stopIfCancelled = () => {
-        if (!run.cancelled) return false;
+      const finish = (error) => {
         rec = { ...IDLE };
-        broadcast({ error: null });
-        return true;
+        importRun = null;
+        broadcast({ error });
+      };
+      const stopIfCancelled = () => {
+        if (run.cancelled) finish(null);
+        return run.cancelled;
       };
       rec = { ...rec, transcribing: true, meetingId };
-      broadcast({ error: null, importing: true });
+      broadcast({ error: null });
       try {
         const { parts, durationMs } = await splitAudio(file, IMPORT_PART_MS / 1000);
         if (stopIfCancelled()) return { ok: false, cancelled: true };
@@ -387,16 +390,14 @@
           throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the speech-to-text address and model in Settings.');
         }
         const startedAt = file.lastModified - durationMs;
-        await addMeeting({ id: meetingId, title: file.name.replace(/\.[^.]*$/, ''), startedAt, endedAt: file.lastModified, mom: null, source: 'audio',
+        await addMeeting({ id: meetingId, title: file.name.replace(/\.[^.]*$/, ''), startedAt, endedAt: file.lastModified, keepFrom: now(), mom: null, source: 'audio',
           segments: merge.replaceAudioSegments([], stt.mergeSttChunks(results, IMPORT_PART_MS, startedAt), { baseTime: startedAt }) });
-        rec = { ...IDLE };
         setActive(meetingId);
-        broadcast({ error: failures.length ? `${failures.length}/${parts.length} parts failed to transcribe: ${failures[0].error}` : null });
+        finish(failures.length ? `${failures.length}/${parts.length} parts failed to transcribe: ${failures[0].error}` : null);
         if (!failures.length) autoMom(meetingId).catch((e) => console.error(e));
         return { ok: true };
       } catch (e) {
-        rec = { ...IDLE };
-        broadcast({ error: e.message });
+        finish(e.message);
         return { ok: false, error: e.message };
       }
     }

@@ -66,3 +66,14 @@ test('messages built by the desktop app are translated', () => {
   const texts = ['no answer within 15 seconds', 'exit code 5', 'API key encryption is not available on this computer.'];
   for (const text of texts) assert.notEqual(inIndonesian(() => t(text)), text);
 });
+
+test('open-circle status lines are translated', () => {
+  const text = '○ Speech-to-text: choose a service in Settings.';
+  assert.equal(inIndonesian(() => t(text)), '○ Speech-to-text: pilih layanan di Pengaturan.');
+});
+
+test('field names have no leftovers from the rename', () => {
+  for (const file of ['panel/panel.js', 'lib/i18n.js', 'README.en.md', 'README.md']) {
+    assert.ok(!readFileSync(file, 'utf8').includes('enginel'), file);
+  }
+});

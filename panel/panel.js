@@ -9,7 +9,7 @@ let progressStart = 0;
 const busyLabel = () => {
   if (recState.saving) return 'Saving recording…';
   if (!recState.total) return 'Transcribing…';
-  const left = M.minutesLeft(recState.done, recState.total, Date.now() - progressStart);
+  const left = progressStart ? M.minutesLeft(recState.done, recState.total, Date.now() - progressStart) : null;
   const count = `Transcribing… ${recState.done}/${recState.total}`;
   return left ? `${count}, about ${left} min left` : count;
 };
@@ -96,6 +96,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     const wasActive = recState.recording || recState.transcribing;
     if (wasActive !== (msg.recording || msg.transcribing)) audioMetaKey = null;
     if (msg.total && !msg.done) progressStart = Date.now();
+    if (!msg.transcribing) progressStart = 0;
     recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, importing: !!msg.importing,
       done: msg.done ?? 0, total: msg.total ?? 0,
       error: 'error' in msg ? msg.error : recState.error };
@@ -151,6 +152,7 @@ let lastRenderedKey = null;
 let editingId = null;
 let asking = null;
 const askAnswers = new Map();
+const askDrafts = new Map();
 const EDIT_LINE_CHARS = 40;
 let audioMeta = null;
 let audioMetaKey = null;
@@ -334,8 +336,9 @@ async function renderMeeting(id, live, epoch) {
   dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatTranscript(meeting.segments)));
   dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
   dl.item('Download .docx', async () => download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting)));
-  dl.item('Download .srt', () => download(`${meeting.title}.srt`, M.formatSubtitles(meeting.segments, 'srt')));
-  dl.item('Download .vtt', () => download(`${meeting.title}.vtt`, M.formatSubtitles(meeting.segments, 'vtt')));
+  const subtitleStart = () => (recs.length ? Math.min(...recs.map((r) => r.baseTime)) : meeting.startedAt);
+  dl.item('Download .srt', () => download(`${meeting.title}.srt`, M.formatSubtitles(meeting.segments, 'srt', subtitleStart())));
+  dl.item('Download .vtt', () => download(`${meeting.title}.vtt`, M.formatSubtitles(meeting.segments, 'vtt', subtitleStart())));
   dl.item('Save as PDF', async () => {
     if (!Host) {
       chrome.tabs.create({ url: chrome.runtime.getURL(`panel/print.html?id=${encodeURIComponent(meeting.id)}`) });
@@ -386,7 +389,7 @@ async function renderMeeting(id, live, epoch) {
     if (reable.length) {
       const jalankan = async (r, setLabel) => {
         const tag = `audio:${r.baseTime}:`;
-        const editedHere = meeting.segments.some((s) => s.edited && String(s.id ?? '').startsWith(tag));
+        const editedHere = meeting.deletedFrom?.includes(r.baseTime) || meeting.segments.some((s) => s.edited && String(s.id ?? '').startsWith(tag));
         if (editedHere && !confirm(t('Retranscribing replaces your edits to the lines from this recording. Continue?'))) {
           render();
           return;
@@ -452,7 +455,7 @@ async function renderMeeting(id, live, epoch) {
   if (!editing && meeting.segments.length) view.append(askBox(meeting));
   const list = raw(el('div'));
   const playable = running ? [] : recs.filter((r) => !r.legacy && (r.count > 0 || r.systemCount > 0 || r.micCount > 0));
-  const recordingAt = (t) => playable.filter((r) => r.baseTime <= t).sort((a, b) => b.baseTime - a.baseTime)[0];
+  const recordingAt = (t) => playable.find((r) => M.coversLine(r, t));
   if (editing) {
     for (const s of meeting.segments) list.append(segmentEditor(meeting, s));
   } else {
@@ -495,6 +498,7 @@ async function loadLineAudio(rec, index) {
 async function playLine(meeting, s, next, rec) {
   const same = playing?.segmentId === s.id;
   stopPlaying();
+  momErrors.delete(meeting.id);
   if (same) return render();
   const session = { segmentId: s.id, context: new AudioContext() };
   playing = session;
@@ -505,8 +509,10 @@ async function playLine(meeting, s, next, rec) {
     if (!blobs.length) throw new Error('no audio');
     const buffers = await Promise.all(blobs.map(async (b) => session.context.decodeAudioData(await b.arrayBuffer())));
     if (playing !== session) return undefined;
+    const usable = buffers.filter((buffer) => offset < buffer.duration);
+    if (!usable.length) throw new Error('no audio');
     const seconds = Math.min(PLAY_MAX_SECONDS, Math.max(PLAY_MIN_SECONDS, next ? (next.t - s.t) / 1000 + 1 : PLAY_MIN_SECONDS * 3));
-    for (const buffer of buffers) {
+    for (const buffer of usable) {
       const source = session.context.createBufferSource();
       source.buffer = buffer;
       source.connect(session.context.destination);
@@ -529,14 +535,17 @@ async function playLine(meeting, s, next, rec) {
 function askBox(meeting) {
   const box = el('div', 'ask');
   const row = el('div', 'ask-row');
-  const input = mkEl('input', { placeholder: 'Ask about this meeting' });
+  const draft = askDrafts.get(meeting.id) ?? '';
+  const input = mkEl('input', { placeholder: 'Ask about this meeting', value: draft, defaultValue: draft });
   input.dataset.editKey = 'ask';
+  input.addEventListener('input', () => askDrafts.set(meeting.id, input.value));
   input.setAttribute('aria-label', 'Ask about this meeting');
   const send = async () => {
     const question = input.value.trim();
     if (!question || asking) return;
     asking = meeting.id;
     input.value = '';
+    askDrafts.delete(meeting.id);
     momErrors.delete(meeting.id);
     render();
     const res = await chrome.runtime.sendMessage({ type: 'ask-meeting', id: meeting.id, question }).catch(() => null);
@@ -785,7 +794,7 @@ async function renderSettings(epoch) {
     mkEl('input', { value: initialUrl }));
   const sttApiKey = field('Speech-to-text API key (empty if none)',
     mkEl('input', { type: 'password', value: settings.sttApiKey ?? '' }));
-  const sttModel = field('Speech-to-text enginel',
+  const sttModel = field('Speech-to-text model',
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
   const sttLanguage = field('Speech language (empty = detect automatically, or a code such as id, en, ja)',
     mkEl('input', { value: settings.sttLanguage ?? ST.DEFAULT_LANGUAGE }));

@@ -481,9 +481,77 @@ test('only meetings past the limit are expired', () => {
   const { expiredMeetingIds } = globalThis.MeetMerge;
   const day = 86400000;
   const now = 100 * day;
-  const list = [{ id: 'old', endedAt: 89 * day }, { id: 'new', endedAt: 95 * day }, { id: 'running', endedAt: null }];
+  const list = [{ id: 'old', endedAt: 89 * day }, { id: 'new', endedAt: 95 * day }, { id: 'running', endedAt: null, startedAt: 99 * day }];
   assert.deepEqual(expiredMeetingIds(list, 10, now), ['old']);
   assert.deepEqual(expiredMeetingIds(list, 0, now), []);
   assert.deepEqual(expiredMeetingIds(list, 'x', now), []);
   assert.deepEqual(expiredMeetingIds(list, undefined, now), []);
+});
+
+test('a meeting left open by a crash can still expire', () => {
+  const { expiredMeetingIds } = globalThis.MeetMerge;
+  const day = 86400000;
+  assert.deepEqual(expiredMeetingIds([{ id: 'crashed', endedAt: null, startedAt: day }], 10, 100 * day), ['crashed']);
+});
+
+test('a just imported or restored meeting does not expire', () => {
+  const { expiredMeetingIds } = globalThis.MeetMerge;
+  const day = 86400000;
+  assert.deepEqual(expiredMeetingIds([{ id: 'imported', endedAt: day, keepFrom: 99 * day }], 10, 100 * day), []);
+  assert.deepEqual(expiredMeetingIds([{ id: 'imported', endedAt: day, keepFrom: 50 * day }], 10, 100 * day), ['imported']);
+});
+
+test('a meeting with no dates is left alone', () => {
+  const { expiredMeetingIds } = globalThis.MeetMerge;
+  assert.deepEqual(expiredMeetingIds([{ id: 'empty', segments: [] }], 10, 100 * 86400000), []);
+});
+
+test('subtitles line up with the recording when a start is given', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  const out = formatSubtitles([{ speaker: '', text: 'halo', t: 112000 }], 'vtt', 100000);
+  assert.ok(out.includes('00:00:12.000 --> '));
+});
+
+test('lines before the recording start at zero with valid times', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  const out = formatSubtitles([{ speaker: '', text: 'a', t: 40000 }, { speaker: '', text: 'b', t: 50000 }, { speaker: '', text: 'c', t: 105000 }], 'vtt', 100000);
+  const stamps = out.split('\n').filter((line) => line.includes('-->'));
+  assert.equal(stamps.length, 3);
+  assert.ok(stamps[0].startsWith('00:00:00.000 --> 00:00:00.001'), stamps[0]);
+  assert.ok(stamps[2].startsWith('00:00:05.000'), stamps[2]);
+});
+
+test('a blank line inside an edited line does not break the subtitle', () => {
+  const { formatSubtitles } = globalThis.MeetMerge;
+  const out = formatSubtitles([{ speaker: 'Ani', text: 'satu\n\n  dua', t: 0 }], 'vtt');
+  assert.ok(out.includes('Ani: satu dua\n'));
+});
+
+test('a line only counts as recorded inside the saved parts', () => {
+  const { coversLine } = globalThis.MeetMerge;
+  const rec = { baseTime: 1000, chunkMs: 100, count: 0, systemCount: 2, micCount: 1 };
+  assert.equal(coversLine(rec, 1000), true);
+  assert.equal(coversLine(rec, 1199), true);
+  assert.equal(coversLine(rec, 1200), false);
+  assert.equal(coversLine(rec, 999), false);
+});
+
+test('deleting an audio line is remembered, and a retranscribe clears it', () => {
+  const { editMeeting, replaceMeetingAudio } = globalThis.MeetMerge;
+  const meeting = { segments: [{ id: 'audio:7:0', speaker: 'Others', text: 'a', t: 1 }, { id: 'cap', speaker: 'Ani', text: 'b', t: 2 }] };
+  editMeeting(meeting, { segmentId: 'cap', text: '' });
+  assert.equal(meeting.deletedFrom, undefined);
+  editMeeting(meeting, { segmentId: 'audio:7:0', text: '' });
+  assert.deepEqual(meeting.deletedFrom, [7]);
+  replaceMeetingAudio(meeting, [{ t: 1, speaker: 'Others', text: 'baru' }], { baseTime: 7 });
+  assert.deepEqual(meeting.deletedFrom, [7]);
+  replaceMeetingAudio(meeting, [{ t: 1, speaker: 'Others', text: 'baru' }], { baseTime: 7, replace: true });
+  assert.deepEqual(meeting.deletedFrom, []);
+});
+
+test('audio put into a meeting uses its speaker names', () => {
+  const { replaceMeetingAudio } = globalThis.MeetMerge;
+  const meeting = { segments: [], speakerNames: { Others: 'Budi' } };
+  replaceMeetingAudio(meeting, [{ t: 1, speaker: 'Others', text: 'a' }], { baseTime: 7 });
+  assert.equal(meeting.segments[0].speaker, 'Budi');
 });

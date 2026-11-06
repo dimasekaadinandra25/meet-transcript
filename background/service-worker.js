@@ -184,7 +184,7 @@ async function startFromTab(tab, video) {
 if (!chrome.tabCapture) {
   const useCaptionsOnly = async () => {
     const { settings } = await chrome.storage.local.get('settings');
-    if (settings?.transcriptSource !== 'audio') return;
+    if (settings?.transcriptSource !== 'audio' && settings?.transcriptSource !== 'both') return;
     await chrome.storage.local.set({ settings: { ...settings, transcriptSource: 'caption' } });
   };
   useCaptionsOnly();
@@ -393,8 +393,7 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
   }
   const meeting = data[key] ?? newMeeting(meetingId, meetingId, baseTime ?? Date.now());
   meeting.source = 'audio';
-  meeting.segments = globalThis.MeetMerge.replaceAudioSegments(
-    meeting.segments, segments, { baseTime: baseTime ?? 0, replace: !!replace, legacy: !!legacy, names: meeting.speakerNames });
+  globalThis.MeetMerge.replaceMeetingAudio(meeting, segments, { baseTime: baseTime ?? 0, replace: !!replace, legacy: !!legacy });
   await storeMeeting(meetingId, meeting, data);
   notifyPanel({ type: 'meeting-updated', id: meetingId });
   const tag = `audio:${baseTime ?? 0}:`;
@@ -413,7 +412,10 @@ async function saveSegments({ meetingId, title, segs }) {
   const meeting = data[key] ?? newMeeting(meetingId, title || meetingId, Date.now());
   if (title) meeting.title = title;
   meeting.endedAt = null;
-  for (const seg of segs) globalThis.MeetMerge.upsertSegment(meeting.segments, seg);
+  const names = meeting.speakerNames ?? {};
+  for (const seg of segs) {
+    globalThis.MeetMerge.upsertSegment(meeting.segments, Object.hasOwn(names, seg.speaker) ? { ...seg, speaker: names[seg.speaker] } : seg);
+  }
   await storeMeeting(meetingId, meeting, data);
   if (!active.id || active.id === meetingId) active.lastSegmentAt = Date.now();
   notifyPanel({ type: 'meeting-updated', id: meetingId });
@@ -491,7 +493,8 @@ const enqueueWrite = (fn) => {
   return writeChain;
 };
 
-const meetingRunning = (id) => rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`) || (active.inCall && active.id === id);
+const openCalls = new Set();
+const meetingRunning = (id) => rec.meetingId === id || String(id).startsWith(`${rec.meetingId}@`) || (active.inCall && active.id === id) || openCalls.has(id);
 
 async function removeMeeting(id) {
   if (meetingRunning(id)) throw new Error('This meeting is still running. Stop it before deleting.');
@@ -521,6 +524,7 @@ async function addMark() {
   if (!id) throw new Error('No meeting is running.');
   const key = meetingKey(id);
   const data = await chrome.storage.local.get([key, 'meetings']);
+  await archiveIfStale(id, data);
   const meeting = data[key] ?? newMeeting(id, id, Date.now());
   meeting.marks = [...(meeting.marks ?? []), Date.now()];
   await storeMeeting(id, meeting, data);
@@ -557,6 +561,7 @@ chrome.runtime.onConnect.addListener((port) => {
   let joined = false;
   let ended = false;
   const finish = () => {
+    openCalls.delete(meetingId);
     if (ended || !joined || !meetingId) return;
     ended = true;
     const fromRecordedTab = rec.tabId == null || port.sender?.tab?.id === rec.tabId;
@@ -571,7 +576,10 @@ chrome.runtime.onConnect.addListener((port) => {
       if (msg.joined) joined = true;
       finish();
     } else if (msg.type === 'status') {
-      if (msg.inCall) joined = true;
+      if (msg.inCall) {
+        joined = true;
+        openCalls.add(msg.meetingId);
+      }
       const canClaim = !active.inCall || !active.id || (msg.inCall && active.id === msg.meetingId);
       if (!canClaim) return;
       if (msg.captionsOn && !active.captionsOn) active.captionsOnAt = Date.now();
