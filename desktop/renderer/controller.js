@@ -303,7 +303,7 @@
       if (!settings.apiKey) throw new Error('Add an API key in the Settings tab first.');
       const meeting = await readMeeting(id);
       if (!meeting?.segments.length) throw new Error('The transcript is empty.');
-      const prompt = merge.fillTemplate(settings.momTemplate || merge.DEFAULT_MOM_TEMPLATE,
+      const prompt = merge.fillTemplate(merge.momTemplateOf(settings.momTemplate),
         merge.formatTranscript(meeting.segments));
       const mom = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl, prompt,
         model: settings.model || openai.DEFAULT_MODEL });

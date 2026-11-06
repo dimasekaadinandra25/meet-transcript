@@ -104,7 +104,7 @@ async function getMeeting(id) {
 const safeName = (s) => s.replace(/[\/\\:*?"<>|]/g, '-');
 
 const promptText = (meeting) => M.fillTemplate(
-  settingsCache.momTemplate || M.DEFAULT_MOM_TEMPLATE,
+  M.momTemplateOf(settingsCache.momTemplate),
   M.formatTranscript(meeting.segments));
 
 function download(name, data) {
@@ -482,7 +482,7 @@ async function renderSettings(epoch) {
   const model = field('Model',
     mkEl('input', { value: settings.model ?? DEFAULT_MODEL }));
   const template = field('MoM template ({{transcript}} = transcript)',
-    mkEl('textarea', { value: settings.momTemplate ?? M.DEFAULT_MOM_TEMPLATE }));
+    mkEl('textarea', { value: M.momTemplateOf(settings.momTemplate) }));
   const source = field('Transcript source',
     document.createElement('select'));
   addOptions(source, [['caption', 'Meet captions'], ['audio', 'Record audio']]);

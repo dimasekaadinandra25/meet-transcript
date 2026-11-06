@@ -242,3 +242,35 @@ test('transkrip panjang dengan caption selesai dalam waktu wajar', () => {
   assert.equal(out.length, 2640);
   assert.ok(took < 1000, `took ${took} ms`);
 });
+
+const OLD_DEFAULT = `Buat Minutes of Meeting (MoM) dari transkrip meeting berikut.
+
+Format:
+## Date:
+## Related Project:
+## Participants
+## Context
+## Discussion
+## Action Items (siapa, apa)
+
+Transkrip:
+{{transcript}}`;
+
+test('the default MoM template asks for the language of the meeting', () => {
+  assert.match(DEFAULT_MOM_TEMPLATE, /main language spoken in the transcript/);
+  assert.match(DEFAULT_MOM_TEMPLATE, /including the section headings/);
+  assert.ok(DEFAULT_MOM_TEMPLATE.includes('{{transcript}}'));
+});
+
+test('an empty or unedited old template uses the new default', () => {
+  const { momTemplateOf } = globalThis.MeetMerge;
+  assert.equal(momTemplateOf(undefined), DEFAULT_MOM_TEMPLATE);
+  assert.equal(momTemplateOf(''), DEFAULT_MOM_TEMPLATE);
+  assert.equal(momTemplateOf(OLD_DEFAULT), DEFAULT_MOM_TEMPLATE);
+});
+
+test('a template you edited is never changed', () => {
+  const { momTemplateOf } = globalThis.MeetMerge;
+  const custom = `${OLD_DEFAULT}\nTulis dalam Bahasa Inggris.`;
+  assert.equal(momTemplateOf(custom), custom);
+});

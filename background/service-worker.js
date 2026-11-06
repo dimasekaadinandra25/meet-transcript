@@ -404,7 +404,7 @@ async function generateMom(id) {
   if (!meeting || !meeting.segments.length) throw new Error('The transcript is empty.');
   const transcript = globalThis.MeetMerge.formatTranscript(meeting.segments);
   const prompt = globalThis.MeetMerge.fillTemplate(
-    settings.momTemplate || globalThis.MeetMerge.DEFAULT_MOM_TEMPLATE, transcript);
+    globalThis.MeetMerge.momTemplateOf(settings.momTemplate), transcript);
   const mom = await globalThis.MeetOpenAI.generateMoM({
     apiKey: settings.apiKey, model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt,
     baseUrl: settings.baseUrl,
