@@ -189,7 +189,7 @@ view.addEventListener('focusout', (e) => {
 
 async function render() {
   const editing = document.activeElement;
-  const typingTitle = editing?.matches?.('[data-title-editor],[data-edit-key]') && editing.value !== editing.defaultValue;
+  const typingTitle = editing?.matches?.('[data-title-editor],[data-edit-key]') && editing.type !== 'checkbox' && editing.value !== editing.defaultValue;
   if (clickHold || typingTitle) {
     renderWaiting = true;
     return;
@@ -335,6 +335,44 @@ async function renderMeeting(id, live, epoch) {
         setTimeout(() => { mom.head.textContent = mom.label; }, 3000);
       });
     }
+  }
+  if (meeting.mom) {
+    const showFailure = (e) => {
+      momErrors.set(meeting.id, e?.message ?? String(e));
+      render();
+    };
+    const sendTo = (kind, origin) => async () => {
+      if (momSending.has(meeting.id)) return;
+      momSending.add(meeting.id);
+      const previous = mom.head.textContent;
+      mom.head.textContent = 'Sending…';
+      try {
+        if (!Host) await ensureOrigins([origin]);
+        const { settings = {} } = await chrome.storage.local.get('settings');
+        if (Host) await Host.shareMom(kind, settings, { title: meeting.title, mom: meeting.mom });
+        else await globalThis.MeetShare.deliver(kind, settings, meeting);
+        momErrors.delete(meeting.id);
+        mom.head.textContent = previous;
+        flash(mom.head, 'Sent ✓');
+      } catch (e) {
+        mom.head.textContent = previous;
+        showFailure(e);
+      } finally {
+        momSending.delete(meeting.id);
+      }
+    };
+    mom.item('Email draft', async () => {
+      try {
+        await navigator.clipboard.writeText(meeting.mom).catch(() => {});
+        const url = globalThis.MeetShare.emailUrl(meeting);
+        if (Host) await Host.openMail(url);
+        else window.open(url);
+      } catch (e) {
+        showFailure(e);
+      }
+    });
+    mom.item('Send to Slack', sendTo('slack', 'https://hooks.slack.com/'));
+    mom.item('Send to Notion', sendTo('notion', 'https://api.notion.com/'));
   }
   const dl = dropdown('unduh', 'Download');
   dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatWithMarks(meeting)));
@@ -769,11 +807,84 @@ function historyList(items) {
   });
 }
 
+const momSending = new Set();
+let historyMode = 'list';
+let askAllDraft = '';
+let askAllState = { asking: false, question: '', answer: '', note: '', error: '' };
+
+function askAllBox() {
+  const box = el('div', 'ask');
+  box.append(el('h3', null, 'Ask all meetings'));
+  box.append(el('p', 'muted', 'Sends your MoMs, or transcripts where there is no MoM, to your AI service.'));
+  const row = el('div', 'ask-row');
+  const input = mkEl('input', { placeholder: 'Ask about all your meetings', value: askAllDraft, defaultValue: askAllDraft });
+  input.dataset.editKey = 'ask-all';
+  input.setAttribute('aria-label', t('Ask about all your meetings'));
+  input.addEventListener('input', () => { askAllDraft = input.value; });
+  const send = async () => {
+    const question = input.value.trim();
+    if (!question || askAllState.asking) return;
+    askAllDraft = '';
+    input.value = '';
+    input.defaultValue = '';
+    askAllState = { asking: true, question, answer: '', note: '', error: '' };
+    render();
+    const res = await chrome.runtime.sendMessage({ type: 'ask-all', question }).catch(() => null);
+    askAllState = {
+      asking: false,
+      question,
+      answer: res?.ok ? res.answer : '',
+      error: res?.ok ? '' : res?.error ?? 'Could not reach the service worker.',
+      note: res?.ok && res.left ? 'Some older or very long meetings did not fit, so they were cut short or left out.' : '',
+    };
+    render();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') send();
+  });
+  row.append(input);
+  mkBtn('Ask', send, row);
+  box.append(row);
+  if (askAllState.asking) box.append(el('p', 'muted', 'Thinking…'));
+  if (askAllState.error) box.append(el('p', 'err', askAllState.error));
+  if (askAllState.answer) {
+    const answer = el('div', 'mom');
+    answer.append(raw(el('strong', null, askAllState.question)), raw(el('div', null, askAllState.answer)));
+    if (askAllState.note) answer.append(el('p', 'muted', askAllState.note));
+    box.append(answer);
+  }
+  return box;
+}
+
+function actionItemsView(items) {
+  const box = el('div');
+  box.append(el('h3', null, 'Action items'));
+  const withItems = items.map((meeting) => ({ meeting, list: M.actionItems(meeting) })).filter(({ list }) => list.length)
+    .sort((a, b) => (b.meeting.startedAt ?? 0) - (a.meeting.startedAt ?? 0));
+  if (!withItems.length) box.append(el('p', 'muted', 'No action items yet. They come from the action sections of your MoMs.'));
+  for (const { meeting, list } of withItems) {
+    box.append(raw(el('div', 'who', meeting.title)));
+    for (const { text, done } of list) {
+      const check = mkEl('input', { type: 'checkbox', checked: done });
+      check.dataset.editKey = `item:${meeting.id}:${text}`;
+      check.addEventListener('change', async () => {
+        const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change: { toggleItem: text } }).catch(() => null);
+        if (!res?.ok) check.checked = !check.checked;
+      });
+      const label = el('label', done ? 'action-item done' : 'action-item');
+      label.append(check, raw(el('span', null, text)));
+      box.append(label);
+    }
+  }
+  return box;
+}
+
 async function renderHistory(epoch) {
   const { meetings = [] } = await chrome.storage.local.get('meetings');
   const items = (await Promise.all(meetings.map(getMeeting))).filter(Boolean);
   if (epoch !== renderEpoch) return;
   lastRenderedKey = null;
+  const focusKey = document.activeElement?.dataset?.editKey;
   const previous = document.getElementById('history-search');
   const wasTyping = document.activeElement === previous && previous;
   const caret = wasTyping ? previous.selectionStart : 0;
@@ -782,6 +893,21 @@ async function renderHistory(epoch) {
     view.append(el('p', 'muted', 'No history yet.'));
     return;
   }
+  const modeRow = el('div', 'actions');
+  mkBtn(historyMode === 'actions' ? 'All meetings' : 'Action items', () => {
+    historyMode = historyMode === 'actions' ? 'list' : 'actions';
+    render();
+  }, modeRow);
+  view.append(modeRow);
+  const refocus = () => {
+    if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();
+  };
+  if (historyMode === 'actions') {
+    view.append(actionItemsView(items));
+    refocus();
+    return;
+  }
+  view.append(askAllBox());
   const search = mkEl('input', { type: 'search', id: 'history-search', value: historyQuery, placeholder: 'Search titles, transcripts, and MoM' });
   search.setAttribute('aria-label', 'Search meetings');
   const list = el('div');
@@ -791,6 +917,7 @@ async function renderHistory(epoch) {
     list.replaceChildren(...historyList(items));
   });
   view.append(search, list);
+  refocus();
   if (wasTyping) {
     search.focus();
     search.setSelectionRange(caret, caret);
@@ -1058,6 +1185,14 @@ async function renderSettings(epoch) {
   const actions = el('div', 'actions');
   actions.append(test, save, note);
   view.append(actions);
+  view.append(el('h3', null, 'Sending the MoM'));
+  const secretField = (key, label, type) => {
+    const input = field(label, mkEl('input', { type, value: settings[key] ?? '' }));
+    input.addEventListener('change', () => patchSettings({ [key]: input.value.trim() }));
+  };
+  secretField('slackWebhook', 'Slack webhook address', 'password');
+  secretField('notionToken', 'Notion token', 'password');
+  secretField('notionPage', 'Notion page link (new MoMs go under it)', 'text');
   view.append(el('h3', null, 'Storage'));
   const keepDays = field('Delete meetings older than this many days (empty = keep them)',
     mkEl('input', { type: 'number', min: 1, value: settings.deleteAfterDays ?? '' }));

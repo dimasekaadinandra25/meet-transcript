@@ -625,6 +625,18 @@ async function addMark() {
 
 const markMoment = () => whenWritten(addMark);
 
+async function askAll(question) {
+  const { settings = {}, meetings = [] } = await chrome.storage.local.get(['settings', 'meetings']);
+  if (!globalThis.MeetMerge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
+  const keys = meetings.map(meetingKey);
+  const stored = Object.values(await chrome.storage.local.get(keys));
+  const { prompt, used, left } = globalThis.MeetMerge.askAllPrompt(stored, question);
+  if (!used) throw new Error('There are no meetings to ask about yet.');
+  const answer = await keepAwake(globalThis.MeetOpenAI.generateMoM({ stream: true, apiKey: settings.apiKey, baseUrl: settings.baseUrl,
+    model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt }));
+  return { answer, used, left };
+}
+
 async function askMeeting(id, question) {
   const key = meetingKey(id);
   const { settings = {}, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
@@ -644,7 +656,7 @@ async function askMeeting(id, question) {
 }
 
 async function saveTranscriptEdit(id, change) {
-  if (change.deleteAnswer === undefined && meetingRunning(id)) throw new Error('This meeting is still running. Stop it before editing.');
+  if (change.deleteAnswer === undefined && change.toggleItem === undefined && meetingRunning(id)) throw new Error('This meeting is still running. Stop it before editing.');
   const key = meetingKey(id);
   const { [key]: meeting } = await chrome.storage.local.get(key);
   if (!meeting) throw new Error('Meeting not found.');
@@ -830,6 +842,7 @@ const HANDLERS = {
   'add-imported-meeting': (msg, sender, sendResponse) => reply(addImportedMeeting(msg), sendResponse),
   'mark-moment': (msg, sender, sendResponse) => reply(markMoment(), sendResponse),
   'ask-meeting': (msg, sender, sendResponse) => reply(askMeeting(msg.id, msg.question), sendResponse),
+  'ask-all': (msg, sender, sendResponse) => reply(askAll(msg.question), sendResponse),
   'delete-old-meetings': (msg, sender, sendResponse) => reply(deleteOldMeetings(), sendResponse),
   'stop-recording': () => { stopRecording(); },
   'set-paused': (msg, sender, sendResponse) => reply(setRecordingPaused(!!msg.on), sendResponse),

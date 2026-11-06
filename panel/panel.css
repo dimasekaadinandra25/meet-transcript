@@ -140,6 +140,8 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .seg textarea { min-height: 0; resize: vertical; }
 .seg .corrected { margin-top: 4px; color: var(--muted); font-size: 12px; }
 .seg .corrected summary { cursor: pointer; }
+.action-item { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+.action-item.done span { color: var(--muted); text-decoration: line-through; }
 .seg .play { float: right; min-height: 0; padding: 0 8px; line-height: 22px; font-size: 11px; }
 .mark { margin-bottom: var(--gap); color: var(--accent); font-weight: 600; font-size: 13px; }
 .ask { margin-bottom: var(--gap); }

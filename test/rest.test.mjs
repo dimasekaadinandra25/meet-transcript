@@ -81,3 +81,131 @@ test('carried names leave out blank names and blank speakers', () => {
   const { carriedNames } = globalThis.MeetMerge;
   assert.deepEqual(carriedNames({ '': 'Budi', Ani: '', Citra: 'Citra S.' }), { Citra: 'Citra S.' });
 });
+
+const { actionItems, askAllPrompt } = globalThis.MeetMerge;
+const mom = `## Date: 1 Mei
+## Discussion
+- Anggaran naik
+## Action Items (who, what)
+- **Ani**: kirim laporan
+* Budi cek target
+1. Citra buat slide
+## Next
+- bukan tugas`;
+
+test('action items come from the MoM action section', () => {
+  assert.deepEqual(actionItems({ mom }).map((item) => item.text), ['Ani: kirim laporan', 'Budi cek target', 'Citra buat slide']);
+});
+
+test('action items are found in other MoM types and languages', () => {
+  assert.deepEqual(actionItems({ mom: '## Next steps\n- a' }).map((i) => i.text), ['a']);
+  assert.deepEqual(actionItems({ mom: '## Promises we made (who, what, when)\n- b' }).map((i) => i.text), ['b']);
+  assert.deepEqual(actionItems({ mom: '## Tindak Lanjut\n- c' }).map((i) => i.text), ['c']);
+  assert.deepEqual(actionItems({ mom: '**Action Items:**\n- d' }).map((i) => i.text), ['d']);
+});
+
+test('placeholders and empty MoMs give no action items', () => {
+  assert.deepEqual(actionItems({ mom: '## Action Items\n- None\n- Tidak ada\n- -' }), []);
+  assert.deepEqual(actionItems({ mom: null }), []);
+  assert.deepEqual(actionItems({}), []);
+});
+
+test('ticking an action item is remembered and can be undone', () => {
+  const meeting = { segments: [], mom };
+  editMeeting(meeting, { toggleItem: 'Budi cek target' });
+  assert.deepEqual(actionItems(meeting).map((i) => i.done), [false, true, false]);
+  editMeeting(meeting, { toggleItem: 'Budi cek target' });
+  assert.deepEqual(actionItems(meeting).map((i) => i.done), [false, false, false]);
+});
+
+test('asking across meetings uses the MoM when there is one, newest first', () => {
+  const meetings = [
+    { title: 'Lama', startedAt: 1000, mom: 'ringkasan lama', segments: [{ speaker: 'Ani', text: 'tidak terkirim', t: 1 }] },
+    { title: 'Baru', startedAt: 2000, mom: null, segments: [{ speaker: 'Budi', text: 'isi transkrip', t: 2 }] },
+    { title: 'Kosong', startedAt: 3000, mom: null, segments: [] },
+  ];
+  const { prompt, used } = askAllPrompt(meetings, 'apa keputusannya?');
+  assert.equal(used, 2);
+  assert.match(prompt, /apa keputusannya\?/);
+  assert.match(prompt, /ringkasan lama/);
+  assert.doesNotMatch(prompt, /tidak terkirim/);
+  assert.ok(prompt.indexOf('isi transkrip') < prompt.indexOf('ringkasan lama'));
+  assert.doesNotMatch(prompt, /Kosong/);
+});
+
+test('asking across meetings stops at a size the AI can take', () => {
+  const meetings = Array.from({ length: 50 }, (_, i) => ({ title: `M${i}`, startedAt: i, mom: 'x'.repeat(5000), segments: [] }));
+  const { prompt, used } = askAllPrompt(meetings, 'q');
+  assert.ok(used < 50);
+  assert.ok(prompt.length < 70000);
+  assert.match(prompt, /M49/);
+  assert.doesNotMatch(prompt, /M0\b/);
+});
+
+test('backups leave out the sharing secrets and keep your own on restore', async () => {
+  await import('../lib/backup.js');
+  const restored = globalThis.MeetBackup.keepCurrentKeys({ settings: { baseUrl: 'https://other.example/v1' } }, { baseUrl: 'https://x/v1', slackWebhook: 'https://hooks.slack.com/services/A', notionToken: 'n' });
+  assert.equal(restored.settings.slackWebhook, 'https://hooks.slack.com/services/A');
+  assert.equal(restored.settings.notionToken, 'n');
+});
+
+const texts = (momText) => actionItems({ mom: momText }).map((item) => item.text);
+
+test('people listed under the action heading keep their items', () => {
+  assert.deepEqual(texts('## Action Items\n**Ani**\n- kirim laporan\n**Budi**\n- review'), ['Ani: kirim laporan', 'Budi: review']);
+  assert.deepEqual(texts('## Action Items\n**Ani**: kirim laporan'), ['Ani: kirim laporan']);
+  assert.deepEqual(texts('## Action Items\n- first\n**Ani**: kirim **laporan**\n- after'), ['first', 'Ani: kirim laporan', 'after']);
+});
+
+test('action items in a table are read, without the header', () => {
+  assert.deepEqual(texts('## Action Items\n| Who | What |\n|---|---|\n| Ani | kirim laporan |\n| Budi | review |'), ['Ani - kirim laporan', 'Budi - review']);
+});
+
+test('other ways of writing the heading are understood', () => {
+  assert.deepEqual(texts('2. **Action Items**\n- a'), ['a']);
+  assert.deepEqual(texts('### Item Tindakan\n- b'), ['b']);
+  assert.deepEqual(texts('## Acciones\n- c'), ['c']);
+  assert.deepEqual(texts('## Próximos pasos\n- d'), ['d']);
+  assert.deepEqual(texts('## 行动项\n- e'), ['e']);
+});
+
+test('headings that only contain similar letters are not action items', () => {
+  for (const heading of ['Transaction review', 'Customer satisfaction', 'Compromises', 'Discussion: action on budget']) {
+    assert.deepEqual(texts(`## ${heading}\n- x`), [], heading);
+  }
+});
+
+test('a real heading after the section ends it', () => {
+  assert.deepEqual(texts('## Action Items\n- a\n**Notes:**\n- b'), ['a']);
+  assert.deepEqual(texts('## Action Items\n- a\nNotes:\n- b'), ['a']);
+  assert.deepEqual(texts('## Action Items\nBerikut tugasnya:\n- a'), ['a']);
+});
+
+test('details under an item and "nothing to do" lines are not items', () => {
+  assert.deepEqual(texts('## Action Items\n- a\n  - Deadline: Jumat'), ['a']);
+  assert.deepEqual(texts('## Action Items\n- None identified.\n- No action items.\n- Tidak ada tindak lanjut.'), []);
+});
+
+test('one very long meeting does not hide the others', () => {
+  const huge = 'x'.repeat(80000);
+  const newestHuge = askAllPrompt([{ title: 'Besar', startedAt: 2, mom: huge, segments: [] }, { title: 'Kecil', startedAt: 1, mom: 'pendek', segments: [] }], 'q');
+  assert.equal(newestHuge.used, 1);
+  assert.ok(newestHuge.left > 0);
+  assert.ok(newestHuge.prompt.length < 70000);
+  const middleHuge = askAllPrompt([{ title: 'Baru', startedAt: 3, mom: 'pendek baru', segments: [] }, { title: 'Besar', startedAt: 2, mom: huge, segments: [] }, { title: 'Lama', startedAt: 1, mom: 'pendek lama', segments: [] }], 'q');
+  assert.match(middleHuge.prompt, /pendek baru/);
+  assert.equal(middleHuge.left, 2);
+});
+
+test('empty meetings do not count as left out', () => {
+  const { used, left } = askAllPrompt([{ title: 'A', startedAt: 1, mom: 'isi', segments: [] }, { title: 'B', startedAt: 2, mom: null, segments: [] }], 'q');
+  assert.equal(used, 1);
+  assert.equal(left, 0);
+});
+
+test('a backup cannot silently replace your Slack webhook', async () => {
+  await import('../lib/backup.js');
+  const backup = { settings: { slackWebhook: 'https://hooks.slack.com/services/ATTACKER' } };
+  assert.equal(globalThis.MeetBackup.keepCurrentKeys(backup, { slackWebhook: 'https://hooks.slack.com/services/MINE' }).settings.slackWebhook, 'https://hooks.slack.com/services/MINE');
+  assert.equal(globalThis.MeetBackup.keepCurrentKeys(backup, {}).settings.slackWebhook, 'https://hooks.slack.com/services/ATTACKER');
+});

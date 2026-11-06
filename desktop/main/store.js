@@ -2,7 +2,7 @@ const { mkdirSync } = require('node:fs');
 const { readdir, readFile, rename, rm, writeFile } = require('node:fs/promises');
 const { join } = require('node:path');
 
-const SECRET_FIELDS = ['apiKey', 'sttApiKey'];
+const SECRET_FIELDS = ['apiKey', 'sttApiKey', 'slackWebhook', 'notionToken'];
 const SUFFIX = '.json';
 
 const fileName = (key) => encodeURIComponent(key).replace(/\*/g, '%2A') + SUFFIX;

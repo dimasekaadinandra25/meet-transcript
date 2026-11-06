@@ -125,3 +125,15 @@ test('a new key replaces one that could not be read', async () => {
   await locked.set({ settings: { apiKey: 'baru' } });
   assert.equal((await createStore({ dir, cipher }).get('settings')).settings.apiKey, 'baru');
 });
+
+test('sharing secrets are encrypted like API keys', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tx-store-'));
+  const cipher = { available: () => true, encrypt: (t) => `enc:${t}`, decrypt: (t) => t.slice(4) };
+  const store = createStore({ dir, cipher });
+  await store.set({ settings: { slackWebhook: 'https://hooks.slack.com/services/A', notionToken: 'n' } });
+  const raw = readdirSync(dir).map((name) => readFileSync(join(dir, name), 'utf8')).join('');
+  assert.doesNotMatch(raw, /"slackWebhook":"https/);
+  const { settings } = await store.get('settings');
+  assert.equal(settings.notionToken, 'n');
+  rmSync(dir, { recursive: true, force: true });
+});

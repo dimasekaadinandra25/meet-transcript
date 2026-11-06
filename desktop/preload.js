@@ -50,5 +50,6 @@ contextBridge.exposeInMainWorld('desktop', {
     test: (args) => ipcRenderer.invoke('net:test', args),
     stt: (args) => ipcRenderer.invoke('net:stt', args),
     probe: (url, key) => ipcRenderer.invoke('net:probe', url, key),
+    share: (kind, settings, meeting) => ipcRenderer.invoke('net:share', kind, settings, meeting),
   },
 });

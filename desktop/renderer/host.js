@@ -352,6 +352,8 @@
     hasEngine: () => desktop.engine.available(),
     settingsRows,
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
+    shareMom: (kind, settings, meeting) => globalThis.shareMom(kind, settings, meeting),
+    openMail: (url) => desktop.openExternal(url),
     aiLabel: (name) => `Copy & open ${name}`,
     emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
     emptySegmentsText: 'The transcript appears about every 2 minutes, and finishes when you stop.',

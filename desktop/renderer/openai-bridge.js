@@ -17,6 +17,8 @@
     },
   });
 
+  globalThis.shareMom = async (kind, settings, meeting) => unwrap(await net.share(kind, settings, meeting));
+
   globalThis.bridgeFetch = async (url, init = {}) => {
     const key = init.headers?.Authorization?.replace(/^Bearer /, '') ?? '';
     const answer = unwrap(await net.probe(url, key));

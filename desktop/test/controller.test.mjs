@@ -935,3 +935,24 @@ test('pausing and resuming tells the panel and the tray', async () => {
   await ctl.handle({ type: 'set-paused', on: false });
   assert.equal(recStates().at(-1).paused, false);
 });
+
+test('asking across meetings works in the app too', async () => {
+  data.settings = { ...data.settings, apiKey: 'k' };
+  data.meetings = ['a'];
+  data['meeting:a'] = { id: 'a', title: 'Satu', startedAt: 1, mom: 'hasil', segments: [] };
+  let prompt = '';
+  fakeOpenAI.generateMoM = async (args) => { prompt = args.prompt; return 'jawaban'; };
+  const res = await ctl.handle({ type: 'ask-all', question: 'apa?' });
+  assert.equal(res.answer, 'jawaban');
+  assert.match(prompt, /hasil/);
+});
+
+test('an action item can be ticked during a recording', async () => {
+  await ctl.handle(START);
+  const { rec } = await ctl.handle({ type: 'get-active' });
+  const key = `meeting:${rec.meetingId}`;
+  data[key].mom = '## Action Items\n- a';
+  const res = await ctl.handle({ type: 'edit-transcript', id: rec.meetingId, change: { toggleItem: 'a' } });
+  assert.equal(res.ok, true);
+  assert.deepEqual(data[key].doneItems, ['a']);
+});

@@ -550,3 +550,37 @@ test('closing the record reminder still leaves the captions warning available', 
   const prompts = tab.posted.at(-1).prompts.map((p) => p.kind);
   assert.deepEqual([...prompts], ['record', 'captions']);
 });
+
+test('asking across meetings sends them and returns the answer', async () => {
+  const sw = loadSw({ store: { settings: { apiKey: 'k' }, meetings: ['a', 'b'], 'meeting:a': { id: 'a', title: 'Satu', startedAt: 1, mom: 'hasil satu', segments: [] }, 'meeting:b': { id: 'b', title: 'Dua', startedAt: 2, mom: 'hasil dua', segments: [] } } });
+  sw.finishWaking();
+  let prompt = '';
+  sw.useModel(async (args) => { prompt = args.prompt; return 'jawaban'; });
+  const res = await sw.ask({ type: 'ask-all', question: 'apa?' });
+  assert.equal(res.answer, 'jawaban');
+  assert.equal(res.used, 2);
+  assert.equal(res.left, 0);
+  assert.match(prompt, /hasil satu/);
+  assert.match(prompt, /hasil dua/);
+});
+
+test('asking across meetings needs an AI service and some content', async () => {
+  const none = loadSw({ store: { settings: { baseUrl: 'https://api.openai.com/v1' } } });
+  none.finishWaking();
+  assert.match((await none.ask({ type: 'ask-all', question: 'q' })).error, /API key/);
+  const empty = loadSw({ store: { settings: { apiKey: 'k' }, meetings: [] } });
+  empty.finishWaking();
+  assert.match((await empty.ask({ type: 'ask-all', question: 'q' })).error, /no meetings/i);
+});
+
+test('an action item can be ticked while the meeting is still running', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { meetings: [MEET], [key]: meetingFor({ mom: '## Action Items\n- a' }) } });
+  sw.finishWaking();
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: true });
+  const res = await sw.ask({ type: 'edit-transcript', id: MEET, change: { toggleItem: 'a' } });
+  assert.equal(res.ok, true);
+  assert.deepEqual(sw.store[key].doneItems, ['a']);
+});

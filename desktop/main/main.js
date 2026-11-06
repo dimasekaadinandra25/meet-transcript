@@ -6,7 +6,7 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
-const { loadLib, netCall, callChat, callTest, callStt, probe } = require('./net');
+const { loadLib, netCall, callChat, callTest, callStt, callShare, probe } = require('./net');
 const { createEngine } = require('./engine');
 const { createModels } = require('./models');
 const { createAppAudio } = require('./appaudio');
@@ -196,6 +196,7 @@ function serveNet() {
   handleFromApp('engine:download-model', (id) => netCall(() => models.download(id)));
   handleFromApp('engine:use-model', (id) => engine.useModel(models.pathOf(id)));
   handleFromApp('net:probe', probe);
+  handleFromApp('net:share', callShare);
 }
 
 function serveRecordings() {
@@ -341,7 +342,7 @@ app.whenReady().then(() => {
     app.exit(0);
   });
   handleFromApp('shell:open', (url) => {
-    if (EXTERNAL_URLS.has(url)) return shell.openExternal(url);
+    if (EXTERNAL_URLS.has(url) || String(url).startsWith('mailto:?')) return shell.openExternal(url);
     return undefined;
   });
   Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]) : null);

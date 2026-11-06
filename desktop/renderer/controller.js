@@ -351,7 +351,7 @@
     }
 
     async function editTranscript({ id, change }) {
-      if (change.deleteAnswer === undefined && rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
+      if (change.deleteAnswer === undefined && change.toggleItem === undefined && rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
       try {
         await updateMeeting(id, (meeting) => merge.editMeeting(meeting, change));
         return { ok: true };
@@ -435,6 +435,21 @@
       return { ok: true };
     }
 
+    async function askAll({ question }) {
+      try {
+        const settings = await readSettings();
+        if (!merge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
+        const { meetings = [] } = await storage.get('meetings');
+        const stored = (await Promise.all(meetings.map(readMeeting))).filter(Boolean);
+        const { prompt, used, left } = merge.askAllPrompt(stored, question);
+        if (!used) throw new Error('There are no meetings to ask about yet.');
+        const answer = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl, model: settings.model || openai.DEFAULT_MODEL, prompt });
+        return { ok: true, answer, used, left };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+
     async function askMeeting({ id, question }) {
       try {
         const settings = await readSettings();
@@ -472,6 +487,7 @@
       'import-audio': importAudio,
       'mark-moment': markMoment,
       'ask-meeting': askMeeting,
+      'ask-all': askAll,
       'delete-old-meetings': deleteOldMeetings,
       'cancel-import': () => {
         if (importRun) importRun.cancelled = true;

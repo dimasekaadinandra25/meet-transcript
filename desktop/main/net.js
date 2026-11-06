@@ -6,6 +6,7 @@ function loadLib(root) {
   require(join(root, 'lib', 'i18n.js'));
   require(join(root, 'lib', 'stt.js'));
   require(join(root, 'lib', 'openai.js'));
+  require(join(root, 'lib', 'share.js'));
 }
 
 function assertHttp(url) {
@@ -38,6 +39,8 @@ const callStt = ({ bytes, ...args }, engineUrl) => netCall(async () => {
   return globalThis.MeetOpenAI.transcribeAudio({ ...args, baseUrl, blob: new Blob([bytes]) });
 });
 
+const callShare = (kind, settings, meeting) => netCall(() => globalThis.MeetShare.deliver(kind, settings, meeting));
+
 const probe = (url, key) => netCall(async () => {
   assertHttp(url);
   const res = await fetch(url, {
@@ -47,4 +50,4 @@ const probe = (url, key) => netCall(async () => {
   return { ok: res.ok, status: res.status, ...(res.ok ? { body: await res.json().catch(() => null) } : {}) };
 });
 
-module.exports = { loadLib, netCall, callChat, callTest, callStt, probe };
+module.exports = { loadLib, netCall, callChat, callTest, callStt, callShare, probe };
