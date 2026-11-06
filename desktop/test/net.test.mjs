@@ -41,6 +41,17 @@ test('hasil sukses dibungkus', async () => {
   assert.deepEqual(await netCall(async () => 5), { ok: true, value: 5 });
 });
 
+test('probe returns the answer of a server that replies', async () => {
+  const server = createServer((req, res) => res.end('{"data":[{"id":"m1"}]}'));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const r = await probe(`http://127.0.0.1:${server.address().port}/models`, '');
+    assert.deepEqual(r.value.body, { data: [{ id: 'm1' }] });
+  } finally {
+    server.close();
+  }
+});
+
 test('probe menolak skema selain http dan https', async () => {
   assert.equal((await probe('file:///etc/passwd', '')).ok, false);
 });

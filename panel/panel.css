@@ -277,7 +277,7 @@ input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; acce
   html, body { background: #fff; }
   body::before, nav, .actions, main > button, #history-search, #crash { display: none !important; }
   main { height: auto; overflow: visible; padding: 0; mask-image: none; }
-  .play, .ask, .ask-row { display: none !important; }
+  .play, .ask, .ask-row, .stale { display: none !important; }
   .seg, .mom, main > input { background: none; border: 0; box-shadow: none; padding: 2px 0; break-inside: avoid; }
 }
 

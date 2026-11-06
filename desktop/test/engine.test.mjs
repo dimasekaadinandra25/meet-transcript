@@ -29,6 +29,23 @@ function setup({ exists = () => true, healthy = () => true } = {}) {
   return { engine, started, guarded };
 }
 
+test('a chosen model is used from the next start, and the old engine stops', async () => {
+  const { engine, started } = setup();
+  await engine.url();
+  assert.equal(started[0].args[1], join(DIR, 'ggml-base-q5_1.bin'));
+  engine.useModel('C:/models/small.bin');
+  assert.equal(started[0].child.killed, 1);
+  await engine.url();
+  assert.equal(started[1].args[1], 'C:/models/small.bin');
+});
+
+test('choosing the same model again keeps the engine running', async () => {
+  const { engine, started } = setup();
+  await engine.url();
+  engine.useModel(null);
+  assert.equal(started[0].child.killed, 0);
+});
+
 test('engine arguments stay on this computer and use the OpenAI path', () => {
   const args = engineArgs('model.bin', 5000, 4);
   assert.deepEqual(args, ['-m', 'model.bin', '--host', '127.0.0.1', '--port', '5000', '--inference-path', '/v1/audio/transcriptions', '-t', '4', '-l', 'auto']);

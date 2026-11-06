@@ -20,7 +20,7 @@ const Host = globalThis.PanelHost;
 let settingsCache = {};
 async function loadSettings() { settingsCache = (await chrome.storage.local.get('settings')).settings ?? {}; }
 
-const { el, raw, markLine, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
+const { CAPTION_LANGUAGES, el, raw, markLine, mkBtn, mkDropdown, patchSettings, meetingKey, clearShortcut } = globalThis.MeetUi;
 const { t } = globalThis.MeetI18n;
 const mkEl = (tag, props) => Object.assign(document.createElement(tag), props);
 const addOptions = (select, pairs) => {
@@ -87,7 +87,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     status = msg;
     if (tab === 'live') render();
   } else if (msg.type === 'meeting-updated') {
-    if (isShowing(msg.id)) render();
+    if (isShowing(msg.id) || (tab === 'history' && !viewingId)) render();
   } else if (msg.type === 'ai-inject') {
     if (msg.ok || !msg.id) return;
     momErrors.set(msg.id, `Could not paste into the AI tab: ${msg.error} The prompt is on your clipboard, so paste it there yourself.`);
@@ -125,11 +125,13 @@ async function downloadAudio(meeting, rec, suffix) {
   const saved = await globalThis.MeetAudioStore.loadAudio(rec.recId);
   if (!saved?.blobs?.length) return 0;
   if (saved.meetingId !== meeting.id) return 0;
-  saved.blobs.forEach((blob, i) => download(
-    saved.blobs.length > 1
-      ? `${meeting.title}${suffix}-${String((saved.indices?.[i] ?? i) + 1).padStart(2, '0')}.webm`
-      : `${meeting.title}${suffix}.webm`,
-    blob));
+  if (saved.blobs.length === 1) {
+    download(`${meeting.title}${suffix}.${saved.imported ? 'wav' : 'webm'}`, saved.blobs[0]);
+    return 1;
+  }
+  const kind = saved.imported ? 'wav' : 'webm';
+  const parts = saved.blobs.map((data, i) => ({ name: `part-${String((saved.indices?.[i] ?? i) + 1).padStart(2, '0')}.${kind}`, data }));
+  download(`${meeting.title}${suffix}-audio.zip`, await globalThis.MeetBackup.makeZip(parts));
   return saved.blobs.length;
 }
 
@@ -284,7 +286,7 @@ async function renderMeeting(id, live, epoch) {
     back.addEventListener('click', () => { viewingId = null; render(); });
     view.append(back);
   }
-  view.append(Host ? Host.titleEditor(meeting) : raw(el('h2', null, meeting.title)));
+  view.append(titleEditor(meeting));
   const startedText = new Date(meeting.startedAt).toLocaleString();
   if (meeting.title !== startedText) view.append(el('p', 'muted', startedText));
   if (momErrors.has(meeting.id)) view.append(el('div', 'error', momErrors.get(meeting.id)));
@@ -372,8 +374,6 @@ async function renderMeeting(id, live, epoch) {
           const n = await downloadAudio(meeting, r, sfx).catch(() => 0);
           flash(dl.head, n ? `Downloaded ✓${n > 1 ? ` (${n} files)` : ''}` : 'Audio not found', 3000);
         });
-        if (r.count > 1) dl.list.append(el('span', 'muted',
-          'Several files: allow "Download multiple files" if Chrome asks.'));
       }
       if (r.videoCount > 0) {
         dl.item(`Download video${tag}`, async () => {
@@ -471,6 +471,7 @@ async function renderMeeting(id, live, epoch) {
   if (meeting.mom) {
     view.append(el('h3', null, 'MoM'));
     view.append(raw(el('div', 'mom', meeting.mom)));
+    if (M.changedSince(meeting, meeting.momBasedOn)) view.append(el('p', 'muted stale', 'The transcript changed after this MoM was made. Regenerate it to update.'));
   }
   if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
@@ -503,19 +504,23 @@ async function playLine(meeting, s, next, rec) {
   playing = session;
   render();
   try {
-    const { index, offset } = M.locateLine(s.t, rec.baseTime, rec.chunkMs);
-    const blobs = await loadLineAudio(rec, index);
-    if (!blobs.length) throw new Error('no audio');
-    const buffers = await Promise.all(blobs.map(async (b) => session.context.decodeAudioData(await b.arrayBuffer())));
-    if (playing !== session) return undefined;
-    const usable = buffers.filter((buffer) => offset < buffer.duration);
-    if (!usable.length) throw new Error('no audio');
     const seconds = Math.min(PLAY_MAX_SECONDS, Math.max(PLAY_MIN_SECONDS, next ? (next.t - s.t) / 1000 + 1 : PLAY_MIN_SECONDS * 3));
-    for (const buffer of usable) {
-      const source = session.context.createBufferSource();
-      source.buffer = buffer;
-      source.connect(session.context.destination);
-      source.start(0, offset, seconds);
+    const parts = M.playPlan(s.t, rec.baseTime, rec.chunkMs, seconds);
+    const decoded = await Promise.all(parts.map(async (part) => {
+      const blobs = await loadLineAudio(rec, part.index);
+      const buffers = await Promise.all(blobs.map(async (b) => session.context.decodeAudioData(await b.arrayBuffer())));
+      return { part, buffers: buffers.filter((buffer) => part.offset < buffer.duration) };
+    }));
+    if (playing !== session) return undefined;
+    if (!decoded[0].buffers.length) throw new Error('no audio');
+    const startAt = session.context.currentTime;
+    for (const { part, buffers } of decoded) {
+      for (const buffer of buffers) {
+        const source = session.context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(session.context.destination);
+        source.start(startAt + part.wait, part.offset, part.seconds);
+      }
     }
     session.timer = setTimeout(() => {
       if (playing !== session) return;
@@ -529,6 +534,27 @@ async function playLine(meeting, s, next, rec) {
     render();
   }
   return undefined;
+}
+
+function titleEditor(meeting) {
+  const input = mkEl('input', { value: meeting.title, defaultValue: meeting.title });
+  input.dataset.titleEditor = '';
+  input.setAttribute('aria-label', 'Meeting title');
+  input.addEventListener('change', () => {
+    input.defaultValue = input.value;
+    chrome.runtime.sendMessage({ type: 'rename-meeting', id: meeting.id, title: input.value }).catch(() => {});
+  });
+  return input;
+}
+
+async function fillModels(list, base, key) {
+  const res = await (Host?.fetch ?? fetch)(`${base}/models`, {
+    ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
+    signal: AbortSignal.timeout(15000),
+  }).catch(() => null);
+  if (!res?.ok) return;
+  const ids = globalThis.MeetOpenAI.modelIds(await res.json().catch(() => null));
+  list.replaceChildren(...ids.map((id) => mkEl('option', { value: id })));
 }
 
 function askBox(meeting) {
@@ -559,9 +585,18 @@ function askBox(meeting) {
   mkBtn('Ask', send, row);
   box.append(row);
   if (asking === meeting.id) box.append(el('p', 'muted', 'Thinking…'));
-  for (const { question, answer } of meeting.answers ?? []) {
-    const item = raw(el('div', 'mom'));
-    item.append(el('strong', null, question), el('div', null, answer));
+  for (const [index, { question, answer, basedOn }] of (meeting.answers ?? []).entries()) {
+    const item = el('div', 'mom');
+    item.append(raw(el('strong', null, question)), raw(el('div', null, answer)));
+    if (M.changedSince(meeting, basedOn)) item.append(el('p', 'muted', 'The transcript changed after this answer.'));
+    const remove = mkBtn('Delete answer', async () => {
+      const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change: { deleteAnswer: index } }).catch(() => null);
+      if (!res?.ok) {
+        momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
+        render();
+      }
+    }, item);
+    clearShortcut(remove);
     box.append(item);
   }
   return box;
@@ -615,6 +650,49 @@ function segmentEditor(meeting, s) {
 }
 
 let historyQuery = '';
+const IMPORT_PART_MS = 120000;
+let importNote = null;
+
+async function importFile(file) {
+  const send = (msg) => chrome.runtime.sendMessage(msg);
+  const store = globalThis.MeetAudioStore;
+  importNote = el('span', 'muted', 'Reading the file…');
+  render();
+  let id = null;
+  try {
+    const origins = [globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl].filter(Boolean);
+    const denied = await ensureOrigins(origins).then(() => null, (e) => e.message);
+    const { parts, durationMs } = await globalThis.MeetWav.speechParts(file, IMPORT_PART_MS / 1000);
+    if (!parts.length) throw new Error('This file has no audio to transcribe.');
+    const baseTime = await store.freeRecId(file.lastModified - durationMs);
+    const added = await send({ type: 'add-imported-meeting', title: file.name.replace(/\.[^.]*$/, ''), startedAt: baseTime, endedAt: file.lastModified });
+    if (!added?.ok) throw new Error(added?.error ?? 'Could not reach the service worker.');
+    id = added.id;
+    await store.beginAudio({ meetingId: id, chunkMs: IMPORT_PART_MS, baseTime, keep: settingsCache.keepRecordings, imported: true });
+    for (const part of parts) await store.appendChunk(part, baseTime);
+    importNote = null;
+    audioMetaKey = null;
+    viewingId = id;
+    if (denied) {
+      momErrors.set(id, `${denied} Press Generate transcript to try again.`);
+    } else {
+      const res = await send({ type: 'regenerate-transcript', id, recId: baseTime }).catch(() => null);
+      if (!res?.ok) momErrors.set(id, `${res?.error ?? 'Could not reach the service worker.'} Press Generate transcript to try again.`);
+    }
+  } catch (e) {
+    if (id) await send({ type: 'delete-meeting', id }).catch(() => {});
+    importNote = el('span', 'err', e.message);
+  }
+  render();
+}
+
+function historyActions() {
+  const box = el('div', 'actions');
+  if (!HAS_AUDIO || Host) return box;
+  globalThis.MeetUi.mkImportButton(importFile, box);
+  if (importNote) box.append(importNote);
+  return box;
+}
 
 function historyList(items) {
   const found = items.filter((m) => M.matchesSearch(m, historyQuery));
@@ -646,7 +724,7 @@ async function renderHistory(epoch) {
   const previous = document.getElementById('history-search');
   const wasTyping = document.activeElement === previous && previous;
   const caret = wasTyping ? previous.selectionStart : 0;
-  view.replaceChildren();
+  view.replaceChildren(historyActions());
   if (!items.length) {
     view.append(el('p', 'muted', 'No history yet.'));
     return;
@@ -713,6 +791,9 @@ async function renderSettings(epoch) {
     mkEl('input', { type: 'password', value: settings.apiKey ?? '' }));
   const model = field('Model',
     mkEl('input', { value: settings.model ?? DEFAULT_MODEL }));
+  const modelList = mkEl('datalist', { id: 'llm-models' });
+  model.setAttribute('list', modelList.id);
+  rowOf.get(model).append(modelList);
   const momType = field('MoM type', document.createElement('select'));
   addOptions(momType, [...M.MOM_PRESETS.map((p) => [p.name, p.name]), ['', 'Custom']]);
   const template = field('MoM template ({{transcript}} = transcript)',
@@ -748,7 +829,7 @@ async function renderSettings(epoch) {
   hideRow.hidden = !!Host;
   view.append(hideRow);
   const captionLang = field('Meet caption language', document.createElement('select'));
-  addOptions(captionLang, [['id', 'Indonesia'], ['en', 'English']]);
+  addOptions(captionLang, CAPTION_LANGUAGES);
   captionLang.value = settings.captionLang ?? 'id';
   show(captionLang, !Host);
   captionLang.addEventListener('change', () => patchSettings({ captionLang: captionLang.value }));
@@ -763,7 +844,7 @@ async function renderSettings(epoch) {
   micRow.append(micBtn);
   micBtn.hidden = !!Host;
   micWrap.append(micLabel, micRow, el('div', 'muted',
-    'Without a headset, voices from your speakers can leak into the mic and appear twice.'));
+    'Without a headset, voices from your speakers can leak into the mic. Repeated lines are removed where possible.'));
   micWrap.hidden = !HAS_AUDIO;
   view.append(micWrap);
   const ST = globalThis.MeetStt;
@@ -774,7 +855,7 @@ async function renderSettings(epoch) {
   addOptions(sttModeSel, [['whisper-local', 'Your own Whisper server'], ['api', 'Online speech-to-text service']]);
   sttModeSel.value = ST.sttMode(settings);
   const INFO = {
-    builtin: 'Audio stays on this computer, and no server or internet is needed. Speed depends on your computer, and accuracy is lower than larger models on your own server.',
+    builtin: 'Audio stays on this computer, and no server or internet is needed. Speed depends on your computer. Choose higher accuracy below.',
     'whisper-local': 'Audio goes to your own OpenAI-compatible whisper server '
       + '(whisper.cpp, faster-whisper, and others) at the URL below. Audio stays on '
       + 'your network, but the server must be running during transcription. If it is down, '
@@ -862,6 +943,7 @@ async function renderSettings(epoch) {
     } catch (e) {
       setNote('err', '✗ Failed: ' + (e?.message ?? e));
     } finally {
+      await fillModels(modelList, normalizedBase(), apiKey.value.trim());
       test.disabled = false;
     }
   });
@@ -924,6 +1006,14 @@ async function renderSettings(epoch) {
     await patchSettings({ deleteAfterDays: days > 0 ? days : null });
     await chrome.runtime.sendMessage({ type: 'delete-old-meetings' }).catch(() => {});
   });
+  const keepRecordings = field('Recordings to keep (older ones are deleted when a new recording starts)',
+    mkEl('input', { type: 'number', min: 1, max: 100, value: globalThis.MeetAudioStore.keepCount(settings.keepRecordings) }));
+  show(keepRecordings, HAS_AUDIO);
+  keepRecordings.addEventListener('change', () => {
+    const count = globalThis.MeetAudioStore.keepCount(keepRecordings.value);
+    keepRecordings.value = count;
+    patchSettings({ keepRecordings: count });
+  });
   for (const row of Host?.settingsRows(settings) ?? []) view.append(row);
   view.append(el('h3', null, 'Backup'));
   const bnote = el('span', 'muted', '');
@@ -936,7 +1026,7 @@ async function renderSettings(epoch) {
     exportBtn.disabled = true;
     setBnote('muted', 'Building zip…');
     try {
-      const zip = await globalThis.MeetBackup.exportBackup();
+      const zip = await globalThis.MeetBackup.exportBackup({ includeKeys: keysBox.checked });
       download(`transcripables-backup-${new Date().toISOString().slice(0, 10)}.zip`, zip);
       setBnote('ok', `✓ Backup ready (${zip.size < 1048576
         ? `${Math.max(1, Math.round(zip.size / 1024))} KB`
@@ -973,15 +1063,17 @@ async function renderSettings(epoch) {
       importBtn.disabled = false;
     }
   });
+  const keysBox = mkEl('input', { type: 'checkbox' });
+  const keysLabel = el('label');
+  keysLabel.append(keysBox, 'Include API keys in the backup (not encrypted, so keep the file safe)');
+  view.append(keysLabel);
   const backupRow = el('div', 'actions');
   backupRow.append(exportBtn, importBtn, importInput, bnote);
   view.append(backupRow);
-  if (Host) view.append(el('div', 'err', Host.backupWarning));
   view.append(el('div', 'muted',
     'Backups hold transcripts, MoM, and Settings, not recording files. Audio and '
     + 'video are left out because they can reach hundreds of MB each. Download them from '
-    + 'the History entry → Download. Only the last 5 recordings are kept; older '
-    + 'ones are removed when a new recording starts. Importing a backup also DELETES '
+    + 'the History entry → Download. Importing a backup also DELETES '
     + 'the recordings saved at that moment.'));
 }
 

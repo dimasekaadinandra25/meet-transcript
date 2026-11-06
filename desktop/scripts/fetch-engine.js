@@ -1,11 +1,13 @@
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
 const OUTPUT = process.argv[2] ?? join(__dirname, '..', 'engine');
-const WINDOWS_TAR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+const SYSTEM_DIR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+const WINDOWS_TAR = join(SYSTEM_DIR, 'tar.exe');
+const RUNTIME_FILES = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'vcomp140.dll'];
 const ZIP = {
   url: 'https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip',
   sha256: '6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb',
@@ -50,10 +52,18 @@ async function fetchModel() {
   writeFileSync(path, await download(MODEL));
 }
 
+function copyRuntime() {
+  for (const file of RUNTIME_FILES) {
+    if (!existsSync(join(SYSTEM_DIR, file))) throw new Error(`${file} is missing on this computer. Install the Microsoft Visual C++ Redistributable, then build again.`);
+    copyFileSync(join(SYSTEM_DIR, file), join(OUTPUT, file));
+  }
+}
+
 async function main() {
   mkdirSync(OUTPUT, { recursive: true });
   await fetchProgram();
   await fetchModel();
+  copyRuntime();
   console.log(`Speech engine ready in ${OUTPUT}`);
 }
 

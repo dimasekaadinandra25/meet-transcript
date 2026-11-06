@@ -108,6 +108,8 @@ test('the uploaded file keeps the name it is given', async () => {
     assert.equal(form.get('file').name, 'audio.wav');
     await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x']), baseUrl: 'http://127.0.0.1:1/v1', model: 'm' });
     assert.equal(form.get('file').name, 'audio.webm');
+    await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x'], { type: 'audio/wav' }), baseUrl: 'http://127.0.0.1:1/v1', model: 'm' });
+    assert.equal(form.get('file').name, 'audio.wav');
   } finally {
     globalThis.fetch = realFetch;
   }

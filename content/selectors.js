@@ -45,9 +45,20 @@
       '[role="combobox"][aria-label*="bahasa" i]',
     ]);
   }
+  const named = (...names) => new RegExp(`^(${names.join('|')})`, 'i');
   const LANG_PATTERN = {
     id: /^(bahasa\s+)?indonesian?\b/i,
     en: /^(english|inggris)\b/i,
+    ms: named('malay', 'melayu', 'bahasa melayu'),
+    zh: named('chinese', 'mandarin', 'tionghoa', 'cina', '中文'),
+    ja: named('japanese', 'jepang', '日本語'),
+    ko: named('korean', 'korea', '한국어'),
+    hi: named('hindi', 'हिन्दी'),
+    ar: named('arabic', 'arab', 'العربية'),
+    es: named('spanish', 'spanyol', 'español'),
+    fr: named('french', 'prancis', 'français'),
+    de: named('german', 'jerman', 'deutsch'),
+    pt: named('portuguese', 'portugis', 'português'),
   };
   function langOption(re) {
     const hits = [...document.querySelectorAll('[role="option"]')]

@@ -52,17 +52,25 @@ function guardEngine(enginePid) {
 
 function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, wait = sleep, exists = existsSync, guard = guardEngine }) {
   const server = join(dir, SERVER_FILE);
-  const model = join(dir, MODEL_FILE);
+  const standardModel = join(dir, MODEL_FILE);
+  let model = standardModel;
   const threads = Math.max(1, Math.floor(availableParallelism() / 2));
   let child;
   let starting;
 
-  const available = () => exists(server) && exists(model);
+  const available = () => exists(server) && exists(standardModel);
 
   function stop() {
     child?.kill();
     child = undefined;
     starting = undefined;
+  }
+
+  function useModel(path) {
+    const next = path ?? standardModel;
+    if (next === model) return;
+    model = next;
+    stop();
   }
 
   async function start() {
@@ -101,7 +109,7 @@ function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, 
     return attempt;
   }
 
-  return { available, url, stop };
+  return { available, url, stop, useModel };
 }
 
 module.exports = { createEngine, engineArgs, GUARD_SCRIPT };

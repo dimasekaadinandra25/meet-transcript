@@ -134,7 +134,7 @@ async function start(msg) {
   if (vTrack) vTrack.contentHint = 'detail';
   stream.getAudioTracks()[0]?.addEventListener('ended', () => toSW({ type: 'stop-recording' }));
   await globalThis.MeetAudioStore.beginAudio(
-    { meetingId: msg.meetingId, chunkMs: msg.chunkMs, baseTime: msg.baseTime });
+    { meetingId: msg.meetingId, chunkMs: msg.chunkMs, baseTime: msg.baseTime, keep: msg.keepRecordings });
   audioCtx = new AudioContext();
   const src = audioCtx.createMediaStreamSource(stream);
   src.connect(audioCtx.destination);
@@ -237,7 +237,7 @@ async function retranscribe(msg) {
   busy = true;
   try {
     const saved = await globalThis.MeetAudioStore.loadAudio(msg.recId);
-    if (!saved) throw new Error('The recording audio is no longer saved. Only the last 5 recordings are kept.');
+    if (!saved) throw new Error('The recording audio is no longer saved. Settings decides how many are kept.');
     if (saved.meetingId !== msg.meetingId) {
       throw new Error('The saved audio belongs to another meeting.');
     }

@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 await import('../../lib/stt.js');
+await import('../../lib/merge.js');
 require('../renderer/tracks.js');
 const { mergeTracks, replaceBlocker } = globalThis.MeetTracks;
 

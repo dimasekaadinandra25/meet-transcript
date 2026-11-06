@@ -22,3 +22,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Transcripables also includes the Microsoft Visual C++ runtime files vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, and vcomp140.dll, which the speech engine needs. They are Microsoft software, redistributed under the Microsoft Visual Studio license terms.

@@ -36,8 +36,8 @@ The extension's interface is in Indonesian, so UI labels below appear in their o
 * **Hidden Captions (Default):** Captions are hidden from the Meet screen without turning CC off, so video tiles stay full size while the transcript keeps filling the panel. To see captions again, turn off **Hide captions on the Meet screen** (hide captions on the Meet screen) in Settings.
 * **Caption Language from the Popup:** Meet's language selector sits inside the caption area, so it gets hidden too. Choosing **Indonesia** (default) or **English** in the popup applies it directly to Meet, once per call. Manual changes in Meet's UI are respected.
 * **Discord Web Recording:** Voice calls at `discord.com/channels/…` can be recorded (audio, or audio + tab video). Web version only: the Discord desktop app is out of the extension's reach.
-* **Zoom Web Recording:** Meetings in the Zoom web client (`zoom.us/wc/<id>/join`, `/start`, or the older `/wc/join/<id>`) can be recorded, including `app.zoom.us` and company vanity subdomains. Start from the **icon popup** or the `Alt+Shift+R` / `Alt+Shift+V` shortcuts; the right-click menu is not registered for Zoom. `zoom.us/j/<id>` links are not web client pages: they launch the desktop app, whose audio is not in the tab. Zoom for Government (`zoomgov.com`) is out of scope.
-* **Teams, Webex, and Slack Web Recording:** Start from the **icon popup** or the `Alt+Shift+R` / `Alt+Shift+V` shortcuts (the right-click menu is not registered). The tab URL must contain a meeting id:
+* **Zoom Web Recording:** Meetings in the Zoom web client (`zoom.us/wc/<id>/join`, `/start`, or the older `/wc/join/<id>`) can be recorded, including `app.zoom.us` and company vanity subdomains. Start from the **icon popup**, the right-click menu, or the `Alt+Shift+R` / `Alt+Shift+V` shortcuts. `zoom.us/j/<id>` links are not web client pages: they launch the desktop app, whose audio is not in the tab. Zoom for Government (`zoomgov.com`) is out of scope.
+* **Teams, Webex, and Slack Web Recording:** Start from the **icon popup**, the right-click menu, or the `Alt+Shift+R` / `Alt+Shift+V` shortcuts. The tab URL must contain a meeting id:
   * **Teams** (`teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft`): thread id `19:meeting_…@thread.v2` (in the web client hash, an `/l/meetup-join/…` invite link, or the launcher) or a short `/meet/<number>` link. One meeting opened through both link types becomes two history entries.
   * **Webex** (`<site>.webex.com`): `MTID=m<hex>` in an invite link, a hex id on the *join* page, or a personal room at `/meet/<name>` / `/join/<name>`. `web.webex.com` (the Webex app in the browser) is not recognized yet.
   * **Slack** (`app.slack.com`): the huddle window at `/huddle/<workspace>/<channel>` or the channel view at `/client/<workspace>/<channel>`. Huddles have no id of their own, so one channel/DM is one entry, as with Discord.
@@ -107,7 +107,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Mark an important moment | **Mark moment** | `Alt+Shift+K` |
 
 * **Language** in Settings switches the app between English and Bahasa Indonesia. Transcripts, MoM, and titles are never translated, and `Alt` shortcut letters stay the same in both languages.
-* **Import audio file** turns an existing audio or video file into a meeting with a transcript. The file stays where it is and is not copied into the app, so **Retranscribe** is not offered for it. Import it again instead.
+* **Import audio file** turns an existing audio or video file into a meeting with a transcript. A speech-quality copy is kept with your recordings, so ▶ and **Retranscribe** work. It counts toward **Recordings to keep** in Settings.
 * Right-click the tray icon to record, stop, mute, or open the recordings folder without opening the window.
 * **Check for updates** in Settings looks for a new GitHub release and opens its download page. It does not install anything by itself.
 * Every button also has an `Alt` shortcut that works while the window is focused. Hold `Alt` to see them, or hover a button.
@@ -116,16 +116,16 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * Each recording is also saved to `Documents/Transcripables`. Deleting a meeting in the app does not delete that copy. Turn this off in Settings.
 * Closing the window while recording or transcribing keeps working in the system tray. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
 * Everything on your computer's speakers gets recorded, including notifications and other apps.
-* Without a headset, other people's voices can leak into your microphone and appear twice, labeled **You**.
+* Without a headset, other people's voices can leak into your microphone. Lines that repeat what the computer played within about 5 seconds are removed. Short replies and differently heard lines can still appear as **You**.
 * Ask meeting participants for permission before recording.
 
 ### Limits
 
 * If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes.
-* API keys are encrypted on your computer, but **Export backup** stores them in plain text.
+* API keys are encrypted on your computer. **Export backup** leaves them out unless you tick **Include API keys**, which stores them in plain text. Restoring a backup without keys keeps the keys you have now.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
-* **Ask** on a meeting sends your question and the transcript to your AI service. Answers are saved with the meeting, and stay out of exports.
+* **Ask** on a meeting sends your question and the transcript to your AI service. Answers are saved with the meeting, can be deleted one at a time, are found by History search, and stay out of exports. An answer or MoM says so if the transcript changed after it was made.
 * **Mark moment** (`Alt+Shift+K` in the desktop app and Chrome) flags an important point. Marks show in the transcript and in `.txt`, `.md`, `.docx` and PDF exports, and the MoM prompt gives them priority.
 * The ▶ on a line plays that moment from the recording, while the recording is still kept.
 * **Download** also offers `.srt` and `.vtt` subtitles. **MoM type** in Settings offers Standard, Standup, Client call, and 1-on-1.
@@ -133,7 +133,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * In the extension, the icon shows **!** when captions are off or quiet, or when *Meet captions + recorded audio* has no recording. Hover the icon for the reason.
 * **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay. If a part fails to transcribe again, its old lines are kept.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
-* The built-in engine uses a small model (`ggml-base-q5_1`), so a larger model on your own server is more accurate. It needs the Microsoft Visual C++ Redistributable, and the app says so if the engine cannot start.
+* The built-in engine starts with a small model (`ggml-base-q5_1`). **Built-in engine accuracy** in Settings downloads a larger one (190 MB or 540 MB), checked against a fixed checksum, and it stays on your computer. The installer includes the Microsoft runtime files the engine needs.
 * Speaker letters come from your STT service, one recording part at a time. **Speaker A** in one 2-minute part may be a different person from **Speaker A** in the next. The `gpt-4o-transcribe-diarize` model is requested with `diarized_json`. Other services must return a `speaker` field in each segment.
 
 ---
@@ -156,7 +156,7 @@ You can record tab audio and transcribe it through STT, either alone or together
 
 ### How to Record Audio
 
-1. Open **Settings** and configure **Speech-to-text engine**. Automatic transcription on Stop only runs for Google Meet with **Transcript source** set to *Record audio*. Other recordings (Meet in *Meet captions* mode, Teams, Webex, Slack, Discord, and Zoom) are stored as audio/video archives; open the entry in **History** and click **Generate transcript** if you need a transcript of its audio (the button only appears while its audio is stored).
+1. Open **Settings** and configure **Speech-to-text engine**. Automatic transcription on Stop runs on every meeting site when **Transcript source** is *Record audio* or *Meet captions + recorded audio*. With *Meet captions*, recordings are stored as audio/video archives; open the entry in **History** and click **Generate transcript** if you need a transcript of its audio (the button only appears while its audio is stored).
 2. During a call, start recording through one of three paths: the **extension icon popup** then *Record*, **right-click** on the page, or a keyboard shortcut. *Audio + video* also records the tab's picture (720p VP9, about 250 MB/hour, downloaded as one `.webm` file with **Download video** in history).
 3. On Google Meet, recording stops automatically when you leave the call. **On Teams, Webex, Slack, Discord, and Zoom it does not**: there is no session tracking there, so it only stops by itself if the recorded tab closes. Otherwise stop it yourself through the popup, panel, the `Alt+Shift+S` shortcut, or right-click then **Stop recording** (Meet/Discord only). After stopping, **Saving recording…** (for archives) or **Transcribing…** (for automatic transcripts) appears until processing finishes.
 
@@ -166,9 +166,10 @@ You can record tab audio and transcribe it through STT, either alone or together
 * Every panel and popup button has an `Alt` shortcut while that page is focused, such as `Alt+1` to `Alt+3` for tabs. Hold `Alt` to see them, or hover a button. When a menu is open, its own keys come first.
 * Default shortcuts: `Alt+Shift+R` (audio), `Alt+Shift+V` (audio + video), `Alt+Shift+S` (stop). Change them at `chrome://extensions/shortcuts`. They are useful on Discord, which swallows the `contextmenu` event so the browser's right-click menu does not appear (`Shift` + right-click forces it to appear).
 * By default, only other participants' voices (*tab audio*) are recorded. Check **Record microphone** in *Settings* to include your voice, then click **Allow microphone** (allow microphone) once to grant permission. If you have not, a permission window appears automatically when recording starts; tab recording continues and the mic joins once approved. Without a headset, participants' voices from your speakers can also be picked up by the mic (doubled).
-* Every 10 minutes, an audio chunk is saved to IndexedDB to avoid data loss if the browser closes unexpectedly. Chunks can be downloaded at any time with **Download audio** as separate `.webm` files (Chrome may need the *"Download multiple files"* permission when there is more than one).
+* Every 2 minutes, an audio part is saved to IndexedDB to avoid data loss if the browser closes unexpectedly. **Download audio** gives one `.webm` file, or one `.zip` when there are several parts.
 * **Meet captions + recorded audio** in **Transcript source** keeps captions as the main text, with speaker names. When you stop, the recording is transcribed and only lines the captions missed are added, without speaker names. You still press **Record** in each meeting, because Chrome only allows it after you click. It needs an STT service, and if STT fails the captions stay. Differently worded lines can still appear twice.
-* Only the **last 5 recordings** are kept. When a new recording starts, the oldest beyond those five is deleted, both audio and video.
+* The **last 5 recordings** are kept by default. Change this with **Recordings to keep** in Settings, up to 100. When a new recording starts, older ones beyond that number are deleted, both audio and video.
+* **Import audio file** in the **History** tab transcribes an existing file in Chrome or Edge, using your speech-to-text service. Keep the panel open until the parts are saved. It cannot be cancelled there.
 
 ### STT Mode Options (Speech-to-Text)
 
@@ -195,7 +196,7 @@ This extension is designed to be *privacy-first*:
 * **Automatic MoM:** A Settings option makes MoM when a transcript is ready. It is off by default because it sends the transcript to your LLM without asking.
 * **Delete a meeting:** Open it in **History** and choose **Delete** to permanently remove its transcript, MoM, and stored recordings. A meeting that is still running cannot be deleted.
 * **Copy Prompt / Paste into Gemini / Paste into ChatGPT:** All three copy the **entire transcript** to the clipboard, and the Gemini/ChatGPT buttons paste it into `gemini.google.com` / `chatgpt.com` without sending it. Once you press send, the whole meeting's content goes into your Google/OpenAI account. Do not use them for meetings whose content must not leave.
-* **Backup files:** The ZIP created by **Export backup** contains **your API key in plain text** along with all transcripts. Store the file safely and do not share it.
+* **Backup files:** The ZIP created by **Export backup** contains all transcripts, and **your API key in plain text only if you tick Include API keys**. Store the file safely and do not share it.
 
 ---
 

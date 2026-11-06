@@ -20,7 +20,6 @@ function icon(paths, cls) {
   return svg;
 }
 
-const BAHASA = [['id', 'Indonesia'], ['en', 'English']];
 let captionLang = 'id';
 
 let micOn = false;
@@ -112,7 +111,7 @@ function render() {
   });
   const l = mkDropdown(view, 'bahasa', 'Caption language', { cls: 'inline' });
   l.head.prepend(ICON.bahasa());
-  for (const [code, label] of BAHASA) {
+  for (const [code, label] of globalThis.MeetUi.CAPTION_LANGUAGES) {
     l.item(code === captionLang ? label + '  ✓' : label, () => setCaptionLang(code));
   }
   row('Show details', ICON.detail(), () => openPanel());

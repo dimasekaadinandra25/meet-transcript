@@ -39,9 +39,14 @@ stage() {
 }
 
 zip_stage() {
-  local dir="$1" out="$2"
-  rm -f "$out"
-  ( cd "$dir" && zip -rq "$out" . )
+  local dir="$1" out="$2" tmp="${2%.zip}.tmp.zip"
+  rm -f "$tmp"
+  if command -v zip >/dev/null; then
+    ( cd "$dir" && zip -rq "$tmp" . )
+  else
+    ( cd "$dir" && "${SYSTEMROOT:?zip is not installed}/System32/tar.exe" -a -cf "$tmp" -- * )
+  fi
+  mv -f "$tmp" "$out"
   rm -rf "$(dirname "$dir")"
   echo "pack: $out"
 }

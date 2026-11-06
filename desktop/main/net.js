@@ -44,7 +44,7 @@ const probe = (url, key) => netCall(async () => {
     headers: key ? { Authorization: `Bearer ${key}` } : {},
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   });
-  return { ok: res.ok, status: res.status };
+  return { ok: res.ok, status: res.status, ...(res.ok ? { body: await res.json().catch(() => null) } : {}) };
 });
 
 module.exports = { loadLib, netCall, callChat, callTest, callStt, probe };

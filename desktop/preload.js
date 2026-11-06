@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('desktop', {
   engine: {
     available: () => ipcRenderer.invoke('engine:available'),
     start: () => ipcRenderer.invoke('engine:start'),
+    models: () => ipcRenderer.invoke('engine:models'),
+    downloadModel: (id) => ipcRenderer.invoke('engine:download-model', id),
+    useModel: (id) => ipcRenderer.invoke('engine:use-model', id),
+    onModelProgress: (listener) => {
+      ipcRenderer.on('engine:model-progress', (_event, progress) => listener(progress));
+    },
   },
   net: {
     chat: (args) => ipcRenderer.invoke('net:chat', args),

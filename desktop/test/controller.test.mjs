@@ -88,7 +88,13 @@ beforeEach(() => {
   fakeStore = {
     removed: [],
     began: [],
+    appended: [],
     async beginAudio(meta) { this.began.push(meta); },
+    async appendSystemChunk(part, recId) {
+      if (this.failAppend) throw new Error(this.failAppend);
+      this.appended.push({ part, recId });
+    },
+    async freeRecId(baseTime) { return this.began.some((m) => m.baseTime === baseTime) ? baseTime + 1 : baseTime; },
     async removeRecordings(meetingId) {
       if (this.failRemove) throw new Error(this.failRemove);
       this.removed.push(meetingId);
@@ -140,7 +146,7 @@ test('rekaman membuat entri desktop-<baseTime> dengan judul tanggal', async () =
   assert.match(m.title, /\d/);
   assert.equal(m.endedAt, null);
   assert.deepEqual(data.meetings, [id]);
-  assert.deepEqual(fakeStore.began[0], { meetingId: id, chunkMs: 120000, baseTime: NOW });
+  assert.deepEqual(fakeStore.began[0], { meetingId: id, chunkMs: 120000, baseTime: NOW, keep: undefined });
   assert.equal(fakeRecorder.options.chunkMs, 120000);
   assert.equal(fakeRecorder.options.mic, true);
 });
@@ -668,6 +674,52 @@ test('an imported file becomes a meeting named after the file', async () => {
   assert.equal(imported().segments[1].t - imported().segments[0].t, 120000);
 });
 
+test('an imported file keeps its audio, so it can be played and retranscribed', async () => {
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  const began = fakeStore.began.at(-1);
+  assert.equal(began.imported, true);
+  assert.equal(began.meetingId, importedId());
+  assert.equal(began.baseTime, NOW - 200000);
+  assert.equal(began.chunkMs, 120000);
+  assert.equal(fakeStore.appended.length, 2);
+  assert.ok(fakeStore.appended.every((a) => a.recId === NOW - 200000));
+});
+
+test('retranscribing an imported file does not call the speaker Others', async () => {
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  const baseTime = NOW - 200000;
+  fakeStore.loadSystem = async () => ({ meetingId: importedId(), chunkMs: 120000, baseTime, imported: true, blobs: [blob('lagi')], indices: [0] });
+  fakeStore.loadMic = async () => null;
+  const res = await ctl.handle({ type: 'regenerate-transcript', id: importedId(), recId: baseTime });
+  assert.equal(res.ok, true);
+  const lines = imported().segments.filter((s) => s.text === 'teks lagi');
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].speaker, '');
+});
+
+test('importing the same file twice keeps two separate recordings', async () => {
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.deepEqual(fakeStore.began.map((m) => m.baseTime), [NOW - 200000, NOW - 199999]);
+  assert.equal(imported().startedAt, NOW - 199999);
+});
+
+test('if the audio cannot be kept, the transcript stays and you are told', async () => {
+  fakeStore.failAppend = 'disk penuh';
+  const res = await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.equal(res.ok, true);
+  assert.equal(imported().segments.length, 2);
+  assert.match(recStates().at(-1).error, /could not be kept/);
+  assert.deepEqual(fakeStore.removed, [importedId()]);
+});
+
+test('a cancelled import keeps no audio', async () => {
+  fakeOpenAI.onTranscribe = () => ctl.handle({ type: 'cancel-import' });
+  await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
+  assert.equal(fakeStore.began.length, 0);
+  assert.equal(fakeStore.appended.length, 0);
+});
+
 test('import reports progress and finishes idle', async () => {
   await ctl.handle({ type: 'import-audio', file: AUDIO_FILE });
   assert.ok(recStates().some((s) => s.transcribing && s.total === 2));
@@ -749,7 +801,8 @@ test('asking about a meeting saves the answer, newest first', async () => {
   const res = await ctl.handle({ type: 'ask-meeting', id, question: 'Satu?' });
   await ctl.handle({ type: 'ask-meeting', id, question: 'Dua?' });
   assert.deepEqual([res.ok, res.answer], [true, 'JAWABAN']);
-  assert.deepEqual(meeting().answers, [{ question: 'Dua?', answer: 'JAWABAN' }, { question: 'Satu?', answer: 'JAWABAN' }]);
+  assert.deepEqual(meeting().answers.map((a) => [a.question, a.answer]), [['Dua?', 'JAWABAN'], ['Satu?', 'JAWABAN']]);
+  assert.equal(typeof meeting().answers[0].basedOn, 'number');
   assert.equal(meeting().mom, momBefore);
 });
 

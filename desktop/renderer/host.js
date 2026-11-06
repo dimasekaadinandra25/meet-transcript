@@ -48,7 +48,10 @@
   useEngineByDefault().catch((e) => console.error(e));
 
   const tellLanguage = (settings) => desktop.setLanguage(settings?.uiLang);
-  shim.storage.local.get('settings').then(({ settings }) => tellLanguage(settings));
+  shim.storage.local.get('settings').then(({ settings }) => {
+    tellLanguage(settings);
+    if (settings?.engineModel) desktop.engine.useModel(settings.engineModel);
+  });
   shim.storage.onChanged.addListener((changes) => {
     if (changes.settings) tellLanguage(changes.settings.newValue);
   });
@@ -100,21 +103,6 @@
     return select;
   }
 
-  function importButton(box) {
-    const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'audio/*,video/*', hidden: true });
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      if (globalThis.MeetWav.isLargeFile(file.size) && !confirm(globalThis.MeetI18n.t('This file is very large, and importing it may run out of memory. Continue?'))) return;
-      send({ type: 'import-audio', file });
-    });
-    mkBtn('Import audio file', () => {
-      input.value = '';
-      input.click();
-    }, box);
-    box.append(input);
-  }
-
   const meters = { system: null, mic: null };
 
   function levelRow(name, label) {
@@ -157,21 +145,10 @@
       mkBtn('Record audio', () => send({ type: 'start-recording', video: false }), box).classList.add('primary');
       mkBtn('Record audio + video', () => send({ type: 'start-recording', video: true }), box);
       box.append(sourcePicker());
-      importButton(box);
-      box.append(el('div', 'muted', 'Without a headset, other people can leak into your microphone and appear twice as "You".'));
+      globalThis.MeetUi.mkImportButton((file) => send({ type: 'import-audio', file }), box);
+      box.append(el('div', 'muted', 'Without a headset, other people can leak into your microphone. Repeated lines are removed, but some may stay as "You".'));
     }
     return box;
-  }
-
-  function titleEditor(meeting) {
-    const input = Object.assign(document.createElement('input'), { value: meeting.title, defaultValue: meeting.title });
-    input.dataset.titleEditor = '';
-    input.setAttribute('aria-label', 'Meeting title');
-    input.addEventListener('change', () => {
-      input.defaultValue = input.value;
-      send({ type: 'rename-meeting', id: meeting.id, title: input.value });
-    });
-    return input;
   }
 
   function settingToggle(key, label, on) {
@@ -182,10 +159,74 @@
     return row;
   }
 
+  const MODEL_NAMES = { base: 'Standard (included)', small: 'Better', medium: 'Best, slower' };
+  const megabytes = (bytes) => Math.round(bytes / 1000000);
+  let showModelProgress = () => {};
+  desktop.engine.onModelProgress((progress) => showModelProgress(progress));
+
+  function modelOption({ id, bytes, installed }) {
+    const name = MODEL_NAMES[id];
+    return Object.assign(document.createElement('option'), { value: id, textContent: installed ? name : `${name} (${megabytes(bytes)} MB download)` });
+  }
+
+  function engineModelRow(settings) {
+    const row = el('div');
+    row.hidden = true;
+    const select = el('select');
+    const note = el('span', 'muted');
+    row.append(el('label', null, 'Built-in engine accuracy'), select, note);
+    let current = settings.engineModel ?? 'base';
+    const fill = async () => {
+      const models = await desktop.engine.models();
+      select.replaceChildren(modelOption({ id: 'base', installed: true }), ...models.map(modelOption));
+      select.value = current;
+      return models;
+    };
+    desktop.engine.available().then((ready) => {
+      if (!ready) return;
+      row.hidden = false;
+      fill().catch((e) => console.error(e));
+    });
+    select.addEventListener('change', async () => {
+      const { t } = globalThis.MeetI18n;
+      const id = select.value;
+      const { rec } = await send({ type: 'get-active' });
+      if (rec.recording || rec.transcribing) {
+        select.value = current;
+        note.textContent = 'Wait until the recording or transcript finishes.';
+        return;
+      }
+      const missing = (await desktop.engine.models()).find((model) => model.id === id && !model.installed);
+      if (missing) {
+        if (!confirm(t('Download about {} MB now? It stays on this computer.').replace('{}', megabytes(missing.bytes)))) {
+          select.value = current;
+          return;
+        }
+        select.disabled = true;
+        showModelProgress = ({ percent }) => { note.textContent = `Downloading… ${percent}%`; };
+        const res = await desktop.engine.downloadModel(id);
+        showModelProgress = () => {};
+        select.disabled = false;
+        if (!res.ok) {
+          select.value = current;
+          note.textContent = res.error;
+          return;
+        }
+      }
+      await desktop.engine.useModel(id);
+      await globalThis.MeetUi.patchSettings({ engineModel: id });
+      current = id;
+      await fill();
+      note.textContent = 'Ready.';
+    });
+    return row;
+  }
+
   function settingsRows(settings) {
     const open = el('div', 'actions');
     mkBtn('Open recordings folder', () => desktop.recordings.open(), open);
     return [
+      engineModelRow(settings),
       el('h3', null, 'Recordings'),
       settingToggle('autoSave', 'Save each recording to Documents/Transcripables', settings.autoSave !== false),
       open,
@@ -217,7 +258,6 @@
   globalThis.PanelHost = {
     runCommand,
     recordControls,
-    titleEditor,
     makePdf: () => desktop.makePdf(),
     hasEngine: () => desktop.engine.available(),
     settingsRows,
@@ -226,6 +266,5 @@
     emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
     emptySegmentsText: 'The transcript appears about every 2 minutes, and finishes when you stop.',
     deleteNote: ' Copies in your Documents/Transcripables folder stay.',
-    backupWarning: 'The backup file holds your API key in plain text. Keep it somewhere safe and do not share it.',
   };
 })();

@@ -194,7 +194,10 @@ if (!chrome.tabCapture) {
 }
 
 if (chrome.tabCapture) {
-  const RECORDABLE = ['https://meet.google.com/*', 'https://discord.com/channels/*'];
+  const RECORDABLE = [
+    'https://meet.google.com/*', 'https://discord.com/channels/*', 'https://teams.microsoft.com/*', 'https://teams.live.com/*', 'https://teams.cloud.microsoft/*',
+    'https://*.webex.com/*', 'https://app.slack.com/*', 'https://zoom.us/*', 'https://*.zoom.us/*',
+  ];
   const MENU = [
     ['rec-start', 'Record meeting audio'],
     ['rec-start-video', 'Record meeting audio + video'],
@@ -226,6 +229,10 @@ if (chrome.tabCapture) {
   };
   chrome.contextMenus.onClicked.addListener((info, tab) => runCommand(info.menuItemId, tab));
   chrome.commands?.onCommand.addListener(runCommand);
+} else {
+  chrome.commands?.onCommand.addListener((id) => {
+    if (id === 'mark-moment') markMoment().catch((e) => recError(e.message));
+  });
 }
 
 async function sttConfig() {
@@ -236,11 +243,12 @@ async function sttConfig() {
     sttModel: stt.model, sttLanguage: stt.language,
     mic: !!settings.mic,
     transcriptSource: settings.transcriptSource ?? 'caption',
+    keepRecordings: settings.keepRecordings,
   };
 }
 
-function autoTranscribe(meetingId, transcriptSource) {
-  return globalThis.MeetSession.isMeetCode(meetingId) && (transcriptSource === 'audio' || transcriptSource === 'both');
+function autoTranscribe(transcriptSource) {
+  return transcriptSource === 'audio' || transcriptSource === 'both';
 }
 
 let micWin = null;
@@ -281,11 +289,11 @@ async function startRecordingInner({ streamId, meetingId, title, baseTime, video
   const stt = await sttConfig();
   await ensureOffscreen();
   broadcastRec({ error: null });
-  const transcribe = autoTranscribe(meetingId, stt.transcriptSource);
+  const transcribe = autoTranscribe(stt.transcriptSource);
   rec.autoStt = transcribe;
   const res = await chrome.runtime.sendMessage({
     target: 'offscreen', op: 'start', streamId, meetingId, ...stt,
-    chunkMs: 600000, baseTime, video: !!video, transcribe, tabId,
+    chunkMs: 120000, baseTime, video: !!video, transcribe, tabId,
   }).catch((e) => ({ ok: false, error: e.message }));
   if (!res?.ok) throw new Error(res?.error || 'The recorder did not respond, so recording did not start.');
   enqueueWrite(() => ensureMeeting({ meetingId, title, startedAt: baseTime }));
@@ -303,7 +311,7 @@ async function regenerateTranscript(meetingId, recId) {
     const target = (await globalThis.MeetAudioStore.listRecordings())
       .find((r) => r.recId === Number(recId));
     if (!target) {
-      throw new Error('That recording is no longer saved. Only the last 5 recordings are kept.');
+      throw new Error('That recording is no longer saved. Settings decides how many are kept.');
     }
     if (target.meetingId !== meetingId) {
       throw new Error('That recording belongs to another meeting, so it cannot be retranscribed here.');
@@ -372,7 +380,7 @@ async function ensureMeeting({ meetingId, title, startedAt }) {
   if (!(meeting.startedAt <= startedAt)) meeting.startedAt = startedAt;
   meeting.source = 'audio';
   meeting.endedAt = null;
-  if (title) meeting.title = title;
+  if (title && !meeting.renamed) meeting.title = title;
   await storeMeeting(meetingId, meeting, data);
   notifyPanel({ type: 'meeting-updated', id: meetingId });
 }
@@ -410,7 +418,7 @@ async function saveSegments({ meetingId, title, segs }) {
   const data = await chrome.storage.local.get([key, 'meetings']);
   await archiveIfStale(meetingId, data);
   const meeting = data[key] ?? newMeeting(meetingId, title || meetingId, Date.now());
-  if (title) meeting.title = title;
+  if (title && !meeting.renamed) meeting.title = title;
   meeting.endedAt = null;
   const names = meeting.speakerNames ?? {};
   for (const seg of segs) {
@@ -433,7 +441,7 @@ async function autoMom(id) {
   }
 }
 
-async function endMeeting(meetingId) {
+async function endMeeting(meetingId, { makeMom = true } = {}) {
   if (active.id === meetingId) {
     active = { ...ACTIVE_IDLE };
     updateBadge();
@@ -445,8 +453,15 @@ async function endMeeting(meetingId) {
   data[key].endedAt = Date.now();
   await chrome.storage.local.set({ [key]: data[key] });
   notifyPanel({ type: 'meeting-updated', id: meetingId });
-  const transcriptComing = data[key].source === 'audio' && autoTranscribe(meetingId, settings.transcriptSource);
-  if (!transcriptComing) autoMom(meetingId).catch((e) => console.error(e));
+  const transcriptComing = data[key].source === 'audio' && autoTranscribe(settings.transcriptSource);
+  if (makeMom && !transcriptComing) autoMom(meetingId).catch((e) => console.error(e));
+}
+
+async function finishOtherSite(id) {
+  if (globalThis.MeetSession.isMeetCode(id)) return;
+  const key = meetingKey(id);
+  const { [key]: meeting } = await chrome.storage.local.get(key);
+  if (meeting && !meeting.endedAt) await endMeeting(id, { makeMom: false });
 }
 
 async function generateMom(id) {
@@ -457,6 +472,7 @@ async function generateMom(id) {
   const meeting = data[key];
   if (!meeting || !meeting.segments.length) throw new Error('The transcript is empty.');
   const prompt = globalThis.MeetMerge.momPrompt(meeting, settings);
+  const momBasedOn = globalThis.MeetMerge.transcriptStamp(meeting);
   const mom = await globalThis.MeetOpenAI.generateMoM({
     apiKey: settings.apiKey, model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt,
     baseUrl: settings.baseUrl,
@@ -467,6 +483,7 @@ async function generateMom(id) {
         const fresh = (await chrome.storage.local.get(key))[key];
         if (!fresh) throw new Error('Meeting not found.');
         fresh.mom = mom;
+        fresh.momBasedOn = momBasedOn;
         await chrome.storage.local.set({ [key]: fresh });
         resolve();
       } catch (e) {
@@ -538,12 +555,13 @@ async function askMeeting(id, question) {
   const { settings = {}, [key]: meeting } = await chrome.storage.local.get(['settings', key]);
   if (!globalThis.MeetMerge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
   if (!meeting?.segments.length) throw new Error('The transcript is empty.');
+  const basedOn = globalThis.MeetMerge.transcriptStamp(meeting);
   const answer = await globalThis.MeetOpenAI.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
     model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt: globalThis.MeetMerge.askPrompt(meeting, question) });
   await whenWritten(async () => {
     const { [key]: current } = await chrome.storage.local.get(key);
     if (current?.startedAt !== meeting.startedAt) throw new Error('Meeting not found.');
-    globalThis.MeetMerge.addAnswer(current, question, answer);
+    globalThis.MeetMerge.addAnswer(current, question, answer, basedOn);
     await chrome.storage.local.set({ [key]: current });
     notifyPanel({ type: 'meeting-updated', id });
   });
@@ -561,6 +579,28 @@ async function saveTranscriptEdit(id, change) {
 }
 
 const editTranscript = (id, change) => whenWritten(() => saveTranscriptEdit(id, change));
+
+async function saveTitle(id, title) {
+  const clean = String(title ?? '').trim();
+  if (!clean) return;
+  const key = meetingKey(id);
+  const { [key]: meeting } = await chrome.storage.local.get(key);
+  if (!meeting) throw new Error('Meeting not found.');
+  meeting.title = clean;
+  meeting.renamed = true;
+  await chrome.storage.local.set({ [key]: meeting });
+  notifyPanel({ type: 'meeting-updated', id });
+}
+
+const renameMeeting = (id, title) => whenWritten(() => saveTitle(id, title));
+
+const addImportedMeeting = ({ title, startedAt, endedAt }) => whenWritten(async () => {
+  const id = `import-${Date.now()}`;
+  const meeting = { ...newMeeting(id, title, startedAt), endedAt, keepFrom: Date.now(), source: 'audio' };
+  await storeMeeting(id, meeting, await chrome.storage.local.get('meetings'));
+  notifyPanel({ type: 'meeting-updated', id });
+  return { id };
+});
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'captions') return;
@@ -698,6 +738,8 @@ const HANDLERS = {
     reply(generateMomOnce(msg.id).then((mom) => ({ mom })), sendResponse),
   'delete-meeting': (msg, sender, sendResponse) => reply(deleteMeeting(msg.id), sendResponse),
   'edit-transcript': (msg, sender, sendResponse) => reply(editTranscript(msg.id, msg.change), sendResponse),
+  'rename-meeting': (msg, sender, sendResponse) => reply(renameMeeting(msg.id, msg.title), sendResponse),
+  'add-imported-meeting': (msg, sender, sendResponse) => reply(addImportedMeeting(msg), sendResponse),
   'mark-moment': (msg, sender, sendResponse) => reply(markMoment(), sendResponse),
   'ask-meeting': (msg, sender, sendResponse) => reply(askMeeting(msg.id, msg.question), sendResponse),
   'delete-old-meetings': (msg, sender, sendResponse) => reply(deleteOldMeetings(), sendResponse),
@@ -724,6 +766,7 @@ const HANDLERS = {
       : 'Empty transcript. STT returned no text, so check the speech-to-text address and model in Settings.' });
     enqueueWrite(async () => {
       const id = await saveAudioTranscript(msg);
+      await finishOtherSite(id);
       if (!msg.error) autoMom(id).catch((e) => console.error(e));
     });
     closeOffscreen();
@@ -737,6 +780,7 @@ const HANDLERS = {
   'audio-error': (msg) => {
     resetRec();
     broadcastRec({ error: msg.error });
+    if (msg.meetingId) enqueueWrite(() => finishOtherSite(msg.meetingId));
     closeOffscreen();
   },
   'audio-warn': (msg) => { broadcastRec({ error: msg.error }); },

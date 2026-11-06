@@ -89,7 +89,7 @@
       const begin = async () => {
         const settings = await readSettings();
         await recorder.start({ baseTime, mic: settings.mic !== false, video: !!video, chunkMs: CHUNK_MS,
-          prepare: () => audioStore.beginAudio({ meetingId, chunkMs: CHUNK_MS, baseTime }) });
+          prepare: () => audioStore.beginAudio({ meetingId, chunkMs: CHUNK_MS, baseTime, keep: settings.keepRecordings }) });
         await addMeeting({ id: meetingId, title: new Date(baseTime).toLocaleString(), startedAt: baseTime,
           endedAt: null, segments: [], mom: null, source: 'audio' }).catch(async (e) => {
           await recorder.stop().catch(() => {});
@@ -215,7 +215,7 @@
         if (blocked) throw new Error(blocked);
       }
       const segments = tracks.mergeTracks({ system: systemTrack, mic: micTrack,
-        chunkMs: source.chunkMs, baseTime: source.baseTime });
+        chunkMs: source.chunkMs, baseTime: source.baseTime, imported: source.imported });
       await updateMeeting(meetingId, (meeting) => {
         merge.replaceMeetingAudio(meeting, segments, { baseTime: source.baseTime, replace });
       });
@@ -287,7 +287,7 @@
       broadcast({ error: null });
       try {
         const target = (await audioStore.listRecordings()).find((r) => r.recId === Number(recId));
-        if (!target) throw new Error('That recording is no longer saved. Only the last 5 recordings are kept.');
+        if (!target) throw new Error('That recording is no longer saved. Settings decides how many are kept.');
         if (target.meetingId !== id) throw new Error('That recording belongs to another meeting.');
         const error = await transcribe(id, target.recId, true);
         rec = { ...IDLE };
@@ -306,9 +306,13 @@
       const meeting = await readMeeting(id);
       if (!meeting?.segments.length) throw new Error('The transcript is empty.');
       const prompt = merge.momPrompt(meeting, settings);
+      const momBasedOn = merge.transcriptStamp(meeting);
       const mom = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl, prompt,
         model: settings.model || openai.DEFAULT_MODEL });
-      await updateMeeting(id, (fresh) => { fresh.mom = mom; });
+      await updateMeeting(id, (fresh) => {
+        fresh.mom = mom;
+        fresh.momBasedOn = momBasedOn;
+      });
       return mom;
     }
 
@@ -363,6 +367,18 @@
       return results;
     }
 
+    async function keepImportedAudio(meetingId, baseTime, parts) {
+      try {
+        const { keepRecordings } = await readSettings();
+        await audioStore.beginAudio({ meetingId, chunkMs: IMPORT_PART_MS, baseTime, keep: keepRecordings, imported: true });
+        for (const part of parts) await audioStore.appendSystemChunk(part, baseTime);
+        return null;
+      } catch (e) {
+        await audioStore.removeRecordings(meetingId).catch(() => {});
+        return `The audio could not be kept (${e.message}), so this file cannot be played or retranscribed here.`;
+      }
+    }
+
     async function importAudio({ file }) {
       if (busy()) return { ok: false, error: 'A recording or transcript is still running.' };
       const meetingId = `desktop-${now()}`;
@@ -389,11 +405,13 @@
         if (!results.some((r) => r.segments?.length)) {
           throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the speech-to-text address and model in Settings.');
         }
-        const startedAt = file.lastModified - durationMs;
+        const startedAt = await audioStore.freeRecId(file.lastModified - durationMs);
         await addMeeting({ id: meetingId, title: file.name.replace(/\.[^.]*$/, ''), startedAt, endedAt: file.lastModified, keepFrom: now(), mom: null, source: 'audio',
           segments: merge.replaceAudioSegments([], stt.mergeSttChunks(results, IMPORT_PART_MS, startedAt), { baseTime: startedAt }) });
+        const notKept = await keepImportedAudio(meetingId, startedAt, parts);
         setActive(meetingId);
-        finish(failures.length ? `${failures.length}/${parts.length} parts failed to transcribe: ${failures[0].error}` : null);
+        const failed = failures.length ? `${failures.length}/${parts.length} parts failed to transcribe: ${failures[0].error}` : null;
+        finish([failed, notKept].filter(Boolean).join(' ') || null);
         if (!failures.length) autoMom(meetingId).catch((e) => console.error(e));
         return { ok: true };
       } catch (e) {
@@ -415,9 +433,10 @@
         if (!merge.canMakeMom(settings)) throw new Error('Add an API key in the Settings tab first.');
         const meeting = await readMeeting(id);
         if (!meeting?.segments.length) throw new Error('The transcript is empty.');
+        const basedOn = merge.transcriptStamp(meeting);
         const answer = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
           model: settings.model || openai.DEFAULT_MODEL, prompt: merge.askPrompt(meeting, question) });
-        await updateMeeting(id, (current) => merge.addAnswer(current, question, answer));
+        await updateMeeting(id, (current) => merge.addAnswer(current, question, answer, basedOn));
         return { ok: true, answer };
       } catch (e) {
         return { ok: false, error: e.message };

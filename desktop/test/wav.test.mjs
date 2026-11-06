@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-require('../renderer/wav.js');
+require('../../lib/wav.js');
 const { encodeWav, mono } = globalThis.MeetWav;
 
 const text = (view, at, length) => String.fromCharCode(...new Uint8Array(view.buffer, at, length));

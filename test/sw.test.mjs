@@ -8,7 +8,7 @@ const SESSION = readFileSync(new URL('../content/session.js', import.meta.url), 
 const MERGE = readFileSync(new URL('../lib/merge.js', import.meta.url), 'utf8');
 const I18N = readFileSync(new URL('../lib/i18n.js', import.meta.url), 'utf8');
 
-function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {}, generateMoM = async () => 'MOM OTOMATIS', withMenus = false }) {
+function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = async () => {}, generateMoM = async () => 'MOM OTOMATIS', withMenus = false, withCommands = false }) {
   const sent = [];
   const scripts = [];
   const tabUpdated = [];
@@ -45,7 +45,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
       set: async (o) => { Object.assign(store, structuredClone(o)); },
       remove: async (k) => { for (const x of [].concat(k)) delete store[x]; },
     }, onChanged: { addListener: (f) => changed.push(f) } },
-    offscreen: { closeDocument: async () => {} },
+    offscreen: { closeDocument: async () => {}, createDocument: async () => {} },
     tabs: {
       create: async () => ({ id: 7 }),
       onUpdated: { addListener: (f) => tabUpdated.push(f), removeListener() {} },
@@ -58,11 +58,14 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   const installed = [];
   const changed = [];
   const menus = {};
+  const patterns = [];
+  const commands = [];
+  if (withCommands) chrome.commands = { onCommand: { addListener: (f) => commands.push(f) } };
   if (withMenus) {
     chrome.tabCapture = {};
     chrome.contextMenus = {
       removeAll: (done) => done(),
-      create: ({ id, title }) => { menus[id] = title; },
+      create: ({ id, title, documentUrlPatterns }) => { menus[id] = title; patterns.push(...documentUrlPatterns); },
       update: async (id, { title }) => { menus[id] = title; },
       onClicked: { addListener() {} },
     };
@@ -100,7 +103,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
     return { send: (m) => port.msgFns.forEach((f) => f(m)), disconnect: () => port.discFns.forEach((f) => f()) };
   };
   return { ask, sent, store, connect, scripts, tabUpdated, removedAudio, badge: () => badge, badgeTitle: () => badgeTitle, meetingIdFromUrl: ctx.meetingIdFromUrl,
-    autoTranscribe: ctx.autoTranscribe, menus, install: () => installed.forEach((f) => f()), settingsChanged: (settings) => changed.forEach((f) => f({ settings: { newValue: settings } }, 'local')) };
+    autoTranscribe: ctx.autoTranscribe, saveSegments: ctx.saveSegments, startRecording: ctx.startRecording, menuPatterns: () => patterns, pressCommand: (id) => commands.forEach((f) => f(id)), menus, install: () => installed.forEach((f) => f()), settingsChanged: (settings) => changed.forEach((f) => f({ settings: { newValue: settings } }, 'local')) };
 }
 
 const idOf = loadSw({ offscreen: null }).meetingIdFromUrl;
@@ -139,15 +142,11 @@ test('offscreen yang idle tidak memalsukan rekaman', async () => {
   assert.ok(!sw.badge());
 });
 
-test('STT otomatis hanya untuk Meet bermode audio', () => {
+test('STT otomatis mengikuti sumber transkrip', () => {
   const { autoTranscribe } = loadSw({ offscreen: null });
-  const meet = idOf('https://meet.google.com/abc-defg-hij');
-  assert.equal(autoTranscribe(meet, 'caption'), false);
-  assert.equal(autoTranscribe(meet, 'audio'), true);
-  assert.equal(autoTranscribe(meet, 'both'), true);
-  assert.equal(autoTranscribe(idOf('https://discord.com/channels/123/456'), 'both'), false);
-  assert.equal(autoTranscribe(idOf('https://discord.com/channels/123/456'), 'audio'), false);
-  assert.equal(autoTranscribe(idOf('https://zoom.us/wc/84787201766/join'), 'audio'), false);
+  assert.equal(autoTranscribe('caption'), false);
+  assert.equal(autoTranscribe('audio'), true);
+  assert.equal(autoTranscribe('both'), true);
 });
 
 test('audio-saved melepas status transkrip', async () => {
@@ -237,7 +236,7 @@ test('recId yang sudah terpangkas ditolak dengan pesan yang menjelaskan', async 
     recordings: [{ recId: 1000, meetingId: 'abc-defg-hij', count: 2 }] });
   const res = await sw.ask({ type: 'regenerate-transcript', id: 'abc-defg-hij', recId: 999 });
   assert.equal(res.ok, false);
-  assert.match(res.error, /last 5 recordings/);
+  assert.match(res.error, /no longer saved/);
   assert.ok(!sw.sent.some((m) => m.op === 'retranscribe'));
 });
 
@@ -728,6 +727,112 @@ test('asking needs an AI service', async () => {
   const res = await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
   assert.equal(res.ok, false);
   assert.match(res.error, /API key/);
+});
+
+test('a meeting can be renamed, and the name stays when the call page sends its title', async () => {
+  const store = editStore();
+  store['meeting:a'].endedAt = Date.now();
+  const sw = loadSw({ offscreen: null, store });
+  const res = await sw.ask({ type: 'rename-meeting', id: 'a', title: '  Rapat anggaran  ' });
+  assert.equal(res.ok, true);
+  assert.equal(sw.store['meeting:a'].title, 'Rapat anggaran');
+  await sw.saveSegments({ meetingId: 'a', title: 'Judul halaman', segs: [] });
+  assert.equal(sw.store['meeting:a'].title, 'Rapat anggaran');
+});
+
+test('an empty name leaves the title alone', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const before = sw.store['meeting:a'].title;
+  await sw.ask({ type: 'rename-meeting', id: 'a', title: '   ' });
+  assert.equal(sw.store['meeting:a'].title, before);
+});
+
+test('an answer and a MoM remember the transcript they came from', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } } });
+  await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
+  await sw.ask({ type: 'generate-mom', id: 'a' });
+  const saved = sw.store['meeting:a'];
+  assert.equal(typeof saved.answers[0].basedOn, 'number');
+  assert.equal(saved.momBasedOn, saved.answers[0].basedOn);
+});
+
+test('with Record audio, a recording from another meeting site is transcribed when it stops', async () => {
+  const sw = loadSw({ offscreen: null, withMenus: true, store: { settings: { transcriptSource: 'audio' } } });
+  await sw.startRecording({ streamId: 's', meetingId: 'teams-123', title: 'x', tabId: 1 }).catch(() => {});
+  assert.equal(sw.sent.find((m) => m.op === 'start')?.transcribe, true);
+});
+
+const openOtherSite = () => ({ meetings: ['teams-123'], 'meeting:teams-123': { id: 'teams-123', title: 'T', startedAt: 1, endedAt: null, segments: [], mom: null, source: 'audio' } });
+
+test('a recording from another site is finished once its transcript arrives', async () => {
+  const sw = loadSw({ offscreen: null, withMenus: true, store: openOtherSite() });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'teams-123', baseTime: 1, segments: [{ t: 1, speaker: '', text: 'halo' }], replace: false });
+  await wait();
+  assert.ok(sw.store['meeting:teams-123'].endedAt > 0);
+});
+
+test('a recording from another site is finished even if transcribing fails', async () => {
+  const sw = loadSw({ offscreen: null, withMenus: true, store: openOtherSite() });
+  await sw.ask({ type: 'audio-error', meetingId: 'teams-123', error: 'STT mati' });
+  await wait();
+  assert.ok(sw.store['meeting:teams-123'].endedAt > 0);
+});
+
+test('retranscribing a finished meeting keeps its end time', async () => {
+  const store = openOtherSite();
+  store['meeting:teams-123'].endedAt = 77;
+  const sw = loadSw({ offscreen: null, withMenus: true, store });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'teams-123', baseTime: 1, segments: [{ t: 1, speaker: '', text: 'halo' }], replace: true });
+  await wait();
+  assert.equal(sw.store['meeting:teams-123'].endedAt, 77);
+});
+
+test('a Meet recording stays open for the call page to finish', async () => {
+  const store = { meetings: ['abc-defg-hij'], 'meeting:abc-defg-hij': { id: 'abc-defg-hij', title: 'M', startedAt: 1, endedAt: null, segments: [], mom: null, source: 'audio' } };
+  const sw = loadSw({ offscreen: null, withMenus: true, store });
+  await sw.ask({ type: 'audio-transcript', meetingId: 'abc-defg-hij', baseTime: 1, segments: [{ t: 1, speaker: '', text: 'halo' }], replace: false });
+  await wait();
+  assert.equal(sw.store['meeting:abc-defg-hij'].endedAt, null);
+});
+
+test('an imported file becomes a finished meeting, safe from auto-delete for now', async () => {
+  const sw = loadSw({ offscreen: null, store: { meetings: ['lama'] } });
+  const res = await sw.ask({ type: 'add-imported-meeting', title: 'Rapat', startedAt: 1000, endedAt: 5000 });
+  assert.equal(res.ok, true);
+  assert.match(res.id, /^import-\d+$/);
+  const saved = sw.store[`meeting:${res.id}`];
+  assert.equal(saved.title, 'Rapat');
+  assert.equal(saved.startedAt, 1000);
+  assert.equal(saved.endedAt, 5000);
+  assert.equal(saved.source, 'audio');
+  assert.ok(saved.keepFrom > 5000);
+  assert.equal(sw.store.meetings[0], res.id);
+});
+
+test('the right-click menu is offered on every meeting site', () => {
+  const sw = loadSw({ offscreen: null, withMenus: true });
+  sw.install();
+  for (const site of ['meet.google.com', 'discord.com/channels', 'teams.microsoft.com', 'teams.live.com', 'teams.cloud.microsoft', '*.webex.com', 'app.slack.com', '*.zoom.us']) {
+    assert.ok(sw.menuPatterns().some((pattern) => pattern.includes(site)), site);
+  }
+});
+
+test('recording parts are 2 minutes, and the keep number reaches the recorder', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { keepRecordings: 12 } } });
+  await sw.startRecording({ streamId: 's', meetingId: 'abc-defg-hij', title: 'x', tabId: 1 }).catch(() => {});
+  const sentStart = sw.sent.find((m) => m.op === 'start');
+  assert.equal(sentStart?.chunkMs, 120000);
+  assert.equal(sentStart?.keepRecordings, 12);
+});
+
+test('Firefox can mark a moment with the keyboard', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore(), withCommands: true });
+  const port = sw.connect(1);
+  port.send({ type: 'status', meetingId: 'a', inCall: true, captionsOn: true });
+  await wait();
+  sw.pressCommand('mark-moment');
+  await wait();
+  assert.equal(sw.store['meeting:a'].marks.length, 1);
 });
 
 test('old meetings are deleted when the limit is set', async () => {

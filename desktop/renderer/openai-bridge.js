@@ -19,6 +19,7 @@
 
   globalThis.bridgeFetch = async (url, init = {}) => {
     const key = init.headers?.Authorization?.replace(/^Bearer /, '') ?? '';
-    return unwrap(await net.probe(url, key));
+    const answer = unwrap(await net.probe(url, key));
+    return { ...answer, json: async () => answer.body };
   };
 })();

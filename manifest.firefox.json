@@ -10,6 +10,9 @@
       "data_collection_permissions": { "required": ["none"] }
     }
   },
+  "commands": {
+    "mark-moment": { "suggested_key": { "default": "Alt+Shift+K" }, "description": "Mark moment" }
+  },
   "permissions": ["storage", "unlimitedStorage", "activeTab", "contextMenus", "scripting"],
   "host_permissions": [
     "https://meet.google.com/*",

@@ -8,6 +8,7 @@ const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, netCall, callChat, callTest, callStt, probe } = require('./net');
 const { createEngine } = require('./engine');
+const { createModels } = require('./models');
 const { createRecordingFolder } = require('./recordings');
 const { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep } = require('./lifecycle');
 const { RELEASES_URL, checkForUpdate } = require('./update');
@@ -165,6 +166,13 @@ function serveNet() {
   handleFromApp('net:stt', (args) => callStt(args, engine.url));
   handleFromApp('engine:available', () => engine.available());
   handleFromApp('engine:start', () => netCall(engine.url));
+  const models = createModels({
+    dir: join(app.getPath('userData'), 'models'),
+    onProgress: (progress) => mainWindow?.webContents.send('engine:model-progress', progress),
+  });
+  handleFromApp('engine:models', () => models.list());
+  handleFromApp('engine:download-model', (id) => netCall(() => models.download(id)));
+  handleFromApp('engine:use-model', (id) => engine.useModel(models.pathOf(id)));
   handleFromApp('net:probe', probe);
 }
 

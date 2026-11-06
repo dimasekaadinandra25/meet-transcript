@@ -3,10 +3,11 @@
 
   const segmentsOf = (track, chunkMs, baseTime) => globalThis.MeetStt.mergeSttChunks(track.results, chunkMs, baseTime, track.indices);
 
-  function mergeTracks({ system, mic, chunkMs, baseTime }) {
+  function mergeTracks({ system, mic, chunkMs, baseTime, imported = false }) {
+    const others = segmentsOf(system, chunkMs, baseTime);
     return [
-      ...segmentsOf(system, chunkMs, baseTime).map((segment) => ({ ...segment, speaker: segment.speaker || LABEL.system })),
-      ...segmentsOf(mic, chunkMs, baseTime).map((segment) => ({ ...segment, speaker: LABEL.mic })),
+      ...others.map((segment) => ({ ...segment, speaker: segment.speaker || (imported ? '' : LABEL.system) })),
+      ...globalThis.MeetMerge.dropEchoes(segmentsOf(mic, chunkMs, baseTime), others).map((segment) => ({ ...segment, speaker: LABEL.mic })),
     ].sort((a, b) => a.t - b.t);
   }
 

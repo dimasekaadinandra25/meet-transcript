@@ -34,8 +34,8 @@ Seluruh data rapat disimpan secara lokal di peramban (*browser*) Anda. Tanpa ser
 * **Caption Tersembunyi (Bawaan):** Tampilan caption di layar Meet disembunyikan tanpa mematikan CC — tile video tetap penuh, transkrip tetap terisi di panel. Ingin melihat caption lagi? Matikan **Hide captions on the Meet screen** di Settings.
 * **Bahasa Caption dari Popup:** Pemilih bahasa milik Meet berada di dalam area caption, jadi ikut tersembunyi oleh butir di atas. Pilihan **Indonesia** (bawaan) / **English** di popup menerapkannya langsung ke Meet, sekali tiap panggilan — pergantian manual di UI Meet tetap dihormati.
 * **Rekam Discord Web:** Panggilan suara di `discord.com/channels/…` ikut bisa direkam (audio, atau audio + video tab). Hanya versi web — aplikasi desktop Discord di luar jangkauan ekstensi.
-* **Rekam Zoom Web:** Meeting di web client Zoom (`zoom.us/wc/<id>/join`, `/start`, atau bentuk lama `/wc/join/<id>`) ikut bisa direkam — termasuk `app.zoom.us` dan subdomain *vanity* perusahaan. Mulai rekam dari **popup ikon** atau pintasan `Alt+Shift+R` / `Alt+Shift+V`; menu klik kanan tidak didaftarkan untuk Zoom. Link `zoom.us/j/<id>` bukan halaman web client — ia meluncurkan aplikasi desktop, yang audionya tidak ada di tab. Zoom for Government (`zoomgov.com`) di luar cakupan.
-* **Rekam Teams, Webex, dan Slack Web:** Mulai rekam dari **popup ikon** atau pintasan `Alt+Shift+R` / `Alt+Shift+V` (menu klik kanan tidak didaftarkan). URL tab harus memuat id rapat:
+* **Rekam Zoom Web:** Meeting di web client Zoom (`zoom.us/wc/<id>/join`, `/start`, atau bentuk lama `/wc/join/<id>`) ikut bisa direkam — termasuk `app.zoom.us` dan subdomain *vanity* perusahaan. Mulai rekam dari **popup ikon**, menu klik kanan, atau pintasan `Alt+Shift+R` / `Alt+Shift+V`. Link `zoom.us/j/<id>` bukan halaman web client — ia meluncurkan aplikasi desktop, yang audionya tidak ada di tab. Zoom for Government (`zoomgov.com`) di luar cakupan.
+* **Rekam Teams, Webex, dan Slack Web:** Mulai rekam dari **popup ikon**, menu klik kanan, atau pintasan `Alt+Shift+R` / `Alt+Shift+V`. URL tab harus memuat id rapat:
   * **Teams** (`teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft`): id thread `19:meeting_…@thread.v2` (di hash web client, link undangan `/l/meetup-join/…`, atau launcher) atau link pendek `/meet/<angka>`. Satu rapat yang dibuka lewat dua bentuk link itu menjadi dua entri Riwayat.
   * **Webex** (`<situs>.webex.com`): `MTID=m<hex>` di link undangan, id hex di halaman *join*, atau *personal room* `/meet/<nama>` / `/join/<nama>`. `web.webex.com` (aplikasi Webex di peramban) belum dikenali.
   * **Slack** (`app.slack.com`): jendela huddle `/huddle/<workspace>/<channel>` atau tampilan channel `/client/<workspace>/<channel>` — huddle tidak punya id sendiri, jadi satu channel/DM = satu entri, seperti Discord.
@@ -104,7 +104,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Bisukan atau nyalakan mikrofon | **Mute microphone** | `Alt+Shift+M` |
 
 * **Language** di Settings mengganti bahasa aplikasi antara English dan Bahasa Indonesia. Transkrip, MoM, dan judul tidak pernah diterjemahkan, dan huruf shortcut `Alt` sama di kedua bahasa.
-* **Import audio file** mengubah berkas audio atau video yang sudah ada menjadi meeting dengan transkrip. Berkas tetap di tempatnya dan tidak disalin ke aplikasi, jadi **Retranscribe** tidak tersedia untuknya. Impor ulang sebagai gantinya.
+* **Import audio file** mengubah berkas audio atau video yang sudah ada menjadi meeting dengan transkrip. Salinan berkualitas suara disimpan bersama rekaman Anda, jadi ▶ dan **Retranscribe** tetap berfungsi. Salinan ini dihitung dalam **Recordings to keep** di Settings.
 * Klik kanan ikon tray untuk merekam, berhenti, membisukan, atau membuka folder rekaman tanpa membuka jendela.
 * **Check for updates** di Settings mencari rilis GitHub baru dan membuka halaman unduhnya. Tidak memasang apa pun sendiri.
 * Setiap tombol juga punya shortcut `Alt` yang berfungsi saat jendela aktif. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol.
@@ -113,13 +113,13 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * Setiap rekaman juga disimpan ke `Documents/Transcripables`. Menghapus meeting di aplikasi tidak menghapus salinan itu. Matikan di Settings.
 * Menutup jendela saat merekam atau mentranskrip membuat proses tetap berjalan di system tray. Ikon tray dan judul jendela menunjukkan statusnya. Peringatan, misalnya mikrofon terputus, memunculkan jendela lagi.
 * Semua suara di speaker komputer ikut terekam, termasuk notifikasi dan aplikasi lain.
-* Tanpa headset, suara peserta bisa bocor ke mikrofon dan muncul dobel berlabel **You**.
+* Tanpa headset, suara peserta bisa bocor ke mikrofon. Baris yang mengulang suara komputer dalam sekitar 5 detik dihapus. Jawaban pendek dan baris yang terdengar berbeda masih bisa muncul sebagai **You**.
 * Minta izin peserta meeting sebelum merekam.
 
 ### Keterbatasan
 
 * Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir.
-* API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
+* API key dienkripsi di komputer. **Export backup** tidak menyertakannya kecuali Anda mencentang **Include API keys**, yang menyimpannya dalam teks polos. Memulihkan cadangan tanpa key mempertahankan key yang Anda punya sekarang.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.
 * Server LLM lokal seperti Ollama dan LM Studio tidak memerlukan API key. Key hanya wajib untuk alamat default OpenAI.
 * **Ask** pada meeting mengirim pertanyaan dan transkrip ke layanan AI Anda. Jawaban disimpan bersama meeting, dan tidak ikut diekspor.
@@ -130,7 +130,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * Di ekstensi, ikon menampilkan **!** saat caption mati atau hening, atau saat *Meet captions + recorded audio* belum merekam. Arahkan kursor ke ikon untuk melihat alasannya.
 * **Edit transcript** pada meeting yang sudah selesai memungkinkan Anda memperbaiki baris dan mengganti nama pembicara, misalnya **Others** menjadi nama asli, di seluruh meeting. **Retranscribe** mengganti hasil edit teks pada baris dari rekaman itu, dan bertanya dulu. Nama pembicara tetap. Bila satu bagian gagal ditranskrip lagi, baris lamanya dipertahankan.
 * **STT language** kosong secara default, jadi bahasa dideteksi otomatis untuk setiap bagian rekaman. Model Whisper pada mesin bawaan mencakup sekitar 100 bahasa. Bila peserta berganti bahasa dalam satu bagian, isi bahasa utama di Settings, misalnya `id` atau `en`. Layanan STT lain mendukung bahasa sesuai modelnya.
-* Mesin bawaan memakai model kecil (`ggml-base-q5_1`), jadi model lebih besar di server Anda sendiri lebih akurat. Mesin ini memerlukan Microsoft Visual C++ Redistributable, dan aplikasi memberi tahu bila mesin tidak bisa dimulai.
+* Mesin bawaan dimulai dengan model kecil (`ggml-base-q5_1`). **Built-in engine accuracy** di Settings mengunduh model lebih besar (190 MB atau 540 MB), diperiksa dengan checksum tetap, dan tetap di komputer Anda. Penginstal sudah memuat berkas runtime Microsoft yang dibutuhkan mesin.
 * Huruf pembicara berasal dari layanan STT Anda, per bagian rekaman. **Speaker A** di satu bagian 2 menit bisa jadi orang berbeda dari **Speaker A** di bagian berikutnya. Model `gpt-4o-transcribe-diarize` diminta dengan `diarized_json`. Layanan lain harus mengembalikan kolom `speaker` di setiap segmen.
 
 ---
@@ -153,7 +153,7 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 
 ### Cara Merekam Audio
 
-1. Buka menu **Settings** → konfigurasikan **Speech-to-text engine**. Transkrip otomatis saat Stop hanya berjalan untuk Google Meet dengan **Transcript source** = *Record audio*. Rekaman lain — Meet bermode *Meet captions*, Teams, Webex, Slack, Discord, dan Zoom — disimpan sebagai arsip audio/video; buka entrinya di **History** lalu klik **Generate transcript** bila butuh transkrip audionya (tombol hanya muncul selama audionya masih tersimpan).
+1. Buka menu **Settings** → konfigurasikan **Speech-to-text engine**. Transkrip otomatis saat Stop berjalan di semua situs meeting bila **Transcript source** = *Record audio* atau *Meet captions + recorded audio*. Dengan *Meet captions*, rekaman disimpan sebagai arsip audio/video; buka entrinya di **History** lalu klik **Generate transcript** bila butuh transkrip audionya (tombol hanya muncul selama audionya masih tersimpan).
 2. Di dalam panggilan, mulai rekam lewat salah satu dari tiga jalur: **popup ikon ekstensi** → *Record*, **klik kanan** di halaman, atau pintasan keyboard. Pilihan *Audio + video* ikut merekam tampilan *tab* (720p VP9, ±250 MB/jam, diunduh sebagai satu fail `.webm` lewat tombol **Download video** di Riwayat).
 3. Di Google Meet, perekaman berhenti otomatis saat Anda keluar panggilan. **Di Teams, Webex, Slack, Discord, dan Zoom tidak** — tidak ada pelacak sesi di sana, jadi rekaman hanya berhenti sendiri bila tab yang direkam ditutup. Selain itu, hentikan sendiri lewat popup, panel, pintasan `Alt+Shift+S`, atau klik kanan → **Stop recording** (Meet/Discord saja). Setelah Stop, status **Saving recording…** (arsip) atau **Transcribing…** (transkrip otomatis) tampil sampai rekaman selesai diproses.
 
@@ -163,9 +163,10 @@ Anda dapat merekam audio *tab* dan mentranskripsikannya via STT, baik secara man
 * Setiap tombol panel dan popup punya shortcut `Alt` saat halamannya aktif, misalnya `Alt+1` sampai `Alt+3` untuk tab. Tahan `Alt` untuk melihatnya, atau arahkan kursor ke tombol. Saat menu terbuka, tombol di menu itu didahulukan.
 * Pintasan bawaan: `Alt+Shift+R` (audio), `Alt+Shift+V` (audio + video), `Alt+Shift+S` (stop). Dapat diubah di `chrome://extensions/shortcuts`. Berguna di Discord, yang menelan *event* `contextmenu` sehingga menu klik kanan bawaan peramban tidak muncul (`Shift`+klik kanan memaksanya muncul).
 * Bawaan: hanya suara peserta lain (*tab audio*) yang direkam. Centang **Record microphone** di *Settings* agar suara Anda ikut, lalu klik **Allow microphone** sekali untuk memberi izin (kalau belum, jendela izin muncul otomatis saat rekaman dimulai; rekaman *tab* tetap jalan dan mic bergabung begitu disetujui). Tanpa headset, suara peserta dari speaker bisa ikut terekam lewat mic (dobel).
-* Setiap 10 menit, potongan audio disimpan ke IndexedDB untuk mencegah kehilangan data jika peramban tertutup mendadak. Potongan tersebut dapat diunduh kapan saja melalui tombol **Download audio** sebagai fail `.webm` terpisah (membutuhkan izin *"Download multiple files"* pada Chrome bila lebih dari satu potongan).
+* Setiap 2 menit, potongan audio disimpan ke IndexedDB untuk mencegah kehilangan data jika peramban tertutup mendadak. **Download audio** memberi satu fail `.webm`, atau satu `.zip` bila potongannya lebih dari satu.
 * **Meet captions + recorded audio** pada **Transcript source** menjadikan caption sebagai isi utama, dengan nama pembicara. Saat berhenti, rekaman ditranskrip dan hanya baris yang terlewat oleh caption yang ditambahkan, tanpa nama pembicara. Anda tetap perlu menekan **Record** di setiap meeting, karena Chrome hanya mengizinkannya setelah Anda mengklik. Fitur ini memerlukan layanan STT, dan bila STT gagal caption tetap ada. Baris dengan kata berbeda masih bisa muncul dua kali.
-* Hanya **5 rekaman terakhir** yang disimpan. Saat rekaman baru dimulai, rekaman tertua di luar lima itu dihapus — audio beserta videonya.
+* Secara bawaan **5 rekaman terakhir** disimpan. Ubah lewat **Recordings to keep** di Settings, sampai 100. Saat rekaman baru dimulai, rekaman yang lebih lama di luar jumlah itu dihapus — audio beserta videonya.
+* **Import audio file** di tab **History** mentranskrip berkas yang sudah ada di Chrome atau Edge memakai layanan speech-to-text Anda. Biarkan panel terbuka sampai potongannya tersimpan. Impor ini tidak bisa dibatalkan di sana.
 
 ### Pilihan Mode STT (Speech-to-Text)
 
@@ -192,7 +193,7 @@ Ekstensi ini dirancang dengan pendekatan *privacy-first*:
 * **MoM otomatis:** Opsi di Settings membuat MoM saat transkrip siap. Bawaannya mati karena transkrip dikirim ke LLM tanpa bertanya.
 * **Hapus meeting:** Buka rapat di **History** lalu pilih **Delete** untuk menghapus transkrip, MoM, dan rekaman tersimpannya secara permanen. Rapat yang masih berjalan tidak bisa dihapus.
 * **Copy Prompt / Paste into Gemini / Paste into ChatGPT:** ketiganya menyalin **seluruh transkrip** ke clipboard, dan tombol Gemini/ChatGPT menempelkannya ke `gemini.google.com` / `chatgpt.com` tanpa mengirimnya. Setelah Anda menekan kirim, seluruh isi rapat masuk ke akun Google/OpenAI Anda. Jangan gunakan untuk rapat yang isinya tidak boleh keluar.
-* **Fail Backup:** ZIP hasil **Export backup** memuat **API key Anda dalam teks polos** beserta seluruh transkrip. Simpan failnya di tempat yang aman dan jangan dibagikan.
+* **Fail Backup:** ZIP hasil **Export backup** memuat seluruh transkrip, dan **API key dalam teks polos hanya bila Anda mencentang Include API keys**. Simpan failnya di tempat yang aman dan jangan dibagikan.
 
 ---
 
