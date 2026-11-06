@@ -119,6 +119,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 
 * Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir.
 * API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
+* **STT language** kosong secara default, jadi bahasa dideteksi otomatis untuk setiap bagian rekaman. Model Whisper pada mesin bawaan mencakup sekitar 100 bahasa. Bila peserta berganti bahasa dalam satu bagian, isi bahasa utama di Settings, misalnya `id` atau `en`. Layanan STT lain mendukung bahasa sesuai modelnya.
 * Mesin bawaan memakai model kecil (`ggml-base-q5_1`), jadi model lebih besar di server Anda sendiri lebih akurat. Mesin ini memerlukan Microsoft Visual C++ Redistributable, dan aplikasi memberi tahu bila mesin tidak bisa dimulai.
 * Huruf pembicara berasal dari layanan STT Anda, per bagian rekaman. **Speaker A** di satu bagian 2 menit bisa jadi orang berbeda dari **Speaker A** di bagian berikutnya. Model `gpt-4o-transcribe-diarize` diminta dengan `diarized_json`. Layanan lain harus mengembalikan kolom `speaker` di setiap segmen.
 

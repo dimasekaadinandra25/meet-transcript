@@ -1,21 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { createEngine, engineArgs } = require('../main/engine.js');
+const { createEngine, engineArgs, GUARD_SCRIPT } = require('../main/engine.js');
 
 const DIR = join('C:', 'engine');
 
 function setup({ exists = () => true, healthy = () => true } = {}) {
   const started = [];
+  const guarded = [];
   const engine = createEngine({
     dir: DIR,
     exists,
+    guard: (pid) => guarded.push(pid),
     run: (file, args, options) => {
-      const child = Object.assign(new EventEmitter(), { killed: 0, kill() { this.killed++; } });
+      const child = Object.assign(new EventEmitter(), { pid: 900 + started.length, killed: 0, kill() { this.killed++; } });
       started.push({ file, args, options, child });
       return child;
     },
@@ -23,7 +26,7 @@ function setup({ exists = () => true, healthy = () => true } = {}) {
     findPort: async () => 5000 + started.length,
     wait: () => new Promise((resolve) => setImmediate(resolve)),
   });
-  return { engine, started };
+  return { engine, started, guarded };
 }
 
 test('engine arguments stay on this computer and use the OpenAI path', () => {
@@ -102,4 +105,61 @@ test('a failed start does not forget the engine that replaced it', async () => {
   assert.equal(await second, 'http://127.0.0.1:5001/v1');
   assert.equal(await engine.url(), 'http://127.0.0.1:5001/v1');
   assert.equal(started.length, 2);
+});
+
+test('every engine started gets a guard', async () => {
+  const { engine, guarded } = setup();
+  await engine.url();
+  assert.deepEqual(guarded, [900]);
+});
+
+const IDLE_PROGRAM = 'setInterval(() => {}, 1000)';
+const isRunning = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+async function waitUntilStopped(pid) {
+  for (let i = 0; i < 60; i++) {
+    if (!isRunning(pid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+}
+
+function startProgram(program, ...args) {
+  return spawn(process.execPath, ['-e', program, ...args.map(String)], { stdio: 'ignore', windowsHide: true });
+}
+
+test('the guard ends the engine when the app dies without warning', async () => {
+  const app = startProgram(IDLE_PROGRAM);
+  const fakeEngine = startProgram(IDLE_PROGRAM);
+  const guard = startProgram(GUARD_SCRIPT, app.pid, fakeEngine.pid);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(isRunning(fakeEngine.pid), true);
+    app.kill('SIGKILL');
+    assert.equal(await waitUntilStopped(fakeEngine.pid), true, 'engine kept running');
+    assert.equal(await waitUntilStopped(guard.pid), true, 'guard kept running');
+  } finally {
+    for (const child of [app, fakeEngine, guard]) child.kill();
+  }
+});
+
+test('the guard ends itself when the engine stops first', async () => {
+  const app = startProgram(IDLE_PROGRAM);
+  const fakeEngine = startProgram(IDLE_PROGRAM);
+  const guard = startProgram(GUARD_SCRIPT, app.pid, fakeEngine.pid);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    fakeEngine.kill();
+    assert.equal(await waitUntilStopped(guard.pid), true, 'guard kept running');
+    assert.equal(isRunning(app.pid), true);
+  } finally {
+    for (const child of [app, fakeEngine, guard]) child.kill();
+  }
 });

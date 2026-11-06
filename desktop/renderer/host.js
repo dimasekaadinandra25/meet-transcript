@@ -160,29 +160,6 @@
     return row;
   }
 
-  const UPDATE_TEXT = {
-    available: ({ latest }) => `Version ${latest} is available.`,
-    current: () => 'You have the latest version.',
-    none: () => 'No releases have been published yet.',
-    failed: ({ error }) => `Could not check for updates (${error}).`,
-  };
-
-  function updateRow() {
-    const box = el('div', 'actions');
-    const note = el('span', 'muted');
-    let openPage;
-    const button = mkBtn('Check for updates', async () => {
-      button.disabled = true;
-      note.textContent = 'Checking…';
-      const result = await desktop.checkForUpdate();
-      button.disabled = false;
-      note.textContent = UPDATE_TEXT[result.status](result);
-      if (result.status === 'available') openPage ??= mkBtn('Open download page', () => desktop.openUpdate(), box);
-    }, box);
-    box.append(note);
-    return box;
-  }
-
   function settingsRows(settings) {
     const open = el('div', 'actions');
     mkBtn('Open recordings folder', () => desktop.recordings.open(), open);
@@ -192,7 +169,7 @@
       open,
       settingToggle('liveTranscript', 'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)', settings.liveTranscript !== false),
       el('h3', null, 'Updates'),
-      updateRow(),
+      globalThis.createUpdateRow({ el, mkBtn, check: () => desktop.checkForUpdate(), open: () => desktop.openUpdate() }),
     ];
   }
 

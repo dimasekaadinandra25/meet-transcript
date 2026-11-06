@@ -11,6 +11,23 @@ const HOST = '127.0.0.1';
 const API_PATH = '/v1/audio/transcriptions';
 const READY_TIMEOUT_MS = 60000;
 const READY_POLL_MS = 250;
+const GUARD_POLL_MS = 2000;
+const GUARD_SCRIPT = `
+const [app, engine] = process.argv.slice(1).map(Number);
+const running = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+setInterval(() => {
+  if (!running(engine)) process.exit();
+  if (running(app)) return;
+  process.kill(engine);
+  process.exit();
+}, ${GUARD_POLL_MS});`;
 
 const engineArgs = (model, port, threads) => [
   '-m', model, '--host', HOST, '--port', String(port), '--inference-path', API_PATH, '-t', String(threads), '-l', 'auto',
@@ -25,7 +42,15 @@ const freePort = () => new Promise((resolve, reject) => {
   });
 });
 
-function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, wait = sleep, exists = existsSync }) {
+function guardEngine(enginePid) {
+  spawn(process.execPath, ['-e', GUARD_SCRIPT, String(process.pid), String(enginePid)], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    stdio: 'ignore',
+    windowsHide: true,
+  }).on('error', (e) => console.error(e));
+}
+
+function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, wait = sleep, exists = existsSync, guard = guardEngine }) {
   const server = join(dir, SERVER_FILE);
   const model = join(dir, MODEL_FILE);
   const threads = Math.max(1, Math.floor(availableParallelism() / 2));
@@ -51,6 +76,7 @@ function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, 
       starting = undefined;
     };
     child = proc;
+    if (proc.pid) guard(proc.pid);
     proc.once('error', (e) => ended(e.message));
     proc.once('exit', (code) => ended(`exit code ${code}`));
     for (let waited = 0; waited < READY_TIMEOUT_MS; waited += READY_POLL_MS) {
@@ -78,4 +104,4 @@ function createEngine({ dir, run = spawn, request = fetch, findPort = freePort, 
   return { available, url, stop };
 }
 
-module.exports = { createEngine, engineArgs };
+module.exports = { createEngine, engineArgs, GUARD_SCRIPT };

@@ -538,7 +538,7 @@ async function renderSettings(epoch) {
     mkEl('input', { type: 'password', value: settings.sttApiKey ?? '' }));
   const sttModel = field('STT model',
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
-  const sttLanguage = field('STT language (such as id or en; empty = auto)',
+  const sttLanguage = field('STT language (empty = detect automatically, or a code such as id, en, ja)',
     mkEl('input', { value: settings.sttLanguage ?? ST.DEFAULT_LANGUAGE }));
   function applyMode() {
     const audio = HAS_AUDIO;

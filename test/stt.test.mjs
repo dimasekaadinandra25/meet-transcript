@@ -107,8 +107,8 @@ test('sttEndpoint api: STT fields kosong → jatuh ke endpoint chat (perilaku la
   assert.equal(r.apiKey, 'k');
 });
 
-test('sttEndpoint: bahasa default Indonesia, tapi string kosong tersimpan = auto', () => {
-  assert.equal(sttEndpoint({ sttMode: 'api' }).language, 'id');
+test('sttEndpoint: default language is auto, and a saved language is kept', () => {
+  assert.equal(sttEndpoint({ sttMode: 'api' }).language, '');
   assert.equal(sttEndpoint({ sttMode: 'api', sttLanguage: '' }).language, '');
   assert.equal(sttEndpoint({ sttMode: 'api', sttLanguage: 'en' }).language, 'en');
 });
@@ -210,4 +210,16 @@ test('only a new install starts on the built-in engine', () => {
   assert.equal(neverConfigured({ settings: { sttMode: 'whisper-local' } }), false);
   assert.equal(neverConfigured({ settings: { sttBaseUrl: 'http://x/v1' } }), false);
   assert.equal(neverConfigured({ meetings: ['a'] }), false);
+});
+
+test('STT detects the language by default, for every language', () => {
+  const { sttEndpoint } = globalThis.MeetStt;
+  assert.equal(sttEndpoint({}).language, '');
+  assert.equal(sttEndpoint({ sttMode: 'api', sttBaseUrl: 'https://x/v1' }).language, '');
+});
+
+test('a language you choose is still used', () => {
+  const { sttEndpoint } = globalThis.MeetStt;
+  assert.equal(sttEndpoint({ sttLanguage: 'ja' }).language, 'ja');
+  assert.equal(sttEndpoint({ sttLanguage: '' }).language, '');
 });

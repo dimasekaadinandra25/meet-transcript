@@ -121,6 +121,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 
 * If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes.
 * API keys are encrypted on your computer, but **Export backup** stores them in plain text.
+* **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine uses a small model (`ggml-base-q5_1`), so a larger model on your own server is more accurate. It needs the Microsoft Visual C++ Redistributable, and the app says so if the engine cannot start.
 * Speaker letters come from your STT service, one recording part at a time. **Speaker A** in one 2-minute part may be a different person from **Speaker A** in the next. The `gpt-4o-transcribe-diarize` model is requested with `diarized_json`. Other services must return a `speaker` field in each segment.
 
