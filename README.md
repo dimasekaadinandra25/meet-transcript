@@ -122,8 +122,8 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * API key dienkripsi di komputer, tapi **Export backup** menyimpannya dalam teks polos.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.
 * Server LLM lokal seperti Ollama dan LM Studio tidak memerlukan API key. Key hanya wajib untuk alamat default OpenAI.
-* **Ask** pada meeting mengirim pertanyaan dan transkrip ke layanan AI Anda. Jawaban tidak disimpan.
-* **Mark moment** (`Alt+Shift+K` di aplikasi desktop dan Chrome) menandai poin penting. Tanda muncul di transkrip, dan prompt MoM memprioritaskannya.
+* **Ask** pada meeting mengirim pertanyaan dan transkrip ke layanan AI Anda. Jawaban disimpan bersama meeting, dan tidak ikut diekspor.
+* **Mark moment** (`Alt+Shift+K` di aplikasi desktop dan Chrome) menandai poin penting. Tanda muncul di transkrip dan di ekspor `.txt`, `.md`, `.docx`, dan PDF, dan prompt MoM memprioritaskannya.
 * Tombol ▶ pada baris memutar momen itu dari rekaman, selama rekamannya masih tersimpan.
 * **Download** juga menyediakan subtitle `.srt` dan `.vtt`. **MoM type** di Settings menyediakan Standard, Standup, Client call, dan 1-on-1.
 * **Delete meetings older than** di Settings menghapus meeting lama beserta rekamannya saat aplikasi dimulai. Nonaktif secara default, dan salinan di `Documents/Transcripables` tetap ada.

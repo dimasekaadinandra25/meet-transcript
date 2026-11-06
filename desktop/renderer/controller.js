@@ -417,6 +417,7 @@
         if (!meeting?.segments.length) throw new Error('The transcript is empty.');
         const answer = await openai.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
           model: settings.model || openai.DEFAULT_MODEL, prompt: merge.askPrompt(meeting, question) });
+        await updateMeeting(id, (current) => merge.addAnswer(current, question, answer));
         return { ok: true, answer };
       } catch (e) {
         return { ok: false, error: e.message };

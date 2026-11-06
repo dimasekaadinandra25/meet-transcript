@@ -540,6 +540,13 @@ async function askMeeting(id, question) {
   if (!meeting?.segments.length) throw new Error('The transcript is empty.');
   const answer = await globalThis.MeetOpenAI.generateMoM({ apiKey: settings.apiKey, baseUrl: settings.baseUrl,
     model: settings.model || globalThis.MeetOpenAI.DEFAULT_MODEL, prompt: globalThis.MeetMerge.askPrompt(meeting, question) });
+  await whenWritten(async () => {
+    const { [key]: current } = await chrome.storage.local.get(key);
+    if (current?.startedAt !== meeting.startedAt) throw new Error('Meeting not found.');
+    globalThis.MeetMerge.addAnswer(current, question, answer);
+    await chrome.storage.local.set({ [key]: current });
+    notifyPanel({ type: 'meeting-updated', id });
+  });
   return { answer };
 }
 

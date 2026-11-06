@@ -125,8 +125,8 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * API keys are encrypted on your computer, but **Export backup** stores them in plain text.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
-* **Ask** on a meeting sends your question and the transcript to your AI service. Answers are not saved.
-* **Mark moment** (`Alt+Shift+K` in the desktop app and Chrome) flags an important point. Marks show in the transcript and the MoM prompt gives them priority.
+* **Ask** on a meeting sends your question and the transcript to your AI service. Answers are saved with the meeting, and stay out of exports.
+* **Mark moment** (`Alt+Shift+K` in the desktop app and Chrome) flags an important point. Marks show in the transcript and in `.txt`, `.md`, `.docx` and PDF exports, and the MoM prompt gives them priority.
 * The ▶ on a line plays that moment from the recording, while the recording is still kept.
 * **Download** also offers `.srt` and `.vtt` subtitles. **MoM type** in Settings offers Standard, Standup, Client call, and 1-on-1.
 * **Delete meetings older than** in Settings removes old meetings and their recordings when the app starts. It is off by default, and copies in `Documents/Transcripables` stay.

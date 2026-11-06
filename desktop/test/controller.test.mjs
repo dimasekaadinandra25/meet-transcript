@@ -742,12 +742,26 @@ test('marking with nothing running reports an error', async () => {
   assert.match(res.error, /No meeting/);
 });
 
-test('asking about a meeting returns the answer', async () => {
+test('asking about a meeting saves the answer, newest first', async () => {
   await runRecording();
-  const res = await ctl.handle({ type: 'ask-meeting', id, question: 'Apa keputusannya?' });
-  assert.equal(res.ok, true);
-  assert.equal(typeof res.answer, 'string');
-  assert.equal(meeting().mom ?? null, meeting().mom ?? null);
+  const momBefore = meeting().mom;
+  fakeOpenAI.generateMoM = async () => 'JAWABAN';
+  const res = await ctl.handle({ type: 'ask-meeting', id, question: 'Satu?' });
+  await ctl.handle({ type: 'ask-meeting', id, question: 'Dua?' });
+  assert.deepEqual([res.ok, res.answer], [true, 'JAWABAN']);
+  assert.deepEqual(meeting().answers, [{ question: 'Dua?', answer: 'JAWABAN' }, { question: 'Satu?', answer: 'JAWABAN' }]);
+  assert.equal(meeting().mom, momBefore);
+});
+
+test('an answer does not bring back a deleted meeting', async () => {
+  await runRecording();
+  fakeOpenAI.generateMoM = async () => {
+    delete data[`meeting:${id}`];
+    return 'JAWABAN';
+  };
+  const res = await ctl.handle({ type: 'ask-meeting', id, question: 'Apa?' });
+  assert.equal(res.ok, false);
+  assert.equal(meeting(), undefined);
 });
 
 test('asking needs an AI service', async () => {

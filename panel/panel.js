@@ -20,7 +20,7 @@ const Host = globalThis.PanelHost;
 let settingsCache = {};
 async function loadSettings() { settingsCache = (await chrome.storage.local.get('settings')).settings ?? {}; }
 
-const { el, raw, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
+const { el, raw, markLine, mkBtn, mkDropdown, patchSettings, meetingKey } = globalThis.MeetUi;
 const { t } = globalThis.MeetI18n;
 const mkEl = (tag, props) => Object.assign(document.createElement(tag), props);
 const addOptions = (select, pairs) => {
@@ -151,7 +151,6 @@ let renderEpoch = 0;
 let lastRenderedKey = null;
 let editingId = null;
 let asking = null;
-const askAnswers = new Map();
 const askDrafts = new Map();
 const EDIT_LINE_CHARS = 40;
 let audioMeta = null;
@@ -310,7 +309,7 @@ async function renderMeeting(id, live, epoch) {
       flash(copy.head, 'Copy failed');
     }
   };
-  copy.item('Copy transcript', copyTo(() => M.formatTranscript(meeting.segments)));
+  copy.item('Copy transcript', copyTo(() => M.formatWithMarks(meeting)));
   if (meeting.segments.length) copy.item('Copy prompt + transcript', copyTo(() => promptText(meeting)));
   const mom = dropdown('mom', meeting.mom ? 'Regenerate MoM' : 'Generate MoM');
   mom.item(meeting.mom ? 'Regenerate MoM' : 'Generate MoM', async () => {
@@ -333,7 +332,7 @@ async function renderMeeting(id, live, epoch) {
     }
   }
   const dl = dropdown('unduh', 'Download');
-  dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatTranscript(meeting.segments)));
+  dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatWithMarks(meeting)));
   dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
   dl.item('Download .docx', async () => download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting)));
   const subtitleStart = () => (recs.length ? Math.min(...recs.map((r) => r.baseTime)) : meeting.startedAt);
@@ -550,8 +549,7 @@ function askBox(meeting) {
     render();
     const res = await chrome.runtime.sendMessage({ type: 'ask-meeting', id: meeting.id, question }).catch(() => null);
     asking = null;
-    if (res?.ok) askAnswers.set(meeting.id, [{ question, answer: res.answer }, ...(askAnswers.get(meeting.id) ?? [])]);
-    else momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
+    if (!res?.ok) momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
     render();
   };
   input.addEventListener('keydown', (e) => {
@@ -561,16 +559,12 @@ function askBox(meeting) {
   mkBtn('Ask', send, row);
   box.append(row);
   if (asking === meeting.id) box.append(el('p', 'muted', 'Thinking…'));
-  for (const { question, answer } of askAnswers.get(meeting.id) ?? []) {
+  for (const { question, answer } of meeting.answers ?? []) {
     const item = raw(el('div', 'mom'));
     item.append(el('strong', null, question), el('div', null, answer));
     box.append(item);
   }
   return box;
-}
-
-function markLine(t) {
-  return raw(el('div', 'mark', `★ ${globalThis.MeetI18n.t('Marked')} ${new Date(t).toLocaleTimeString()}`));
 }
 
 function segmentLine(s, play) {

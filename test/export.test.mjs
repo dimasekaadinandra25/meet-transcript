@@ -6,7 +6,7 @@ await import('../lib/backup.js');
 await import('../lib/export.js');
 const { makeDocx } = globalThis.MeetExport;
 const { readZip } = globalThis.MeetBackup;
-const { matchesSearch, searchSnippet } = globalThis.MeetMerge;
+const { matchesSearch, searchSnippet, formatTranscript, formatWithMarks, formatMarkdown, askPrompt } = globalThis.MeetMerge;
 
 const meeting = (extra = {}) => ({
   title: 'Budget <review> & plan',
@@ -83,4 +83,43 @@ test('cuplikan panjang dipotong di sekitar kata', () => {
 test('docx keeps emoji', async () => {
   const { xml } = await documentXml(meeting({ mom: 'Selesai \u{1F680} \u{0001}oke' }));
   assert.ok(xml.includes('Selesai \u{1F680} oke'));
+});
+
+const marked = (extra = {}) => meeting({ marks: [new Date(2026, 0, 2, 9, 0, 7).getTime()], ...extra });
+
+test('text exports put a mark between the lines around it', () => {
+  assert.equal(formatWithMarks(marked()), [
+    '[09:00:05] Ani: We need 5 < 10 "units" & more',
+    '[09:00:07] ★ Marked',
+    '[09:00:09] no speaker line',
+  ].join('\n'));
+});
+
+test('text exports without marks stay the same', () => {
+  assert.equal(formatWithMarks(meeting()), formatTranscript(meeting().segments));
+});
+
+test('markdown puts a mark between the lines around it', () => {
+  const lines = formatMarkdown(marked()).split('\n');
+  const at = lines.indexOf('- **★ Marked** (09:00:07)');
+  assert.ok(at > 0);
+  assert.match(lines[at - 1], /Ani/);
+  assert.match(lines[at + 1], /no speaker line/);
+});
+
+test('docx puts a mark between the lines around it', async () => {
+  const { xml } = await documentXml(marked());
+  const at = xml.indexOf('★ Marked');
+  assert.ok(xml.indexOf('Ani') < at && at < xml.indexOf('no speaker line'));
+  assert.match(xml, /09:00:07/);
+});
+
+test('a meeting with only marks still exports them', async () => {
+  const { xml } = await documentXml(marked({ mom: null, segments: [] }));
+  assert.match(xml, /★ Marked/);
+  assert.match(formatMarkdown(marked({ mom: null, segments: [] })), /★ Marked/);
+});
+
+test('marks stay out of the AI prompt transcript', () => {
+  assert.ok(!askPrompt(marked(), 'Apa?').includes('★'));
 });

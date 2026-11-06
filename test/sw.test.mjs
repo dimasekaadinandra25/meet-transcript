@@ -675,13 +675,52 @@ test('marking with no meeting running reports an error', async () => {
   assert.match(res.error, /No meeting/);
 });
 
-test('asking about a meeting returns the answer without changing it', async () => {
+test('asking about a meeting saves the answer and leaves the MoM alone', async () => {
   const prompts = [];
   const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } }, generateMoM: async ({ prompt }) => { prompts.push(prompt); return 'jawaban'; } });
   const res = await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
   assert.deepEqual([res.ok, res.answer], [true, 'jawaban']);
   assert.ok(prompts[0].includes('Apa?'));
   assert.equal(sw.store['meeting:a'].mom, null);
+  assert.equal(sw.store['meeting:a'].answers[0].question, 'Apa?');
+  assert.equal(sw.store['meeting:a'].answers[0].answer, 'jawaban');
+});
+
+test('the newest answer comes first', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } } });
+  await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Satu?' });
+  await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Dua?' });
+  assert.equal(sw.store['meeting:a'].answers.map((a) => a.question).join(), 'Dua?,Satu?');
+});
+
+test('saving an answer keeps changes made while waiting for it', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } }, generateMoM: async () => {
+    sw.store['meeting:a'].title = 'Judul baru';
+    return 'jawaban';
+  } });
+  await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
+  assert.equal(sw.store['meeting:a'].title, 'Judul baru');
+  assert.equal(sw.store['meeting:a'].answers.length, 1);
+});
+
+test('an answer does not bring back a deleted meeting', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } }, generateMoM: async () => {
+    delete sw.store['meeting:a'];
+    return 'jawaban';
+  } });
+  const res = await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
+  assert.equal(res.ok, false);
+  assert.equal(sw.store['meeting:a'], undefined);
+});
+
+test('an answer does not land on a newer meeting with the same link', async () => {
+  const sw = loadSw({ offscreen: null, store: { ...editStore(), settings: { apiKey: 'k' } }, generateMoM: async () => {
+    sw.store['meeting:a'] = { id: 'a', startedAt: sw.store['meeting:a'].startedAt + 1, segments: [] };
+    return 'jawaban';
+  } });
+  const res = await sw.ask({ type: 'ask-meeting', id: 'a', question: 'Apa?' });
+  assert.equal(res.ok, false);
+  assert.equal(sw.store['meeting:a'].answers, undefined);
 });
 
 test('asking needs an AI service', async () => {
