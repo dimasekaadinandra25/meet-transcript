@@ -241,3 +241,41 @@ test('a server that ignores streaming still works', async () => {
     globalThis.fetch = real;
   }
 });
+
+test('custom vocabulary goes to the speech service as a prompt', async () => {
+  const real = globalThis.fetch;
+  const forms = [];
+  globalThis.fetch = async (_url, init) => {
+    forms.push(init.body);
+    return new Response('{"segments":[]}', { status: 200 });
+  };
+  try {
+    const args = { blob: new Blob(['x']), baseUrl: 'http://127.0.0.1:1/v1', prompt: 'Dimas, Transcripables' };
+    await globalThis.MeetOpenAI.transcribeAudio({ ...args, model: 'whisper-1' });
+    assert.equal(forms[0].get('prompt'), 'Dimas, Transcripables');
+    await globalThis.MeetOpenAI.transcribeAudio({ ...args, model: 'gpt-4o-transcribe-diarize' });
+    assert.equal(forms[1].get('prompt'), null);
+    await globalThis.MeetOpenAI.transcribeAudio({ blob: args.blob, baseUrl: args.baseUrl, model: 'whisper-1' });
+    assert.equal(forms[2].get('prompt'), null);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a service that rejects the vocabulary still gets the audio', async () => {
+  const real = globalThis.fetch;
+  const forms = [];
+  globalThis.fetch = async (_url, init) => {
+    forms.push(init.body);
+    if (forms.length === 1) return new Response('{"error":{"message":"unknown field prompt"}}', { status: 422 });
+    return new Response('{"text":"halo"}', { status: 200 });
+  };
+  try {
+    const result = await globalThis.MeetOpenAI.transcribeAudio({ blob: new Blob(['x']), baseUrl: 'http://127.0.0.1:1/v1', model: 'm', prompt: 'Dimas' });
+    assert.equal(forms.length, 2);
+    assert.equal(forms[1].get('prompt'), null);
+    assert.equal(result.segments[0].text, 'halo');
+  } finally {
+    globalThis.fetch = real;
+  }
+});

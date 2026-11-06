@@ -21,7 +21,7 @@
     const meetingKey = (id) => `meeting:${id}`;
     const readSettings = async () => (await storage.get('settings')).settings ?? {};
     const readMeeting = async (id) => (await storage.get(meetingKey(id)))[meetingKey(id)];
-    const publishState = () => onState({ recording: rec.recording, transcribing: rec.transcribing, muted: recorder.isMuted() });
+    const publishState = () => onState({ recording: rec.recording, transcribing: rec.transcribing, muted: recorder.isMuted(), paused: !!recorder.isPaused?.() });
 
     function enqueue(work) {
       const run = writes.then(work);
@@ -40,7 +40,7 @@
     function broadcast(extra = {}) {
       publishState();
       notify({ type: 'rec-state', recording: rec.recording, transcribing: rec.transcribing,
-        saving: false, muted: recorder.isMuted(), importing: !!importRun, ...extra });
+        saving: false, muted: recorder.isMuted(), paused: !!recorder.isPaused?.(), importing: !!importRun, ...extra });
     }
 
     const addMeeting = (meeting) => enqueue(async () => {
@@ -118,7 +118,7 @@
 
     function sendToStt(blob, endpoint, voices) {
       const send = (knownSpeakers) => openai.transcribeAudio({ blob, baseUrl: endpoint.baseUrl,
-        apiKey: endpoint.apiKey, model: endpoint.model, language: endpoint.language, ...(knownSpeakers ? { knownSpeakers } : {}) });
+        apiKey: endpoint.apiKey, model: endpoint.model, language: endpoint.language, ...(endpoint.vocabulary ? { prompt: endpoint.vocabulary } : {}), ...(knownSpeakers ? { knownSpeakers } : {}) });
       if (!voices || !stt.isDiarizeModel(endpoint.model)) return send();
       return stt.sendWithVoices({ send, blob, voices, makeClip: clipAudio });
     }
@@ -462,7 +462,7 @@
 
     const HANDLERS = {
       'get-active': () => ({ id: activeId, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0,
-        rec: { ...rec, autoStt: true, muted: recorder.isMuted() }, panelTab: null, panelMeetingId: null }),
+        rec: { ...rec, autoStt: true, muted: recorder.isMuted(), paused: !!recorder.isPaused?.() }, panelTab: null, panelMeetingId: null }),
       'start-recording': startRecording,
       'stop-recording': stopRecording,
       'regenerate-transcript': regenerate,
@@ -478,6 +478,10 @@
       },
       'send-to-ai': ({ target }) => {
         if (Object.hasOwn(AI_URLS, target)) openExternal(AI_URLS[target]);
+      },
+      'set-paused': ({ on }) => {
+        recorder.setPaused(!!on);
+        broadcast();
       },
       'set-muted': ({ on }) => {
         recorder.setMuted(!!on);

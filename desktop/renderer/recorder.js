@@ -20,6 +20,7 @@
     const videoMime = pick('video/webm;codecs=vp9,opus', 'video/webm');
     let session = null;
     let muted = false;
+    let paused = false;
 
     function withinStartTime(getStream, message) {
       return new Promise((resolve, reject) => {
@@ -47,10 +48,15 @@
     function startChunk(s, track) {
       const data = [];
       const index = track.chunk;
+      const chunk = { heard: !paused };
+      track.current = chunk;
       const recorder = new MediaRecorder(track.stream, { mimeType: audioMime });
       recorder.ondataavailable = (e) => { if (e.data.size) data.push(e.data); };
-      recorder.onstop = () => keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId, index).then(() => deps.onChunkSaved?.()),
-        `A ${track.name} track part could not be saved: `);
+      recorder.onstop = () => {
+        if (!chunk.heard) return;
+        keepSave(s, track.append(new Blob(data, { type: audioMime }), s.recId, index).then(() => deps.onChunkSaved?.()),
+          `A ${track.name} track part could not be saved: `);
+      };
       recorder.start();
       track.recorder = recorder;
     }
@@ -64,7 +70,7 @@
     }
 
     function watchForNoSound(s, level) {
-      if (s.heardSound) return;
+      if (s.heardSound || paused) return;
       if (level >= SOUND_LEVEL) {
         s.heardSound = true;
         return;
@@ -170,6 +176,7 @@
       }
       startMix(s, mix);
       if (video) startVideo(s, mix);
+      if (paused) applyPause(s);
       s.timers.push(deps.setInterval(() => rotate(s), chunkMs));
       const fullWindowMs = (PEAK_WINDOW_SAMPLES / s.ctx.sampleRate) * 1000;
       s.sampleMs = Math.min(PEAK_SAMPLE_MS, Math.floor(fullWindowMs));
@@ -183,6 +190,7 @@
       s.micStream?.getTracks().forEach((t) => t.stop());
       await s.ctx?.close().catch(() => {});
       muted = false;
+      paused = false;
     }
 
     async function start(options) {
@@ -228,7 +236,19 @@
       if (session.gain) session.gain.gain.value = on ? 0 : 1;
     }
 
-    return { start, stop, setMuted, isMuted: () => muted, currentPeaks: () => session?.peaks };
+    function applyPause(s) {
+      for (const track of [...(s.display?.getTracks() ?? []), ...(s.micStream?.getTracks() ?? [])]) track.enabled = !paused;
+      if (s.app) s.app.node.gain.value = paused ? 0 : 1;
+    }
+
+    function setPaused(on) {
+      if (!session) return;
+      paused = on;
+      applyPause(session);
+      if (!on) for (const track of session.tracks) track.current.heard = true;
+    }
+
+    return { start, stop, setMuted, isMuted: () => muted, setPaused, isPaused: () => paused, currentPeaks: () => session?.peaks };
   }
 
   globalThis.createRecorder = createRecorder;

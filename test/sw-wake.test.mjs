@@ -8,7 +8,7 @@ const SCRIPTS = ['../content/session.js', '../lib/merge.js', '../lib/i18n.js', '
 const MEET = 'abc-defg-hij';
 const flush = () => new Promise((done) => setTimeout(done, 5));
 
-function loadSw({ offscreen = null, store = {}, firefox = false, shortcut = 'Alt+Shift+R' } = {}) {
+function loadSw({ offscreen = null, store = {}, firefox = false, shortcut = 'Alt+Shift+R', canPause = true } = {}) {
   const handlers = [];
   const connects = [];
   const sent = [];
@@ -26,6 +26,7 @@ function loadSw({ offscreen = null, store = {}, firefox = false, shortcut = 'Alt
         sent.push(msg);
         if (msg.target !== 'offscreen') return undefined;
         if (msg.op === 'state') return stateReply.promise;
+        if (msg.op === 'pause') return { ok: true, paused: canPause ? msg.on : false };
         return { ok: true };
       },
       getURL: (p) => p,
@@ -121,7 +122,7 @@ async function inCall(options = {}) {
     sw.setNow(now);
     tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn });
     await flush();
-    return tab.posted.at(-1)?.text;
+    return (tab.posted.at(-1)?.prompts?.[0]?.text ?? '');
   };
   return { sw, tab, status };
 }
@@ -173,13 +174,13 @@ test('a running recording means no warning', async () => {
   sw.setNow(1016000);
   tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: false });
   await flush();
-  assert.equal(tab.posted.at(-1).text, '');
+  assert.equal((tab.posted.at(-1)?.prompts?.[0]?.text ?? ''), '');
 });
 
 test('audio mode never warns about captions', async () => {
   const { status } = await inCall({ store: { settings: { transcriptSource: 'audio' } } });
   await status(false, 1000000);
-  assert.equal(await status(false, 1016000), '');
+  assert.doesNotMatch(await status(false, 1016000), /Captions stopped/);
 });
 
 test('Firefox cannot record, so it gets no record prompt', async () => {
@@ -214,7 +215,7 @@ test('time spent in the lobby does not count once you join', async () => {
     sw.setNow(now);
     tab.send({ type: 'status', meetingId: MEET, inCall: inCallNow, captionsOn: false });
     await flush();
-    return tab.posted.at(-1)?.text;
+    return (tab.posted.at(-1)?.prompts?.[0]?.text ?? '');
   };
   await status(false, 1000000);
   await status(false, 1028000);
@@ -432,4 +433,120 @@ test('Firefox follows the chosen language in the worker', async () => {
   tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn: false });
   await flush();
   assert.doesNotMatch(sw.titles.at(-1), /Captions are off/);
+});
+
+test('a new session of a recurring meeting remembers the names you gave', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ store: { meetings: [MEET], [key]: meetingFor({ startedAt: 1, endedAt: 1000, speakerNames: { 'Budi Santoso': 'Budi', 'Speaker A': 'Ani' } }) } });
+  sw.finishWaking();
+  sw.setNow(1000 + 31 * 60000);
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'segments', meetingId: MEET, title: 't', segs: [{ id: 'b', speaker: 'Budi Santoso', text: 'baru', t: 2000000 }] });
+  await flush();
+  assert.equal(sw.store[key].segments[0].speaker, 'Budi');
+  assert.deepEqual(sw.store[key].speakerNames, { 'Budi Santoso': 'Budi' });
+});
+
+async function joined(transcriptSource, options = {}) {
+  const sw = loadSw({ store: { settings: { transcriptSource } }, ...options });
+  sw.finishWaking();
+  await flush();
+  const tab = sw.connect();
+  const status = async (captionsOn, now) => {
+    sw.setNow(now);
+    tab.send({ type: 'status', meetingId: MEET, inCall: true, captionsOn });
+    await flush();
+    return (tab.posted.at(-1)?.prompts?.[0]?.text ?? '');
+  };
+  return { sw, tab, status };
+}
+
+test('a call in a recording mode reminds you to record after a few seconds', async () => {
+  for (const mode of ['both', 'audio']) {
+    const { status } = await joined(mode);
+    assert.equal(await status(true, 1000000), '');
+    assert.match(await status(true, 1006000), /not recording/);
+  }
+});
+
+test('captions-only mode gets no reminder while captions work', async () => {
+  const { status } = await joined('caption');
+  await status(true, 1000000);
+  assert.equal(await status(true, 1006000), '');
+});
+
+test('a running recording gets no reminder', async () => {
+  const { status } = await joined('both', { offscreen: { recording: true, transcribing: false, meetingId: MEET, tabId: 5, autoStt: true } });
+  await status(true, 1000000);
+  assert.equal(await status(true, 1006000), '');
+});
+
+test('Firefox gets no reminder because it cannot record', async () => {
+  const { status } = await joined('both', { firefox: true });
+  await status(true, 1000000);
+  assert.equal(await status(true, 1006000), '');
+});
+
+test('pausing reaches the recorder and the panel', async () => {
+  const sw = loadSw({ offscreen: RECORDING });
+  sw.finishWaking();
+  await flush();
+  await sw.ask({ type: 'set-paused', on: true });
+  await flush();
+  assert.ok(sw.sent.some((m) => m.target === 'offscreen' && m.op === 'pause' && m.on === true));
+  assert.equal(sw.sent.filter((m) => m.type === 'rec-state').at(-1).paused, true);
+  assert.equal((await sw.ask({ type: 'get-active' })).rec.paused, true);
+});
+
+test('a paused recording stays paused after the worker wakes', async () => {
+  const sw = loadSw({ offscreen: { ...RECORDING, paused: true } });
+  sw.finishWaking();
+  assert.equal((await sw.ask({ type: 'get-active' })).rec.paused, true);
+});
+
+test('pausing with no recording does nothing', async () => {
+  const sw = loadSw();
+  sw.finishWaking();
+  await sw.ask({ type: 'set-paused', on: true });
+  await flush();
+  assert.ok(!sw.sent.some((m) => m.op === 'pause'));
+});
+
+test('captions spoken during a pause are not saved', async () => {
+  const key = `meeting:${MEET}`;
+  const sw = loadSw({ offscreen: { ...RECORDING, meetingId: MEET, paused: true }, store: { meetings: [MEET], [key]: meetingFor() } });
+  sw.finishWaking();
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'segments', meetingId: MEET, title: 't', segs: [{ id: 'private', speaker: 'Ani', text: 'rahasia', t: 9 }] });
+  await flush();
+  assert.ok(!sw.store[key].segments.some((s) => s.id === 'private'));
+});
+
+test('captions in another meeting still save during a pause', async () => {
+  const sw = loadSw({ offscreen: { ...RECORDING, paused: true } });
+  sw.finishWaking();
+  await flush();
+  const tab = sw.connect();
+  tab.send({ type: 'segments', meetingId: MEET, title: 't', segs: [{ id: 'x', speaker: 'Ani', text: 'halo', t: 9 }] });
+  await flush();
+  assert.equal(sw.store[`meeting:${MEET}`].segments.length, 1);
+});
+
+test('pausing before the recorder is ready does not claim to be paused', async () => {
+  const sw = loadSw({ offscreen: RECORDING, canPause: false });
+  sw.finishWaking();
+  await flush();
+  await sw.ask({ type: 'set-paused', on: true });
+  await flush();
+  assert.equal(sw.sent.filter((m) => m.type === 'rec-state').at(-1).paused, false);
+});
+
+test('closing the record reminder still leaves the captions warning available', async () => {
+  const { tab, status } = await joined('both');
+  await status(false, 1000000);
+  await status(false, 1016000);
+  const prompts = tab.posted.at(-1).prompts.map((p) => p.kind);
+  assert.deepEqual([...prompts], ['record', 'captions']);
 });

@@ -93,7 +93,7 @@ function render() {
     view.append(el('div', 'muted state', rec.saving ? 'Saving recording…' : 'Transcribing…'));
   } else if (rec.recording) {
     row('Stop recording', ICON.stop(), () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
-    view.append(el('div', 'recording state', 'Recording'));
+    view.append(el('div', 'recording state', rec.paused ? 'paused, nothing is being recorded' : 'Recording'));
   } else {
     const d = mkDropdown(view, 'rec', 'Record', { cls: 'inline' });
     d.head.prepend(ICON.rekam());
@@ -133,7 +133,7 @@ function render() {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type !== 'rec-state') return;
-  rec = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving,
+  rec = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, paused: !!msg.paused,
     error: 'error' in msg ? msg.error : rec.error };
   render();
 });
@@ -149,7 +149,7 @@ chrome.storage.local.get('settings').then((d) => {
 }).catch(() => {});
 chrome.runtime.sendMessage({ type: 'get-active' }).then((d) => {
   if (!d?.rec) return;
-  rec = { ...rec, recording: d.rec.recording, transcribing: d.rec.transcribing,
+  rec = { ...rec, recording: d.rec.recording, transcribing: d.rec.transcribing, paused: !!d.rec.paused,
     saving: d.rec.transcribing && d.rec.autoStt === false };
   render();
 }).catch(() => {});

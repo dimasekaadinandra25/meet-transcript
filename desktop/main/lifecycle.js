@@ -3,9 +3,11 @@ const SHORTCUTS = {
   'Alt+Shift+V': 'rec-start-video',
   'Alt+Shift+S': 'rec-stop',
   'Alt+Shift+M': 'mute-toggle',
+  'Alt+Shift+P': 'pause-toggle',
   'Alt+Shift+K': 'mark',
 };
 
+const HIDDEN_ARG = '--hidden';
 const ZOOM_KEYS = { '=': 1, '+': 1, '-': -1, 0: 0 };
 
 function zoomStep({ type, control, alt, meta, key }) {
@@ -18,12 +20,13 @@ const commandItem = (label, command) => ({ label, command, accelerator: ACCELERA
 const statusItem = (label) => ({ label, enabled: false });
 const SEPARATOR = { separator: true };
 
-function trayControls({ recording, transcribing, muted }) {
+function trayControls({ recording, transcribing, muted, paused }) {
   if (transcribing) return [statusItem('Transcribing…')];
   if (recording) {
     return [
-      statusItem(muted ? 'Recording, microphone muted' : 'Recording'),
+      statusItem(paused ? 'Paused' : muted ? 'Recording, microphone muted' : 'Recording'),
       commandItem('Stop recording', 'rec-stop'),
+      commandItem(paused ? 'Resume recording' : 'Pause recording', 'pause-toggle'),
       commandItem(muted ? 'Unmute microphone' : 'Mute microphone', 'mute-toggle'),
       commandItem('Mark moment', 'mark'),
     ];
@@ -41,10 +44,13 @@ function trayMenu(state) {
   ];
 }
 
-function closeAction({ recording, transcribing, quitting }) {
-  if (!recording && !transcribing) return 'close';
-  return quitting ? 'confirm-quit' : 'hide';
+function closeAction({ recording, transcribing, quitting, keepInTray }) {
+  const busy = recording || transcribing;
+  if (quitting) return busy ? 'confirm-quit' : 'close';
+  return busy || keepInTray ? 'hide' : 'close';
 }
+
+const startsHidden = (argv) => argv.includes(HIDDEN_ARG);
 
 function quitPrompt({ recording }) {
   if (recording) {
@@ -61,10 +67,11 @@ function quitPrompt({ recording }) {
   };
 }
 
-function trayLook({ recording, transcribing, muted }) {
+function trayLook({ recording, transcribing, muted, paused }) {
   if (!recording) return { image: 'tray-idle', tooltip: transcribing ? 'Transcripables: transcribing' : 'Transcripables' };
+  if (paused) return { image: 'tray-muted', tooltip: 'Transcripables: recording paused' };
   if (muted) return { image: 'tray-muted', tooltip: 'Transcripables: recording, microphone muted' };
   return { image: 'tray-recording', tooltip: 'Transcripables: recording' };
 }
 
-module.exports = { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep };
+module.exports = { HIDDEN_ARG, SHORTCUTS, closeAction, quitPrompt, startsHidden, trayLook, trayMenu, zoomStep };

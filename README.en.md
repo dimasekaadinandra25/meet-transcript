@@ -107,6 +107,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 | Record audio + video | **Record audio + video** | `Alt+Shift+V` |
 | Stop | **Stop recording** | `Alt+Shift+S` |
 | Mute or unmute your microphone | **Mute microphone** | `Alt+Shift+M` |
+| Pause or resume | **Pause recording** | `Alt+Shift+P` |
 | Mark an important moment | **Mark moment** | `Alt+Shift+K` |
 
 * **Language** in Settings switches the app between English and Bahasa Indonesia. Transcripts, MoM, and titles are never translated, and `Alt` shortcut letters stay the same in both languages.
@@ -117,7 +118,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * Muting in Zoom or Teams does **not** stop this app's microphone recording. Use the app's own mute. It resets to on for each new recording.
 * The transcript fills in about every 2 minutes during the meeting, and finishes when you stop. Turn this off in Settings to send audio only after the meeting.
 * Each recording is also saved to `Documents/Transcripables`. Deleting a meeting in the app does not delete that copy. Turn this off in Settings.
-* Closing the window while recording or transcribing keeps working in the system tray. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
+* Closing the window keeps the app running in the system tray, so shortcuts keep working. Turn this off in Settings, and the app then closes completely unless it is recording or transcribing. Use **Quit** in the tray menu to exit. **Start hidden in the tray** in Settings starts it when you sign in. The tray icon and window title show the status. A warning, such as a disconnected microphone, brings the window back.
 * By default, everything on your computer's speakers gets recorded, including notifications and other apps. On Windows, the sound menu next to **Record audio** records one app instead, such as Zoom. Apps appear there once they have played sound. This needs a recent Windows version, and macOS always records all computer sound.
 * Without a headset, other people's voices can leak into your microphone. Lines that repeat what the computer played within about 5 seconds are removed. Short replies and differently heard lines can still appear as **You**.
 * Ask meeting participants for permission before recording.
@@ -134,6 +135,10 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 * **Download** also offers `.srt` and `.vtt` subtitles. They start at the earliest saved recording, so lines from before it stay out. **MoM type** in Settings offers Standard, Standup, Client call, and 1-on-1.
 * **Delete meetings older than** in Settings removes old meetings and their recordings when the app starts. It is off by default, and copies in `Documents/Transcripables` stay.
 * In the extension, the icon shows **!** when captions are off or quiet, or when *Meet captions + recorded audio* has no recording. Hover the icon for the reason. If you are not recording and captions stay off for 15 seconds or quiet for a minute, the Meet page also warns you and names the record shortcut. Silence can set it off too. Close it to stop it for that call.
+* **Pause recording** records silence, and black in video, until you resume, so the timing of the transcript stays right. The recording file keeps that silent gap, parts that were fully paused are not sent to your speech service, and Meet captions from that time are not saved. In the extension it is in the panel, and you still hear the meeting.
+* On Windows, the app asks to record when another app, such as Zoom, uses your microphone for about 20 seconds. Clicking the notification starts recording. Any app using the microphone counts, including a browser. An app already using the microphone when this app starts, or when a recording ends, does not trigger it, so an app like Discord that always holds the microphone will not. Turn this off in Settings. macOS does not have this yet.
+* **Names and terms to spell correctly** in Settings tells the speech service about names and jargon. It is a hint, so spelling can still be wrong, and diarize models do not accept it.
+* On Google Meet, names you gave people carry over to the next session of the same room. Speaker letters do not, because they can mean someone else next time. In a recording mode, the Meet page reminds you to record if you have not pressed Record after a few seconds.
 * **Edit transcript** on a finished meeting lets you fix lines and rename speakers, such as **Others** to a real name, across the whole meeting. **Retranscribe** replaces text edits to lines from that recording, and asks first. Speaker names stay, but with a diarize model the letters can change, so it asks first and you should check the names afterwards. If a part fails to transcribe again, its old lines are kept.
 * **STT language** is empty by default, so the language is detected automatically for each recording part. The built-in engine's Whisper model covers about 100 languages. If people switch languages inside one part, set the main language in Settings, such as `id` or `en`. Other STT services support what their model supports.
 * The built-in engine starts with a small model (`ggml-base-q5_1`). **Built-in engine accuracy** in Settings downloads a larger one (190 MB or 540 MB), checked against a fixed checksum, and it stays on your computer. The installer includes the Microsoft runtime files the engine needs.

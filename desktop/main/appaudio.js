@@ -14,22 +14,25 @@ function createAppAudio({ dir, onData, onEnded, platform = process.platform, exi
 
   const available = () => platform === 'win32' && exists(helper);
 
-  function list() {
+  function ask(command) {
     return new Promise((resolve) => {
-      const lister = run(helper, ['list'], { ...HELPER_OPTIONS, stdio: ['ignore', 'pipe', 'ignore'] });
+      const lister = run(helper, [command], { ...HELPER_OPTIONS, stdio: ['ignore', 'pipe', 'ignore'] });
       const parts = [];
-      lister.once('error', () => resolve([]));
+      lister.once('error', () => resolve(null));
       lister.stdout.on('data', (part) => parts.push(part));
       lister.once('close', () => {
         try {
           const found = JSON.parse(Buffer.concat(parts).toString());
           resolve(found.filter((app) => Number.isInteger(app?.pid) && typeof app.name === 'string' && app.pid !== process.pid));
         } catch {
-          resolve([]);
+          resolve(null);
         }
       });
     });
   }
+
+  const list = () => ask('list').then((found) => found ?? []);
+  const micApps = () => ask('mic-apps');
 
   function stop() {
     const running = child;
@@ -73,7 +76,7 @@ function createAppAudio({ dir, onData, onEnded, platform = process.platform, exi
     });
   }
 
-  return { available, list, start, stop };
+  return { available, list, micApps, start, stop };
 }
 
 module.exports = { createAppAudio };

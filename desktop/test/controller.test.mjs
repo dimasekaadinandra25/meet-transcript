@@ -251,7 +251,7 @@ test('mute diteruskan ke recorder dan state', async () => {
   await ctl.handle({ type: 'set-muted', on: true });
   assert.equal(fakeRecorder.muted, true);
   assert.equal((await ctl.handle({ type: 'get-active' })).rec.muted, true);
-  assert.deepEqual(states.at(-1), { recording: true, transcribing: false, muted: true });
+  assert.deepEqual(states.at(-1), { recording: true, transcribing: false, muted: true, paused: false });
 });
 
 test('ubah judul tersimpan, judul kosong diabaikan', async () => {
@@ -327,7 +327,7 @@ test('pesan tidak dikenal diabaikan', async () => {
 test('main process tahu transkrip sedang berjalan setelah Stop', async () => {
   await runRecording();
   assert.ok(states.some((s) => !s.recording && s.transcribing));
-  assert.deepEqual(states.at(-1), { recording: false, transcribing: false, muted: false });
+  assert.deepEqual(states.at(-1), { recording: false, transcribing: false, muted: false, paused: false });
 });
 
 test('main process tahu transkrip ulang sedang berjalan', async () => {
@@ -921,4 +921,17 @@ test('a folder failure during recovery still closes the meeting and warns', asyn
   await ctl.recover();
   assert.ok(data['meeting:desktop-5'].endedAt);
   assert.match(recStates().at(-1).error, /could not be saved to your folder/);
+});
+
+test('pausing and resuming tells the panel and the tray', async () => {
+  let pausedNow = false;
+  fakeRecorder.setPaused = (on) => { pausedNow = on; };
+  fakeRecorder.isPaused = () => pausedNow;
+  await ctl.handle(START);
+  await ctl.handle({ type: 'set-paused', on: true });
+  assert.equal(pausedNow, true);
+  assert.equal(recStates().at(-1).paused, true);
+  assert.equal((await ctl.handle({ type: 'get-active' })).rec.paused, true);
+  await ctl.handle({ type: 'set-paused', on: false });
+  assert.equal(recStates().at(-1).paused, false);
 });

@@ -261,13 +261,13 @@ void collectSessions(IMMDevice* device, const std::map<DWORD, ProcessInfo>& tabl
   manager->Release();
 }
 
-int list() {
+int list(EDataFlow flow) {
   IMMDeviceEnumerator* devices = nullptr;
   HRESULT hr = CoCreateInstance(kDeviceEnumeratorClass, nullptr, CLSCTX_ALL, kDeviceEnumerator, reinterpret_cast<void**>(&devices));
   if (FAILED(hr)) return fail("audio devices are not available", hr);
   IMMDeviceCollection* endpoints = nullptr;
-  hr = devices->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &endpoints);
-  if (FAILED(hr)) return fail("audio outputs are not available", hr);
+  hr = devices->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE, &endpoints);
+  if (FAILED(hr)) return fail("audio devices are not available", hr);
   const auto table = processTable();
   std::map<DWORD, bool> found;
   UINT count = 0;
@@ -295,11 +295,12 @@ int list() {
 int main(int argc, char** argv) {
   if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return kExitFailed;
   std::string command = argc > 1 ? argv[1] : "";
-  if (command == "list") return list();
+  if (command == "list") return list(eRender);
+  if (command == "mic-apps") return list(eCapture);
   if (command == "capture" && argc > 2) {
     const long pid = std::strtol(argv[2], nullptr, 10);
     if (pid > 0) return capture(static_cast<DWORD>(pid));
   }
-  std::fputs("usage: app-audio list | capture <pid>\n", stderr);
+  std::fputs("usage: app-audio list | mic-apps | capture <pid>\n", stderr);
   return kExitFailed;
 }

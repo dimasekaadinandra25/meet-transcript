@@ -447,3 +447,86 @@ test('each track part is saved with its own number', async () => {
   await recorder.stop();
   assert.deepEqual(seen, [0]);
 });
+
+test('pausing silences everything and keeps the same recording running', async () => {
+  fake.videoTrack.contentHint = '';
+  await rec.start({ ...opts, video: true });
+  const running = fake.running().length;
+  rec.setPaused(true);
+  assert.equal(rec.isPaused(), true);
+  assert.equal(fake.systemTrack.enabled, false);
+  assert.equal(fake.micTrack.enabled, false);
+  assert.equal(fake.videoTrack.enabled, false);
+  assert.equal(fake.running().length, running);
+  rec.setPaused(false);
+  assert.equal(fake.systemTrack.enabled, true);
+  assert.equal(fake.micTrack.enabled, true);
+  assert.equal(fake.videoTrack.enabled, true);
+});
+
+test('pausing silences the chosen app too', async () => {
+  const node = fake.ctx?.createGain?.() ?? { gain: { value: 1 }, connect() {} };
+  deps.chosenApp = () => 5;
+  deps.openAppAudio = async (_pid, ctx) => {
+    const appNode = ctx.createGain();
+    appNode.isApp = true;
+    return { node: appNode, close() {} };
+  };
+  await rec.start({ ...opts, mic: false });
+  const appNode = fake.gains.find((g) => g.isApp);
+  rec.setPaused(true);
+  assert.equal(appNode.gain.value, 0);
+  rec.setPaused(false);
+  assert.equal(appNode.gain.value, 1);
+  assert.ok(node);
+});
+
+test('the no-sound warning waits while paused', async () => {
+  await rec.start({ ...opts, mic: false });
+  rec.setPaused(true);
+  for (let i = 0; i < 700; i++) fake.intervals.filter((t) => t.ms !== opts.chunkMs && !t.cleared).forEach((t) => t.fn());
+  assert.deepEqual(warnings, []);
+});
+
+test('a new recording does not start paused', async () => {
+  await rec.start(opts);
+  rec.setPaused(true);
+  await rec.stop();
+  assert.equal(rec.isPaused(), false);
+  fake.systemTrack.enabled = true;
+  await rec.start(opts);
+  assert.equal(fake.systemTrack.enabled, true);
+});
+
+test('pausing without a recording does nothing', () => {
+  rec.setPaused(true);
+  assert.equal(rec.isPaused(), false);
+});
+
+test('a part recorded entirely during a pause is not saved', async () => {
+  const seen = [];
+  fake.store.appendSystemChunk = async (_blob, _recId, index) => { seen.push(index); };
+  const recorder = createRecorder(deps);
+  await recorder.start({ ...opts, mic: false });
+  fake.fire(opts.chunkMs);
+  recorder.setPaused(true);
+  fake.fire(opts.chunkMs);
+  fake.fire(opts.chunkMs);
+  recorder.setPaused(false);
+  await recorder.stop();
+  await new Promise((done) => setTimeout(done, 0));
+  assert.deepEqual(seen, [0, 1, 3]);
+});
+
+test('pausing while the microphone is still opening keeps it silent', async () => {
+  let open;
+  deps.getUserMedia = () => new Promise((done) => { open = done; });
+  const recorder = createRecorder(deps);
+  const starting = recorder.start(opts);
+  await new Promise((done) => setTimeout(done, 0));
+  recorder.setPaused(true);
+  open(new FakeStream([fake.micTrack]));
+  await starting;
+  assert.equal(fake.micTrack.enabled, false);
+  assert.equal(fake.systemTrack.enabled, false);
+});

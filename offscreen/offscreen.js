@@ -3,6 +3,9 @@ let stream = null;
 let micStream = null;
 let micJoining = false;
 let mixNode = null;
+let tabGate = null;
+let paused = false;
+let currentChunk = { heard: true };
 let recStream = null;
 let recorder = null;
 let videoRecorder = null;
@@ -34,12 +37,15 @@ async function releaseMedia() {
 function startChunkRecorder() {
   const data = [];
   const recId = cfg.baseTime;
+  const chunk = { heard: !paused };
+  currentChunk = chunk;
   recorder = new MediaRecorder(recStream, { mimeType: MIME });
   recorder.ondataavailable = (e) => { if (e.data.size) data.push(e.data); };
   recorder.onstop = () => {
     const blob = new Blob(data, { type: MIME });
     const index = chunkBlobs.length;
-    chunkBlobs.push(blob);
+    chunkBlobs.push(chunk.heard ? blob : null);
+    if (!chunk.heard) return;
     trackSave(globalThis.MeetAudioStore.appendChunk(blob, recId, index),
       'An audio part could not be saved for retranscribing: ');
   };
@@ -84,9 +90,24 @@ async function joinMic() {
   try {
     audioCtx.createMediaStreamSource(s).connect(mixNode);
     micStream = s;
+    setTracksOn(s, !paused);
   } catch {
     stopTracks(s);
   }
+}
+
+function setTracksOn(source, on) {
+  for (const track of source?.getTracks() ?? []) track.enabled = on;
+}
+
+function setPaused(on) {
+  if (!recorder) return;
+  paused = on;
+  if (tabGate) tabGate.gain.value = on ? 0 : 1;
+  setTracksOn(micStream, !on);
+  for (const track of stream?.getVideoTracks() ?? []) track.enabled = !on;
+  if (on) stopSilenceWatch();
+  else currentChunk.heard = true;
 }
 
 function rotateChunk() {
@@ -121,6 +142,7 @@ async function start(msg) {
   videoRecorder = null;
   await releaseMedia();
   cfg = msg;
+  paused = false;
   chunkBlobs = [];
   pendingSaves = [];
   const constraints = {
@@ -140,7 +162,9 @@ async function start(msg) {
   const src = audioCtx.createMediaStreamSource(stream);
   src.connect(audioCtx.destination);
   mixNode = audioCtx.createGain();
-  src.connect(mixNode);
+  tabGate = audioCtx.createGain();
+  src.connect(tabGate);
+  tabGate.connect(mixNode);
   const dest = audioCtx.createMediaStreamDestination();
   mixNode.connect(dest);
   recStream = dest.stream;
@@ -162,7 +186,7 @@ async function start(msg) {
 function transcribeOne(blob, c, voices) {
   const send = (knownSpeakers) => globalThis.MeetOpenAI.transcribeAudio({
     blob, baseUrl: c.baseUrl, apiKey: c.apiKey,
-    model: c.sttModel, language: c.sttLanguage, knownSpeakers,
+    model: c.sttModel, language: c.sttLanguage, knownSpeakers, prompt: c.sttVocabulary,
   });
   if (!globalThis.MeetStt.isDiarizeModel(c.sttModel)) return send();
   return globalThis.MeetStt.sendWithVoices({ send, blob, voices, makeClip: globalThis.MeetWav.clipDataUrl });
@@ -175,6 +199,10 @@ async function transcribeChunks(blobs, c, replace) {
     const voices = globalThis.MeetStt.createVoiceMemory();
     for (let i = 0; i < blobs.length; i++) {
       toSW({ type: 'audio-progress', meetingId: c.meetingId, done: i, total: blobs.length });
+      if (!blobs[i]) {
+        results.push({ segments: [] });
+        continue;
+      }
       try {
         results.push(await transcribeOne(blobs[i], c, voices));
       } catch (e) {
@@ -281,7 +309,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   } else if (msg.op === 'state') {
     sendResponse({ ok: true, recording: !!recorder, transcribing: busy,
       meetingId: cfg?.meetingId ?? null, tabId: cfg?.tabId ?? null,
-      autoStt: sttRunning || !!cfg?.transcribe });
+      autoStt: sttRunning || !!cfg?.transcribe, paused: !!recorder && paused });
+    return false;
+  } else if (msg.op === 'pause') {
+    setPaused(!!msg.on);
+    sendResponse({ ok: true, paused });
     return false;
   } else if (msg.op === 'mic-enable') {
     sendResponse({ ok: true });

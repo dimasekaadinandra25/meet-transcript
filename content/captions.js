@@ -7,25 +7,30 @@
   let statusTimer = null;
   let flushTimer = null;
   let recordPrompt = null;
-  let recordPromptSeen = false;
+  let recordPromptKind = null;
+  const closedPrompts = new Set();
   function hideRecordPrompt() {
     recordPrompt?.remove();
     recordPrompt = null;
+    recordPromptKind = null;
   }
-  function showRecordPrompt(text) {
-    if (!text) return hideRecordPrompt();
-    if (recordPrompt || recordPromptSeen) return;
+  function showRecordPrompt(prompts) {
+    const next = prompts.find((prompt) => !closedPrompts.has(prompt.kind));
+    if (!next) return hideRecordPrompt();
+    if (recordPromptKind === next.kind) return;
+    hideRecordPrompt();
+    recordPromptKind = next.kind;
     recordPrompt = document.createElement('div');
     recordPrompt.setAttribute('role', 'alert');
     recordPrompt.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;gap:12px;align-items:center;max-width:min(560px,90vw);padding:12px 16px;border-radius:8px;background:#b45309;color:#fff;font:14px/1.4 sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)';
     const message = document.createElement('span');
-    message.textContent = text;
+    message.textContent = next.text;
     const close = document.createElement('button');
     close.textContent = '×';
     close.setAttribute('aria-label', 'Close');
     close.style.cssText = 'min-width:32px;min-height:32px;border:0;border-radius:4px;background:transparent;color:inherit;font:20px sans-serif;cursor:pointer';
     close.addEventListener('click', () => {
-      recordPromptSeen = true;
+      closedPrompts.add(next.kind);
       hideRecordPrompt();
     });
     recordPrompt.append(message, close);
@@ -34,7 +39,7 @@
   function connect() {
     const p = chrome.runtime.connect({ name: 'captions' });
     p.onDisconnect.addListener(() => { if (port === p) port = null; });
-    p.onMessage.addListener((msg) => { if (msg.type === 'record-prompt') showRecordPrompt(msg.text); });
+    p.onMessage.addListener((msg) => { if (msg.type === 'record-prompt') showRecordPrompt(msg.prompts); });
     port = p;
   }
   function stopAll() {
@@ -67,7 +72,7 @@
   let ccAttempts = 0;
   let sess = { ...SESS.INITIAL };
   function openSession() {
-    recordPromptSeen = false;
+    closedPrompts.clear();
     ccAttempts = 0;
     blockIds = new WeakMap();
     dirty.clear();

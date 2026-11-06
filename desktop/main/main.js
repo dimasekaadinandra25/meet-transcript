@@ -1,5 +1,5 @@
 const {
-  app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, net,
+  app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, net,
   powerSaveBlocker, protocol, safeStorage, session, shell,
 } = require('electron');
 const { join } = require('node:path');
@@ -10,10 +10,13 @@ const { loadLib, netCall, callChat, callTest, callStt, probe } = require('./net'
 const { createEngine } = require('./engine');
 const { createModels } = require('./models');
 const { createAppAudio } = require('./appaudio');
+const { appLabel, createMicWatch } = require('./micwatch');
 const { createRecordingFolder } = require('./recordings');
-const { SHORTCUTS, closeAction, quitPrompt, trayLook, trayMenu, zoomStep } = require('./lifecycle');
+const { HIDDEN_ARG, SHORTCUTS, closeAction, quitPrompt, startsHidden, trayLook, trayMenu, zoomStep } = require('./lifecycle');
 const { RELEASES_URL, checkForUpdate } = require('./update');
 
+const APP_ID = 'com.transcripables.desktop';
+const APP_NAME = 'Transcripables';
 const APP_URL = `${SCHEME}://${APP_HOST}`;
 const APP_ROOT = join(__dirname, '..');
 const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture', 'clipboard-sanitized-write']);
@@ -43,6 +46,10 @@ let recordingFolder;
 let engine;
 let appAudio;
 let recState = { recording: false, transcribing: false, muted: false };
+let keepInTray = true;
+let askToRecord = true;
+let micNotice;
+let trayNoticeShown = false;
 
 const t = (text) => globalThis.MeetI18n.t(text);
 const assetPath = (name) => join(APP_ROOT, 'assets', `${name}.png`);
@@ -116,11 +123,15 @@ function registerShortcuts() {
 }
 
 function handleClose(event) {
-  const action = closeAction({ ...recState, quitting });
+  const action = closeAction({ ...recState, quitting, keepInTray });
   if (action === 'close') return;
   event.preventDefault();
   if (action === 'hide') {
     mainWindow.hide();
+    if (process.platform === 'win32' && !trayNoticeShown) {
+      trayNoticeShown = true;
+      tray?.displayBalloon({ title: 'Transcripables', content: t('Still running here, so shortcuts keep working. Right-click this icon to quit.') });
+    }
     return;
   }
   mainWindow.show();
@@ -144,6 +155,11 @@ function handleFromApp(channel, handler) {
   });
 }
 
+function applyWindowSettings(settings) {
+  keepInTray = settings?.keepInTray !== false;
+  askToRecord = settings?.askToRecord !== false;
+}
+
 function serveStore() {
   const store = createStore({
     dir: join(app.getPath('userData'), 'store'),
@@ -152,8 +168,12 @@ function serveStore() {
       encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
       decrypt: (data) => safeStorage.decryptString(Buffer.from(data, 'base64')),
     },
-    onChange: (changes) => mainWindow?.webContents.send('store:changed', changes),
+    onChange: (changes) => {
+      if (changes.settings) applyWindowSettings(changes.settings.newValue);
+      mainWindow?.webContents.send('store:changed', changes);
+    },
   });
+  store.get('settings').then((saved) => applyWindowSettings(Object(saved).settings)).catch(() => {});
   handleFromApp('store:get', store.get);
   handleFromApp('store:set', store.set);
   handleFromApp('store:remove', store.remove);
@@ -210,6 +230,25 @@ function serveAppAudio() {
   handleFromApp('appaudio:list', () => appAudio.list());
   handleFromApp('appaudio:start', (pid) => netCall(() => appAudio.start(pid)));
   handleFromApp('appaudio:stop', () => appAudio.stop());
+  createMicWatch({
+    list: appAudio.micApps,
+    shouldWatch: () => askToRecord && appAudio.available() && !recState.recording && !recState.transcribing,
+    onDetected: offerToRecord,
+  }).start();
+}
+
+function offerToRecord(name) {
+  const body = t(`${appLabel(name)} is using your microphone. Click to record this meeting.`);
+  if (!Notification.isSupported()) {
+    mainWindow?.webContents.send('main:warn', body);
+    return;
+  }
+  micNotice = new Notification({ title: 'Transcripables', body });
+  micNotice.on('click', () => {
+    showWindow();
+    runCommand('rec-start');
+  });
+  micNotice.show();
 }
 
 function limitPermissions() {
@@ -225,6 +264,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 420,
     height: 720,
+    show: !startsHidden(process.argv) && !(process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin),
     icon: join(sharedRoot(), 'icons', 'icon128.png'),
     webPreferences: {
       preload: join(APP_ROOT, 'preload.js'),
@@ -265,6 +305,7 @@ function createWindow() {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', showWindow);
+app.on('activate', showWindow);
 app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
@@ -273,6 +314,7 @@ app.on('will-quit', () => {
 });
 
 app.whenReady().then(() => {
+  app.setAppUserModelId(app.isPackaged ? APP_ID : APP_NAME);
   globalThis.fetch = (input, init) => net.fetch(input instanceof URL ? input.href : input, init);
   handleAssets();
   limitPermissions();
@@ -289,6 +331,10 @@ app.whenReady().then(() => {
   });
   handleFromApp('app:update-check', () => checkForUpdate({ current: app.getVersion() }).catch((e) => ({ status: 'failed', error: e.message })));
   handleFromApp('app:update-open', () => shell.openExternal(RELEASES_URL));
+  handleFromApp('app:login-item', () => ({ available: app.isPackaged, on: app.getLoginItemSettings({ args: [HIDDEN_ARG] }).openAtLogin }));
+  handleFromApp('app:set-login-item', (on) => {
+    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!on, args: [HIDDEN_ARG] });
+  });
   handleFromApp('pdf:make', () => mainWindow.webContents.printToPDF({ printBackground: false }));
   handleFromApp('app:quit', () => {
     engine.stop();

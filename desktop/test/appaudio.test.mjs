@@ -207,3 +207,22 @@ test('an empty part plays nothing', () => {
   createPcmSource(ctx).push(new Uint8Array(0));
   assert.deepEqual(ctx.played, []);
 });
+
+test('apps using the microphone are read from the helper, without this app', async () => {
+  const { audio, children } = setup();
+  const found = audio.micApps();
+  assert.deepEqual(children[0].args, ['mic-apps']);
+  children[0].stdout.emit('data', Buffer.from(JSON.stringify([{ pid: 9, name: 'Zoom.exe', active: true }, { pid: process.pid, name: 'me.exe', active: true }])));
+  children[0].emit('close');
+  assert.deepEqual(await found, [{ pid: 9, name: 'Zoom.exe', active: true }]);
+});
+
+test('a failed microphone check is reported as unknown, not as nobody using it', async () => {
+  const { audio, children } = setup();
+  const found = audio.micApps();
+  children[0].emit('error', new Error('gone'));
+  assert.equal(await found, null);
+  const listed = audio.list();
+  children[1].emit('error', new Error('gone'));
+  assert.deepEqual(await listed, []);
+});

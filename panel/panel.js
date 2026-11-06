@@ -98,7 +98,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (wasActive !== (msg.recording || msg.transcribing)) audioMetaKey = null;
     if (msg.total && !msg.done) progressStart = Date.now();
     if (!msg.transcribing) progressStart = 0;
-    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, importing: !!msg.importing,
+    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, paused: !!msg.paused, importing: !!msg.importing,
       done: msg.done ?? 0, total: msg.total ?? 0,
       error: 'error' in msg ? msg.error : recState.error };
     if (tab === 'live' || (tab === 'history' && viewingId)) render();
@@ -247,7 +247,9 @@ async function renderMeeting(id, live, epoch) {
       const stop = el('button', null, 'Stop recording');
       stop.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
       stop.classList.add('danger');
-      bar.append(stop, el('span', 'recording', 'recording'));
+      const pause = el('button', null, recState.paused ? 'Resume recording' : 'Pause recording');
+      pause.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'set-paused', on: !recState.paused }));
+      bar.append(stop, pause, el('span', 'recording', recState.paused ? 'paused, nothing is being recorded' : 'recording'));
     } else {
       const needsRecord = settingsCache.transcriptSource === 'both' && status.inCall;
       bar.append(needsRecord
@@ -928,6 +930,8 @@ async function renderSettings(epoch) {
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
   const sttLanguage = field('Speech language (empty = detect automatically, or a code such as id, en, ja)',
     mkEl('input', { value: settings.sttLanguage ?? ST.DEFAULT_LANGUAGE }));
+  const sttVocabulary = field('Names and terms to spell correctly (optional, separated by commas)',
+    mkEl('textarea', { value: settings.sttVocabulary ?? '', rows: 2 }));
   function applyMode() {
     const audio = HAS_AUDIO;
     const m = sttModeSel.value;
@@ -938,6 +942,7 @@ async function renderSettings(epoch) {
     show(sttApiKey, audio && m === 'api');
     show(sttModel, audio && m === 'api');
     show(sttLanguage, audio);
+    show(sttVocabulary, audio);
     const info = audio && INFO[m];
     sttInfo.textContent = info ? 'ⓘ ' + INFO[m] : '';
     sttInfo.hidden = !info;
@@ -1038,6 +1043,7 @@ async function renderSettings(epoch) {
         sttMode: sttModeSel.value,
         sttModel: sttModel.value.trim() || ST.DEFAULT_API_MODEL,
         sttLanguage: sttLanguage.value.trim(),
+        sttVocabulary: sttVocabulary.value.trim(),
         sttBaseUrl: sttModeSel.value === 'builtin' ? cur.sttBaseUrl ?? '' : sttBaseValue(),
         sttApiKey: sttApiKey.value.trim(),
       },
@@ -1146,7 +1152,7 @@ chrome.storage.onChanged.addListener((c, area) => {
   await loadSettings();
   const a = await chrome.runtime.sendMessage({ type: 'get-active' }).catch(() => null);
   if (a) status = a;
-  if (a?.rec) recState = { ...recState, recording: a.rec.recording, transcribing: a.rec.transcribing, muted: a.rec.muted,
+  if (a?.rec) recState = { ...recState, recording: a.rec.recording, transcribing: a.rec.transcribing, muted: a.rec.muted, paused: !!a.rec.paused,
     saving: a.rec.transcribing && a.rec.autoStt === false };
   if (a?.panelTab) selectTab(a.panelTab);
   if (a?.panelMeetingId) viewingId = a.panelMeetingId;

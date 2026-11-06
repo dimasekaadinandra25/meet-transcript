@@ -104,6 +104,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 | Rekam audio | **Record audio** | `Alt+Shift+A` |
 | Rekam audio + video | **Record audio + video** | `Alt+Shift+V` |
 | Stop | **Stop recording** | `Alt+Shift+S` |
+| Jeda atau lanjutkan | **Pause recording** | `Alt+Shift+P` |
 | Bisukan atau nyalakan mikrofon | **Mute microphone** | `Alt+Shift+M` |
 
 * **Language** di Settings mengganti bahasa aplikasi antara English dan Bahasa Indonesia. Transkrip, MoM, dan judul tidak pernah diterjemahkan, dan huruf shortcut `Alt` sama di kedua bahasa.
@@ -121,6 +122,11 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 
 ### Keterbatasan
 
+* **Pause recording** merekam keheningan, dan gambar hitam pada video, sampai Anda melanjutkan, jadi waktu transkrip tetap benar. File rekaman menyimpan jeda sunyi itu, bagian yang seluruhnya dijeda tidak dikirim ke layanan suara, dan caption Meet dari waktu itu tidak disimpan. Di ekstensi, tombolnya ada di panel, dan Anda tetap mendengar rapat.
+* Di Windows, aplikasi bertanya untuk merekam saat aplikasi lain, misalnya Zoom, memakai mikrofon selama sekitar 20 detik. Klik notifikasinya untuk mulai merekam. Semua aplikasi yang memakai mikrofon dihitung, termasuk browser. Aplikasi yang sudah memakai mikrofon saat aplikasi ini dibuka, atau saat rekaman selesai, tidak memicunya, jadi aplikasi seperti Discord yang selalu memegang mikrofon tidak akan memicunya. Matikan di Settings. macOS belum memiliki fitur ini.
+* **Names and terms to spell correctly** di Settings memberi tahu layanan suara tentang nama dan istilah. Ini hanya petunjuk, jadi ejaan masih bisa salah, dan model diarize tidak menerimanya.
+* Di Google Meet, nama yang Anda berikan terbawa ke sesi berikutnya di ruang yang sama. Huruf pembicara tidak, karena lain kali bisa berarti orang lain. Dalam mode rekam, halaman Meet mengingatkan Anda bila belum menekan Record setelah beberapa detik.
+* Menutup jendela membuat aplikasi tetap berjalan di system tray, jadi pintasan tetap berfungsi. Matikan di Settings, dan aplikasi lalu tertutup sepenuhnya kecuali sedang merekam atau mentranskrip. Pakai **Quit** di menu tray untuk keluar. **Start hidden in the tray** di Settings menjalankannya saat Anda masuk ke komputer.
 * Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir. Yang sudah tersimpan masuk ke `Documents/Transcripables` saat aplikasi dibuka lagi. Bila hanya jendelanya yang crash, jendela dimulai ulang sendiri dan memberi tahu Anda.
 * API key dienkripsi di komputer. **Export backup** tidak menyertakannya kecuali Anda mencentang **Include API keys**, yang menyimpannya dalam teks polos. Memulihkan cadangan tanpa key mempertahankan key yang Anda punya sekarang hanya bila cadangan memakai alamat server yang sama, jadi cadangan tidak pernah bisa mengirim key Anda ke tempat lain.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.

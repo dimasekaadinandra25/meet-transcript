@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   checkForUpdate: () => ipcRenderer.invoke('app:update-check'),
   openUpdate: () => ipcRenderer.invoke('app:update-open'),
+  loginItem: () => ipcRenderer.invoke('app:login-item'),
+  setLoginItem: (on) => ipcRenderer.invoke('app:set-login-item', on),
   makePdf: () => ipcRenderer.invoke('pdf:make'),
   capture: {
     sources: () => ipcRenderer.invoke('capture:sources'),

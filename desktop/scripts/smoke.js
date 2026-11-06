@@ -13,8 +13,9 @@ const CHECK = `(async () => JSON.stringify({
   nav: !!document.querySelector('nav button[data-tab="live"]'),
   engine: await window.desktop.engine.available(),
   appSound: await window.desktop.appAudio.available(),
+  loginItem: (await window.desktop.loginItem()).available,
 }))()`;
-const EXPECTED = JSON.stringify({ lib: 'object', host: 'object', nav: true, engine: true, appSound: process.platform === 'win32' });
+const EXPECTED = JSON.stringify({ lib: 'object', host: 'object', nav: true, engine: true, appSound: process.platform === 'win32', loginItem: true });
 
 async function appPage() {
   for (let i = 0; i < WAIT_TRIES; i++) {

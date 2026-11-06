@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-const { closeAction, quitPrompt, trayLook, trayMenu, zoomStep, SHORTCUTS } = createRequire(import.meta.url)('../main/lifecycle.js');
+const { closeAction, quitPrompt, startsHidden, trayLook, trayMenu, zoomStep, SHORTCUTS } = createRequire(import.meta.url)('../main/lifecycle.js');
 
 test('tutup jendela saat merekam tidak menghentikan rekaman', () => {
   assert.equal(closeAction({ recording: true, quitting: false }), 'hide');
@@ -29,6 +29,7 @@ test('shortcut memakai kombinasi dari plan', () => {
     'Alt+Shift+V': 'rec-start-video',
     'Alt+Shift+S': 'rec-stop',
     'Alt+Shift+M': 'mute-toggle',
+    'Alt+Shift+P': 'pause-toggle',
     'Alt+Shift+K': 'mark',
   });
 });
@@ -78,7 +79,7 @@ test('tray saat diam bisa mulai merekam', () => {
 
 test('tray saat merekam bisa berhenti dan membisukan', () => {
   const state = { recording: true, transcribing: false, muted: false };
-  assert.deepEqual(labels(state), ['Recording', 'Stop recording', 'Mute microphone', 'Mark moment', 'Open recordings folder', 'Show', 'Quit']);
+  assert.deepEqual(labels(state), ['Recording', 'Stop recording', 'Pause recording', 'Mute microphone', 'Mark moment', 'Open recordings folder', 'Show', 'Quit']);
   assert.equal(find(state, 'Recording').enabled, false);
   assert.equal(find(state, 'Stop recording').command, 'rec-stop');
   assert.equal(find(state, 'Mute microphone').command, 'mute-toggle');
@@ -100,4 +101,38 @@ test('tray selalu punya tampilkan dan keluar', () => {
   assert.equal(find({ recording: false }, 'Show').action, 'show');
   assert.equal(find({ recording: false }, 'Quit').action, 'quit');
   assert.equal(find({ recording: false }, 'Open recordings folder').action, 'folder');
+});
+
+test('with keep in tray on, closing an idle window hides it', () => {
+  assert.equal(closeAction({ keepInTray: true, quitting: false }), 'hide');
+});
+
+test('with keep in tray off, closing an idle window closes the app', () => {
+  assert.equal(closeAction({ keepInTray: false, quitting: false }), 'close');
+});
+
+test('quitting from the tray still closes an idle app', () => {
+  assert.equal(closeAction({ keepInTray: true, quitting: true }), 'close');
+});
+
+test('quitting while busy still asks first with keep in tray on', () => {
+  assert.equal(closeAction({ keepInTray: true, recording: true, quitting: true }), 'confirm-quit');
+});
+
+test('the app starts hidden only when started at login', () => {
+  assert.equal(startsHidden(['app.exe', '--hidden']), true);
+  assert.equal(startsHidden(['app.exe']), false);
+});
+
+test('a paused recording shows Resume in the tray', () => {
+  const state = { recording: true, paused: true };
+  const item = trayMenu(state).find((entry) => entry.command === 'pause-toggle');
+  assert.equal(item.label, 'Resume recording');
+  assert.equal(item.accelerator, 'Alt+Shift+P');
+  assert.equal(trayLook(state).tooltip, 'Transcripables: recording paused');
+});
+
+test('a running recording shows Pause in the tray', () => {
+  const item = trayMenu({ recording: true }).find((entry) => entry.command === 'pause-toggle');
+  assert.equal(item.label, 'Pause recording');
 });

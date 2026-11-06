@@ -58,3 +58,26 @@ test('with recordings, subtitles start at the earliest one', () => {
   const meeting = { startedAt: 100, segments: [{ speaker: '', text: 'x', t: 50 }] };
   assert.equal(globalThis.MeetMerge.subtitleOrigin(meeting, [900, 700]), 700);
 });
+
+test('vocabulary travels with every speech-to-text mode', () => {
+  for (const sttMode of ['api', 'whisper-local']) {
+    assert.equal(sttEndpoint({ sttMode, sttVocabulary: ' Dimas, Transcripables ' }).vocabulary, 'Dimas, Transcripables');
+    assert.equal('vocabulary' in sttEndpoint({ sttMode }), false);
+  }
+});
+
+test('a very long vocabulary is cut to what a speech model can take', () => {
+  assert.equal(sttEndpoint({ sttMode: 'api', sttVocabulary: 'x'.repeat(5000) }).vocabulary.length, 500);
+});
+
+test('speaker names carry over, but letters from a speech service do not', () => {
+  const { carriedNames } = globalThis.MeetMerge;
+  assert.deepEqual(carriedNames({ Others: 'Budi', 'Speaker A': 'Ani', 'Speaker Z3': 'Citra', Ani: 'Ani S.' }), { Others: 'Budi', Ani: 'Ani S.' });
+  assert.equal(carriedNames(undefined), undefined);
+  assert.equal(carriedNames({ 'Speaker A': 'Ani' }), undefined);
+});
+
+test('carried names leave out blank names and blank speakers', () => {
+  const { carriedNames } = globalThis.MeetMerge;
+  assert.deepEqual(carriedNames({ '': 'Budi', Ani: '', Citra: 'Citra S.' }), { Citra: 'Citra S.' });
+});

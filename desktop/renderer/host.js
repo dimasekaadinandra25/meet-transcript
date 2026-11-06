@@ -198,9 +198,10 @@
       if (rec.importing) mkBtn('Cancel import', () => send({ type: 'cancel-import' }), box);
     } else if (rec.recording) {
       mkBtn('Stop recording', () => send({ type: 'stop-recording' }), box).classList.add('danger');
+      mkBtn(rec.paused ? 'Resume recording' : 'Pause recording', () => send({ type: 'set-paused', on: !rec.paused }), box);
       mkBtn(rec.muted ? 'Unmute microphone' : 'Mute microphone', () => send({ type: 'set-muted', on: !rec.muted }), box);
       mkBtn('Mark moment', () => send({ type: 'mark-moment' }), box);
-      box.append(el('span', 'recording', rec.muted ? 'recording, microphone muted' : 'recording'));
+      box.append(el('span', 'recording', rec.paused ? 'paused, nothing is being recorded' : rec.muted ? 'recording, microphone muted' : 'recording'));
       box.append(levelBars());
       box.append(el('div', 'muted', 'Muting in the meeting app does not stop the microphone recording. Use the Mute button here.'));
     } else {
@@ -298,11 +299,23 @@
   function settingsRows(settings) {
     const open = el('div', 'actions');
     mkBtn('Open recordings folder', () => desktop.recordings.open(), open);
+    const loginRow = settingToggle('startAtLogin', 'Start hidden in the tray when you sign in to your computer', false);
+    const loginBox = loginRow.querySelector('input');
+    loginRow.hidden = true;
+    desktop.loginItem().then(({ available, on }) => {
+      loginRow.hidden = !available;
+      loginBox.checked = on;
+    }).catch(() => {});
+    loginBox.addEventListener('change', () => desktop.setLoginItem(loginBox.checked));
     return [
       engineModelRow(settings),
+      el('h3', null, 'Window'),
+      settingToggle('keepInTray', 'Keep running in the tray when you close the window, so shortcuts keep working', settings.keepInTray !== false),
+      loginRow,
       el('h3', null, 'Recordings'),
       settingToggle('autoSave', 'Save each recording to Documents/Transcripables', settings.autoSave !== false),
       open,
+      ...(canPickApp ? [settingToggle('askToRecord', 'Ask to record when another app starts using the microphone', settings.askToRecord !== false)] : []),
       settingToggle('liveTranscript', 'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)', settings.liveTranscript !== false),
       el('h3', null, 'Updates'),
       globalThis.createUpdateRow({ el, mkBtn, check: () => desktop.checkForUpdate(), open: () => desktop.openUpdate() }),
@@ -313,6 +326,10 @@
     'rec-start': () => send({ type: 'start-recording', video: false }),
     'rec-start-video': () => send({ type: 'start-recording', video: true }),
     'rec-stop': () => send({ type: 'stop-recording' }),
+    'pause-toggle': async () => {
+      const { rec } = await send({ type: 'get-active' });
+      await send({ type: 'set-paused', on: !rec.paused });
+    },
     'mute-toggle': async () => {
       const { rec } = await send({ type: 'get-active' });
       await send({ type: 'set-muted', on: !rec.muted });

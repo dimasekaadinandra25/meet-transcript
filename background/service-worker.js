@@ -6,10 +6,10 @@ if (chrome.sidebarAction) {
   chrome.action?.onClicked.addListener(() => chrome.sidebarAction.toggle());
 }
 
-const ACTIVE_IDLE = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0, captionsOffAt: 0 };
+const ACTIVE_IDLE = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0, captionsOffAt: 0, joinedAt: 0 };
 let active = { ...ACTIVE_IDLE };
 const meetingKey = (id) => 'meeting:' + id;
-const newMeeting = (id, title, startedAt) => ({ id, title, startedAt, endedAt: null, segments: [], mom: null });
+const newMeeting = (id, title, startedAt, speakerNames) => ({ id, title, startedAt, endedAt: null, segments: [], mom: null, ...(speakerNames ? { speakerNames } : {}) });
 
 function notifyPanel(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
@@ -19,6 +19,7 @@ chrome.action?.setBadgeTextColor?.({ color: '#ffffff' });
 const QUIET_CAPTIONS_MS = 30000;
 const RECORD_PROMPT_QUIET_MS = 60000;
 const CAPTIONS_OFF_GRACE_MS = 15000;
+const RECORD_REMINDER_MS = 5000;
 let transcriptSource = 'caption';
 
 function captionProblem() {
@@ -36,14 +37,21 @@ function captionsFailing() {
   return !!quietSince && Date.now() - quietSince >= RECORD_PROMPT_QUIET_MS;
 }
 
-async function recordPromptText() {
-  if (!captionsFailing()) return '';
+function recordingForgotten() {
+  if (!chrome.tabCapture || !active.inCall || transcriptSource === 'caption' || recBusy()) return false;
+  return Date.now() - active.joinedAt >= RECORD_REMINDER_MS;
+}
+
+async function recordPrompts() {
+  const reasons = [
+    ...(recordingForgotten() ? [{ kind: 'record', reason: 'You are in a call but not recording.' }] : []),
+    ...(captionsFailing() ? [{ kind: 'captions', reason: 'Captions stopped, so this part of the meeting may not be saved.' }] : []),
+  ];
+  if (!reasons.length) return [];
   const commands = await chrome.commands?.getAll?.().catch(() => []) ?? [];
   const key = commands.find((command) => command.name === 'rec-start')?.shortcut;
   const t = globalThis.MeetI18n?.t ?? String;
-  return t(key
-    ? `Captions stopped, so this part of the meeting may not be saved. Press ${key} to record audio.`
-    : 'Captions stopped, so this part of the meeting may not be saved. Press Record on the extension icon.');
+  return reasons.map(({ kind, reason }) => ({ kind, text: t(key ? `${reason} Press ${key} to record audio.` : `${reason} Press Record on the extension icon.`) }));
 }
 
 function updateBadge() {
@@ -99,7 +107,7 @@ function recError(error) {
 
 function broadcastRec(extra = {}) {
   notifyPanel({ type: 'rec-state', recording: rec.recording, transcribing: rec.transcribing,
-    saving: rec.transcribing && rec.autoStt === false, ...extra });
+    saving: rec.transcribing && rec.autoStt === false, paused: !!rec.paused, ...extra });
 }
 
 async function hasOffscreen() {
@@ -124,7 +132,7 @@ const recRestored = (async () => {
   if (!res?.ok || (!res.recording && !res.transcribing)) return;
   if (recBusy()) return;
   rec = { recording: res.recording, transcribing: res.transcribing, meetingId: res.meetingId,
-    tabId: res.tabId ?? null, autoStt: res.autoStt };
+    tabId: res.tabId ?? null, autoStt: res.autoStt, ...(res.paused ? { paused: true } : {}) };
   updateBadge();
   broadcastRec();
 })().catch((e) => console.warn('[rec] could not restore state', e.message));
@@ -261,7 +269,7 @@ async function sttConfig() {
   const stt = globalThis.MeetStt.sttEndpoint(settings);
   return {
     sttMode: stt.mode, baseUrl: stt.baseUrl, apiKey: stt.apiKey,
-    sttModel: stt.model, sttLanguage: stt.language,
+    sttModel: stt.model, sttLanguage: stt.language, sttVocabulary: stt.vocabulary,
     mic: !!settings.mic,
     transcriptSource: settings.transcriptSource ?? 'caption',
     keepRecordings: settings.keepRecordings,
@@ -351,6 +359,14 @@ async function regenerateTranscript(meetingId, recId) {
   }
 }
 
+async function setRecordingPaused(on) {
+  await recRestored;
+  if (!rec.recording) return;
+  const res = await chrome.runtime.sendMessage({ target: 'offscreen', op: 'pause', on }).catch(() => null);
+  rec.paused = !!res?.paused;
+  broadcastRec();
+}
+
 async function stopRecording() {
   await recRestored;
   if (startPromise) await startPromise.catch(() => {});
@@ -391,6 +407,7 @@ async function archiveIfStale(meetingId, data) {
   });
   await chrome.storage.local.remove(key);
   delete data[key];
+  data.carriedNames = globalThis.MeetMerge.carriedNames(old.speakerNames);
   await globalThis.MeetAudioStore.retagAudioMeta(meetingId, archiveId, lastActivity).catch(() => {});
   notifyPanel({ type: 'meeting-updated', id: archiveId, movedFrom: meetingId });
 }
@@ -399,7 +416,7 @@ async function ensureMeeting({ meetingId, title, startedAt }) {
   const key = meetingKey(meetingId);
   const data = await chrome.storage.local.get([key, 'meetings']);
   await archiveIfStale(meetingId, data);
-  const meeting = data[key] ?? newMeeting(meetingId, title || meetingId, startedAt);
+  const meeting = data[key] ?? newMeeting(meetingId, title || meetingId, startedAt, data.carriedNames);
   if (!(meeting.startedAt <= startedAt)) meeting.startedAt = startedAt;
   meeting.source = 'audio';
   meeting.endedAt = null;
@@ -438,10 +455,12 @@ async function saveAudioTranscript({ meetingId, segments, baseTime, replace, leg
 }
 
 async function saveSegments({ meetingId, title, segs }) {
+  await recRestored;
+  if (rec.paused && rec.meetingId === meetingId) return;
   const key = meetingKey(meetingId);
   const data = await chrome.storage.local.get([key, 'meetings']);
   await archiveIfStale(meetingId, data);
-  const meeting = data[key] ?? newMeeting(meetingId, title || meetingId, Date.now());
+  const meeting = data[key] ?? newMeeting(meetingId, title || meetingId, Date.now(), data.carriedNames);
   if (title && !meeting.renamed) meeting.title = title;
   meeting.endedAt = null;
   const names = meeting.speakerNames ?? {};
@@ -598,7 +617,7 @@ async function addMark() {
   const key = meetingKey(id);
   const data = await chrome.storage.local.get([key, 'meetings']);
   await archiveIfStale(id, data);
-  const meeting = data[key] ?? newMeeting(id, id, Date.now());
+  const meeting = data[key] ?? newMeeting(id, id, Date.now(), data.carriedNames);
   meeting.marks = [...(meeting.marks ?? []), Date.now()];
   await storeMeeting(id, meeting, data);
   notifyPanel({ type: 'meeting-updated', id });
@@ -692,12 +711,13 @@ chrome.runtime.onConnect.addListener((port) => {
       const canClaim = !active.inCall || !active.id || (msg.inCall && active.id === msg.meetingId);
       if (!canClaim) return;
       const joinedNow = msg.inCall && !active.inCall;
+      if (joinedNow) active.joinedAt = Date.now();
       if (joinedNow || (msg.captionsOn && !active.captionsOn)) active.captionsOnAt = Date.now();
       if (joinedNow || (!msg.captionsOn && (active.captionsOn || !active.captionsOffAt))) active.captionsOffAt = Date.now();
       active = { ...active, id: msg.meetingId, inCall: msg.inCall, captionsOn: msg.captionsOn };
       updateBadge();
       notifyPanel({ type: 'status', ...active });
-      recRestored.then(recordPromptText).then((text) => port.postMessage({ type: 'record-prompt', text })).catch(() => {});
+      recRestored.then(recordPrompts).then((prompts) => port.postMessage({ type: 'record-prompt', prompts })).catch(() => {});
     }
   });
   port.onDisconnect.addListener(finish);
@@ -812,6 +832,7 @@ const HANDLERS = {
   'ask-meeting': (msg, sender, sendResponse) => reply(askMeeting(msg.id, msg.question), sendResponse),
   'delete-old-meetings': (msg, sender, sendResponse) => reply(deleteOldMeetings(), sendResponse),
   'stop-recording': () => { stopRecording(); },
+  'set-paused': (msg, sender, sendResponse) => reply(setRecordingPaused(!!msg.on), sendResponse),
   'start-active-tab-recording': (msg) => {
     chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
       if (!tab) return recError('Could not read the active tab.');
