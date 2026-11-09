@@ -1,6 +1,8 @@
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } = require('node:fs');
+const {
+  chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync,
+} = require('node:fs');
 const { tmpdir } = require('node:os');
 const { setTimeout: sleep } = require('node:timers/promises');
 const { join } = require('node:path');
@@ -30,18 +32,43 @@ const MODEL = {
 };
 const SHERPA = 'https://github.com/k2-fsa/sherpa-onnx/releases/download';
 const SPEAKER_PROGRAM = {
-  win32: { url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-win-x64-shared-MT-Release.tar.bz2`, sha256: 'dc703575a68594435f53dec93df775ff4913af851a196c0537163f21d8d2364e',
-    files: ['bin/sherpa-onnx-offline-speaker-diarization.exe', 'bin/onnxruntime.dll', 'bin/onnxruntime_providers_shared.dll'] },
-  'darwin-arm64': { url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-osx-arm64-shared.tar.bz2`, sha256: '5e874d3c9b3d6b8c71f7c09e3a9fb9ae846c3009129d302b398d1f7aedb69f84',
-    files: ['bin/sherpa-onnx-offline-speaker-diarization', 'lib/libonnxruntime.dylib'] },
-  'darwin-x64': { url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-osx-x64-shared.tar.bz2`, sha256: '100315fbb174de2d7fec92b67d28c4128499daf3a6f47b4da6350252680d178f',
-    files: ['bin/sherpa-onnx-offline-speaker-diarization', 'lib/libonnxruntime.dylib'] },
+  win32: {
+    url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-win-x64-shared-MT-Release.tar.bz2`,
+    sha256: 'dc703575a68594435f53dec93df775ff4913af851a196c0537163f21d8d2364e',
+    files: [
+      'bin/sherpa-onnx-offline-speaker-diarization.exe',
+      'bin/onnxruntime.dll',
+      'bin/onnxruntime_providers_shared.dll',
+    ],
+  },
+  'darwin-arm64': {
+    url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-osx-arm64-shared.tar.bz2`,
+    sha256: '5e874d3c9b3d6b8c71f7c09e3a9fb9ae846c3009129d302b398d1f7aedb69f84',
+    files: ['bin/sherpa-onnx-offline-speaker-diarization', 'lib/libonnxruntime.dylib'],
+  },
+  'darwin-x64': {
+    url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-osx-x64-shared.tar.bz2`,
+    sha256: '100315fbb174de2d7fec92b67d28c4128499daf3a6f47b4da6350252680d178f',
+    files: ['bin/sherpa-onnx-offline-speaker-diarization', 'lib/libonnxruntime.dylib'],
+  },
 };
-const SEGMENTATION = { url: `${SHERPA}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2`, sha256: '24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488' };
-const EMBEDDING = { url: `${SHERPA}/speaker-recongition-models/nemo_en_titanet_small.onnx`, sha256: 'ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e' };
+const SEGMENTATION = {
+  url: `${SHERPA}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2`,
+  sha256: '24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488',
+};
+const EMBEDDING = {
+  url: `${SHERPA}/speaker-recongition-models/nemo_en_titanet_small.onnx`,
+  sha256: 'ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e',
+};
 const SPEAKER_LICENSES = {
-  'LICENSE-sherpa-onnx-and-titanet.txt': { url: 'https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v2.0.1/LICENSE', sha256: 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30' },
-  'LICENSE-onnxruntime.txt': { url: 'https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/LICENSE', sha256: '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c' },
+  'LICENSE-sherpa-onnx-and-titanet.txt': {
+    url: 'https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v2.0.1/LICENSE',
+    sha256: 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30',
+  },
+  'LICENSE-onnxruntime.txt': {
+    url: 'https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/LICENSE',
+    sha256: '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c',
+  },
 };
 const PROGRAM_FILES = [
   'whisper-server.exe', 'whisper.dll', 'ggml.dll', 'ggml-base.dll',
@@ -49,13 +76,18 @@ const PROGRAM_FILES = [
   'ggml-cpu-icelake.dll', 'ggml-cpu-sandybridge.dll', 'ggml-cpu-skylakex.dll', 'ggml-cpu-sse42.dll', 'ggml-cpu-x64.dll',
 ];
 
+// Returns the SHA-256 hash of some bytes as hex.
 const digestOf = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+// Downloads a URL, retrying after a wait when the network or server fails.
 async function fetchBytes(url, tries, waitMs) {
   for (let left = tries; ; left--) {
     try {
       const res = await fetch(url);
-      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { retry: res.status === 429 || res.status >= 500 });
+      if (!res.ok) {
+        const retry = res.status === 429 || res.status >= 500;
+        throw Object.assign(new Error(`HTTP ${res.status}`), { retry });
+      }
       return Buffer.from(await res.arrayBuffer());
     } catch (e) {
       if (left <= 1 || e.retry === false) throw new Error(`${url}: ${e.message}`);
@@ -65,6 +97,7 @@ async function fetchBytes(url, tries, waitMs) {
   }
 }
 
+// Downloads a file and checks it against its expected SHA-256 hash.
 async function download({ url, sha256 }, { tries = DOWNLOAD_TRIES, waitMs = RETRY_WAIT_MS } = {}) {
   const bytes = await fetchBytes(url, tries, waitMs);
   const digest = digestOf(bytes);
@@ -72,22 +105,26 @@ async function download({ url, sha256 }, { tries = DOWNLOAD_TRIES, waitMs = RETR
   return bytes;
 }
 
+// Downloads the prebuilt Windows whisper server and unpacks only the files the app needs.
 async function fetchProgram() {
   if (PROGRAM_FILES.every((file) => existsSync(join(OUTPUT, file)))) return;
   const temp = mkdtempSync(join(tmpdir(), 'transcripables-engine-'));
   try {
     const zip = join(temp, 'engine.zip');
     writeFileSync(zip, await download(ZIP));
-    execFileSync(WINDOWS_TAR, ['-xf', zip, '-C', OUTPUT, '--strip-components=1', ...PROGRAM_FILES.map((file) => `Release/${file}`)]);
+    const wanted = PROGRAM_FILES.map((file) => `Release/${file}`);
+    execFileSync(WINDOWS_TAR, ['-xf', zip, '-C', OUTPUT, '--strip-components=1', ...wanted]);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
 }
 
+// Builds the whisper server from source on macOS.
 function buildProgramForMac() {
   const server = join(OUTPUT, 'whisper-server');
   if (existsSync(server)) return;
   const temp = mkdtempSync(join(tmpdir(), 'transcripables-engine-'));
+  // Runs a command inside the temporary source folder, showing its output.
   const inSource = (command, ...args) => execFileSync(command, args, { cwd: temp, stdio: 'inherit' });
   try {
     inSource('git', 'init', '-q');
@@ -102,50 +139,63 @@ function buildProgramForMac() {
   }
 }
 
+// Downloads the standard speech model unless a matching copy is already there.
 async function fetchModel() {
   const path = join(OUTPUT, MODEL.file);
   if (existsSync(path) && digestOf(readFileSync(path)) === MODEL.sha256) return;
   writeFileSync(path, await download(MODEL));
 }
 
+// Unpacks the named files from a .tar.bz2 archive into a folder, dropping the archive's top folder.
 function untar(bytes, into, names) {
   const temp = mkdtempSync(join(tmpdir(), 'transcripables-speakers-'));
   try {
     const archive = join(temp, 'archive.tar.bz2');
     writeFileSync(archive, bytes);
     mkdirSync(into, { recursive: true });
-    execFileSync(process.platform === 'win32' ? WINDOWS_TAR : 'tar', ['-xjf', archive, '-C', into, '--strip-components=1', ...names]);
+    const tar = process.platform === 'win32' ? WINDOWS_TAR : 'tar';
+    execFileSync(tar, ['-xjf', archive, '-C', into, '--strip-components=1', ...names]);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
 }
 
+// Downloads the speaker-diarization program, its two models and their licenses.
 async function fetchSpeakers() {
   const dir = join(OUTPUT, 'speakers');
-  const program = SPEAKER_PROGRAM[process.platform === 'win32' ? 'win32' : `${process.platform}-${process.arch}`];
+  const platformKey = process.platform === 'win32' ? 'win32' : `${process.platform}-${process.arch}`;
+  const program = SPEAKER_PROGRAM[platformKey];
   if (!program) return;
-  const top = program.url.split('/').pop().replace('.tar.bz2', '');
-  if (!existsSync(join(dir, program.files[0]))) untar(await download(program), dir, program.files.map((file) => `${top}/${file}`));
+  const programTop = program.url.split('/').pop().replace('.tar.bz2', '');
+  if (!existsSync(join(dir, program.files[0]))) {
+    untar(await download(program), dir, program.files.map((file) => `${programTop}/${file}`));
+  }
   if (!existsSync(join(dir, 'segmentation.onnx'))) {
-    const top = 'sherpa-onnx-pyannote-segmentation-3-0';
-    untar(await download(SEGMENTATION), dir, [`${top}/model.onnx`, `${top}/LICENSE`]);
+    const segmentationTop = 'sherpa-onnx-pyannote-segmentation-3-0';
+    untar(await download(SEGMENTATION), dir, [`${segmentationTop}/model.onnx`, `${segmentationTop}/LICENSE`]);
     renameSync(join(dir, 'model.onnx'), join(dir, 'segmentation.onnx'));
     renameSync(join(dir, 'LICENSE'), join(dir, 'LICENSE-pyannote-segmentation.txt'));
   }
   const embedding = join(dir, 'embedding.onnx');
-  if (!existsSync(embedding) || digestOf(readFileSync(embedding)) !== EMBEDDING.sha256) writeFileSync(embedding, await download(EMBEDDING));
+  if (!existsSync(embedding) || digestOf(readFileSync(embedding)) !== EMBEDDING.sha256) {
+    writeFileSync(embedding, await download(EMBEDDING));
+  }
   for (const [file, source] of Object.entries(SPEAKER_LICENSES)) {
     if (!existsSync(join(dir, file))) writeFileSync(join(dir, file), await download(source));
   }
 }
 
+// Copies the Microsoft Visual C++ runtime files from this computer next to the engine.
 function copyRuntime() {
   for (const file of RUNTIME_FILES) {
-    if (!existsSync(join(SYSTEM_DIR, file))) throw new Error(`${file} is missing on this computer. Install the Microsoft Visual C++ Redistributable, then build again.`);
+    if (!existsSync(join(SYSTEM_DIR, file))) {
+      throw new Error(`${file} is missing on this computer. Install the Microsoft Visual C++ Redistributable, then build again.`);
+    }
     copyFileSync(join(SYSTEM_DIR, file), join(OUTPUT, file));
   }
 }
 
+// Gets everything the built-in speech engine needs into the output folder.
 async function main() {
   mkdirSync(OUTPUT, { recursive: true });
   if (process.platform === 'darwin') {

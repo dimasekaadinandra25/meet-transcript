@@ -4,6 +4,7 @@ const SCHEME = 'transcripables';
 const APP_HOST = 'app';
 const ROOT_OF = { renderer: 'app', lib: 'shared', panel: 'shared', icons: 'shared' };
 
+// Maps an app URL path to a file inside one of the allowed folders, or returns null if it is not allowed.
 function resolveAsset(urlPath, roots) {
   let decoded;
   try {
@@ -13,11 +14,12 @@ function resolveAsset(urlPath, roots) {
   }
   if (decoded.includes('\\') || decoded.includes('\0')) return null;
   const parts = decoded.replace(/^\//, '').split('/');
-  if (parts.length < 2 || parts.some((p) => !p || p === '.' || p === '..')) return null;
+  if (parts.length < 2 || parts.some((part) => !part || part === '.' || part === '..')) return null;
   const root = Object.hasOwn(ROOT_OF, parts[0]) ? roots[ROOT_OF[parts[0]]] : null;
   return root ? join(root, ...parts) : null;
 }
 
+// Tells whether a URL belongs to the app's own pages.
 function isAppUrl(url) {
   try {
     const parsed = new URL(url);
