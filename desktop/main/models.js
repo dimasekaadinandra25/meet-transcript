@@ -55,11 +55,13 @@ function createModels({ dir, onProgress, catalog = MODELS, request = fetch, stal
         yield part;
       }
     }
+    const out = createWriteStream(temp);
     try {
-      await pipeline(res.body ?? [], counted, createWriteStream(temp));
+      await pipeline(res.body ?? [], counted, out);
       if (hash.digest('hex') !== sha256) throw new Error('The downloaded model failed its checksum, so it was not used.');
       renameSync(temp, fileOf(id));
     } catch (e) {
+      if (!out.closed) await new Promise((resolve) => out.once('close', () => resolve(null)));
       rmSync(temp, { recursive: true, force: true });
       throw e;
     }
