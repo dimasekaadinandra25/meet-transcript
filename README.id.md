@@ -132,7 +132,7 @@ Untuk membangun installer sendiri: `npm --prefix desktop install`, lalu `npm --p
 * Di Google Meet, nama yang Anda berikan terbawa ke sesi berikutnya di ruang yang sama. Huruf pembicara tidak, karena lain kali bisa berarti orang lain. Dalam mode rekam, halaman Meet mengingatkan Anda bila belum menekan Record setelah beberapa detik.
 * Menutup jendela membuat aplikasi tetap berjalan di system tray, jadi pintasan tetap berfungsi. Matikan di Settings, dan aplikasi lalu tertutup sepenuhnya kecuali sedang merekam atau mentranskrip. Pakai **Quit** di menu tray untuk keluar. **Start hidden in the tray** di Settings menjalankannya saat Anda masuk ke komputer.
 * Bila aplikasi crash, file rekaman bisa kehilangan sekitar 1 menit terakhir, dan transkrip bisa kehilangan sampai 2 menit terakhir. Yang sudah tersimpan masuk ke `Documents/Transcripables` saat aplikasi dibuka lagi. Bila hanya jendelanya yang crash, jendela dimulai ulang sendiri dan memberi tahu Anda.
-* API key dienkripsi di komputer. **Export backup** tidak menyertakannya kecuali Anda mencentang **Include API keys**, yang menyimpannya dalam teks polos. Memulihkan cadangan tanpa key mempertahankan key yang Anda punya sekarang hanya bila cadangan memakai alamat server yang sama, jadi cadangan tidak pernah bisa mengirim key Anda ke tempat lain.
+* API key dienkripsi di komputer. **Export backup** tidak menyertakannya kecuali Anda mencentang **Include API keys**. Key lalu dikunci dengan kata sandi cadangan pilihan Anda (AES-256, kuncinya dibuat dari kata sandi dengan PBKDF2), dan mengimpor cadangan itu meminta kata sandi yang sama. Memulihkan cadangan tanpa key mempertahankan key yang Anda punya sekarang hanya bila cadangan memakai alamat server yang sama, jadi cadangan tidak pernah bisa mengirim key Anda ke tempat lain.
 * Template MoM bawaan meminta LLM menulis dalam bahasa utama meeting, termasuk judul bagiannya. Template yang sudah Anda ubah tetap seperti yang Anda tulis.
 * Server LLM lokal seperti Ollama dan LM Studio tidak memerlukan API key. Key hanya wajib untuk alamat default OpenAI.
 * **Ask** pada meeting mengirim pertanyaan dan transkrip ke layanan AI Anda. Jawaban disimpan bersama meeting, dan tidak ikut diekspor.
@@ -208,7 +208,7 @@ Ekstensi ini dirancang dengan pendekatan *privacy-first*:
 * **MoM otomatis:** Opsi di Settings membuat MoM saat transkrip siap. Bawaannya mati karena transkrip dikirim ke LLM tanpa bertanya.
 * **Hapus meeting:** Buka rapat di **History** lalu pilih **Delete** untuk menghapus transkrip, MoM, dan rekaman tersimpannya secara permanen. Rapat yang masih berjalan tidak bisa dihapus.
 * **Copy Prompt / Paste into Gemini / Paste into ChatGPT:** ketiganya menyalin **seluruh transkrip** ke clipboard, dan tombol Gemini/ChatGPT menempelkannya ke `gemini.google.com` / `chatgpt.com` tanpa mengirimnya. Setelah Anda menekan kirim, seluruh isi rapat masuk ke akun Google/OpenAI Anda. Jangan gunakan untuk rapat yang isinya tidak boleh keluar.
-* **Fail Backup:** ZIP hasil **Export backup** memuat seluruh transkrip, dan **API key dalam teks polos hanya bila Anda mencentang Include API keys**. Simpan failnya di tempat yang aman dan jangan dibagikan.
+* **Fail Backup:** ZIP hasil **Export backup** memuat seluruh transkrip, dan API key hanya bila Anda mencentang Include API keys, terkunci dengan kata sandi cadangan Anda. Simpan failnya di tempat yang aman dan jangan dibagikan.
 
 ---
 

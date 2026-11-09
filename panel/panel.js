@@ -1302,7 +1302,7 @@ async function renderSettings(epoch) {
     exportBtn.disabled = true;
     setBnote('muted', 'Building zip…');
     try {
-      const zip = await globalThis.MeetBackup.exportBackup({ includeKeys: keysBox.checked });
+      const zip = await globalThis.MeetBackup.exportBackup({ includeKeys: keysBox.checked, password: passwordBox.value });
       download(`transcripables-backup-${new Date().toISOString().slice(0, 10)}.zip`, zip);
       setBnote('ok', `✓ Backup ready (${zip.size < 1048576
         ? `${Math.max(1, Math.round(zip.size / 1024))} KB`
@@ -1326,7 +1326,7 @@ async function renderSettings(epoch) {
     importBtn.disabled = true;
     setBnote('muted', 'Importing…');
     try {
-      const r = await globalThis.MeetBackup.importBackup(file);
+      const r = await globalThis.MeetBackup.importBackup(file, { password: passwordBox.value });
       await loadSettings();
       audioMetaKey = null;
       alert(t(r.audioError
@@ -1341,8 +1341,12 @@ async function renderSettings(epoch) {
   });
   const keysBox = mkEl('input', { type: 'checkbox' });
   const keysLabel = el('label');
-  keysLabel.append(keysBox, 'Include API keys in the backup (not encrypted, so keep the file safe)');
-  view.append(keysLabel);
+  keysLabel.append(keysBox, 'Include API keys in the backup, locked with a password');
+  const passwordBox = mkEl('input', { type: 'password', autocomplete: 'new-password', placeholder: t('Backup password') });
+  passwordBox.setAttribute('aria-label', t('Backup password'));
+  const passwordRow = el('label', 'muted', 'Backup password, needed to export with API keys and to import a backup that has them');
+  passwordRow.append(passwordBox);
+  view.append(keysLabel, passwordRow);
   const backupRow = el('div', 'actions');
   backupRow.append(exportBtn, importBtn, importInput, bnote);
   view.append(backupRow);

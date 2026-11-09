@@ -148,8 +148,9 @@ test('a backup leaves API keys out unless asked', async () => {
   fakeChrome({ settings: { apiKey: 'rahasia', sttApiKey: 'rahasia2', model: 'm' } });
   const plain = await backupOf(await exportBackup());
   assert.deepEqual(plain.storage.settings, { model: 'm' });
-  const full = await backupOf(await exportBackup({ includeKeys: true }));
-  assert.equal(full.storage.settings.apiKey, 'rahasia');
+  const full = await backupOf(await exportBackup({ includeKeys: true, password: 'pw' }));
+  assert.deepEqual(full.storage.settings, { model: 'm' });
+  assert.ok(full.lockedKeys.data);
 });
 
 test('restoring a backup without keys keeps the keys you have now', async () => {
@@ -181,9 +182,9 @@ test('each key follows its own server when a backup is restored', async () => {
 
 test('restoring a backup with keys uses the keys in the backup', async () => {
   fakeChrome({ settings: { apiKey: 'lama', model: 'm' } });
-  const zip = await exportBackup({ includeKeys: true });
+  const zip = await exportBackup({ includeKeys: true, password: 'pw' });
   const stored = fakeChrome({ settings: { apiKey: 'sekarang' } });
-  await importBackup(zip);
+  await importBackup(zip, { password: 'pw' });
   assert.equal(stored().settings.apiKey, 'lama');
 });
 

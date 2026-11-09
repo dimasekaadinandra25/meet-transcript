@@ -127,7 +127,7 @@ To build the installer yourself: `npm --prefix desktop install`, then `npm --pre
 ### Limits
 
 * If the app crashes, the recording file can lose about the last minute, and the transcript can lose up to the last 2 minutes. What was saved goes to `Documents/Transcripables` the next time the app opens. If only the window crashes, it restarts by itself and tells you.
-* API keys are encrypted on your computer. **Export backup** leaves them out unless you tick **Include API keys**, which stores them in plain text. Restoring a backup without keys keeps a key you have now only if the backup uses the same server address, so a backup can never send your key somewhere else.
+* API keys are encrypted on your computer. **Export backup** leaves them out unless you tick **Include API keys**. Then they are locked with a backup password you choose (AES-256, with the key made from the password by PBKDF2), and importing that backup asks for the same password. Restoring a backup without keys keeps a key you have now only if the backup uses the same server address, so a backup can never send your key somewhere else.
 * The default MoM template asks the LLM to write in the main language of the meeting, including headings. A template you edited stays as you wrote it.
 * Local LLM servers such as Ollama and LM Studio need no API key. The key is only required for the default OpenAI address.
 * **Ask** on a meeting sends your question and the transcript to your AI service. Answers are saved with the meeting, can be deleted one at a time, are found by History search, and stay out of exports. An answer or MoM says so if the transcript changed after it was made.
@@ -210,7 +210,7 @@ This extension is designed to be *privacy-first*:
 * **Automatic MoM:** A Settings option makes MoM when a transcript is ready. It is off by default because it sends the transcript to your LLM without asking.
 * **Delete a meeting:** Open it in **History** and choose **Delete** to permanently remove its transcript, MoM, and stored recordings. A meeting that is still running cannot be deleted.
 * **Copy Prompt / Paste into Gemini / Paste into ChatGPT:** All three copy the **entire transcript** to the clipboard, and the Gemini/ChatGPT buttons paste it into `gemini.google.com` / `chatgpt.com` without sending it. Once you press send, the whole meeting's content goes into your Google/OpenAI account. Do not use them for meetings whose content must not leave.
-* **Backup files:** The ZIP created by **Export backup** contains all transcripts, and **your API key in plain text only if you tick Include API keys**. Store the file safely and do not share it.
+* **Backup files:** The ZIP created by **Export backup** contains all transcripts, and your API keys only if you tick Include API keys, locked with your backup password. Store the file safely and do not share it.
 
 ---
 

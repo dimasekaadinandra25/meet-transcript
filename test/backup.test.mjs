@@ -175,3 +175,36 @@ test('a speech key stays when a blank speech address still means the same server
   const current = { baseUrl: 'https://api.openai.com/v1', sttBaseUrl: '', sttApiKey: 'SECRET' };
   assert.equal(globalThis.MeetBackup.keepCurrentKeys(backup, current).settings.sttApiKey, 'SECRET');
 });
+
+function memoryStorage(initial) {
+  let data = { ...initial };
+  return {
+    get: async () => ({ ...data }),
+    clear: async () => { data = {}; },
+    set: async (v) => { data = { ...data, ...v }; },
+    now: () => data,
+  };
+}
+
+test('API keys in a backup are locked with the password, and come back with it', async () => {
+  const settings = { baseUrl: 'https://ai.example', apiKey: 'sk-secret', sttApiKey: 'stt-secret', notionToken: 'ntn-secret', model: 'm' };
+  const local = memoryStorage({ meetings: [], settings });
+  globalThis.chrome = { storage: { local } };
+  globalThis.MeetAudioStore = { importAudio: async () => {} };
+  const zip = await exportBackup({ includeKeys: true, password: 'correct horse' });
+  const text = await (await readZip(zip))[0].blob.text();
+  for (const secret of ['sk-secret', 'stt-secret', 'ntn-secret']) assert.ok(!text.includes(secret), secret);
+  assert.equal(JSON.parse(text).storage.settings.model, 'm');
+  await local.clear();
+  await assert.rejects(importBackup(zip), /password/i);
+  await assert.rejects(importBackup(zip, { password: 'wrong' }), /password/i);
+  assert.deepEqual(local.now(), {});
+  await importBackup(zip, { password: 'correct horse' });
+  assert.equal(local.now().settings.apiKey, 'sk-secret');
+  assert.equal(local.now().settings.notionToken, 'ntn-secret');
+});
+
+test('a backup with API keys needs a password', async () => {
+  globalThis.chrome = { storage: { local: memoryStorage({ settings: { apiKey: 'k' } }) } };
+  await assert.rejects(exportBackup({ includeKeys: true }), /password/i);
+});
