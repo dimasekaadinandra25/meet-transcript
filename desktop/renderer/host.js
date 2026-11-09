@@ -119,6 +119,7 @@
   function consentNotice() {
     const box = el('div', 'info');
     box.append(el('div', null, 'Before recording, make sure everyone in the meeting agrees. Getting their permission is your responsibility.'));
+    box.append(el('div', null, 'A recording captures the sound from your computer and, if turned on, your microphone. It is kept on this computer, and its audio goes only to the speech-to-text service you choose. Your computer may ask you to allow the microphone or screen next.'));
     mkBtn('Got it', async () => {
       await shim.storage.local.set({ consentShown: true });
       consentShown = true;
