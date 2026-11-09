@@ -73,7 +73,7 @@ test('open-circle status lines are translated', () => {
 });
 
 test('field names have no leftovers from the rename', () => {
-  for (const file of ['panel/panel.js', 'lib/i18n.js', 'README.en.md', 'README.md']) {
+  for (const file of ['panel/panel.js', 'lib/i18n.js', 'README.md', 'README.id.md']) {
     assert.ok(!readFileSync(file, 'utf8').includes('enginel'), file);
   }
 });
