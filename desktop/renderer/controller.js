@@ -159,15 +159,38 @@
           }
         }
       }
-      if (changed) await saveLive(session, system ?? mic);
+      if (changed) {
+        await saveLive(session, system ?? mic);
+        if (system) liveSpeakers(session, system).catch((e) => console.error(e));
+      }
       if (session.paused && !session.stopped) {
         session.paused = false;
         broadcast({ error: null });
       }
     }
 
+    async function liveSpeakers(session, loaded) {
+      const track = finishedTrack(session.done.system);
+      if (session.diarizing || !speakers || !unlabeledTrack(track) || (await readSettings()).localSpeakers === false || !await speakers.available()) return;
+      const byIndex = new Map(loaded.indices.map((index, i) => [index, loaded.blobs[i]]));
+      const blobs = track.indices.map((index) => byIndex.get(index));
+      if (blobs.some((b) => !b)) return;
+      session.diarizing = true;
+      try {
+        const found = await speakers.find(blobs);
+        session.found = { starts: new Map(track.indices.map((index, i) => [index, found.starts[i]])), turns: found.turns };
+        if (!session.stopped) await saveLive(session, loaded);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        session.diarizing = false;
+      }
+    }
+
     async function saveLive(session, source) {
-      const segments = tracks.mergeTracks({ system: finishedTrack(session.done.system), mic: finishedTrack(session.done.mic),
+      const done = finishedTrack(session.done.system);
+      const system = session.found ? tracks.labelSpeakers(done, { starts: done.indices.map((index) => session.found.starts.get(index)), turns: session.found.turns }) : done;
+      const segments = tracks.mergeTracks({ system, mic: finishedTrack(session.done.mic),
         chunkMs: source.chunkMs, baseTime: source.baseTime });
       await updateMeeting(session.meetingId, (meeting) => {
         merge.replaceMeetingAudio(meeting, segments, { baseTime: source.baseTime });
@@ -180,9 +203,10 @@
       session.run = session.run.then(() => catchUpLive(session)).catch((e) => console.error(e));
     }
 
+    const unlabeledTrack = (track) => track.results.some((r) => r?.segments?.length) && !track.results.some((r) => r?.segments?.some((s) => s.speaker));
+
     async function nameSpeakers(blobs, track) {
-      const unlabeled = track.results.some((r) => r?.segments?.length) && !track.results.some((r) => r?.segments?.some((s) => s.speaker));
-      if (!speakers || !blobs?.length || !unlabeled || (await readSettings()).localSpeakers === false || !await speakers.available()) return { track };
+      if (!speakers || !blobs?.length || !unlabeledTrack(track) || (await readSettings()).localSpeakers === false || !await speakers.available()) return { track };
       broadcast({ speakers: true });
       try {
         return { track: tracks.labelSpeakers(track, await speakers.find(blobs)) };

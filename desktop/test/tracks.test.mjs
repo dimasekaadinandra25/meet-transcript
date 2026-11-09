@@ -104,3 +104,8 @@ test('a line no voice overlaps stays unlabeled, and failed parts are skipped', (
   assert.deepEqual(named.results[1], { error: 'x' });
   assert.equal(named.results[2].segments[0].speaker, undefined);
 });
+
+test('parts the last speaker pass did not cover stay unlabeled', () => {
+  const named = labelSpeakers(twoChunks(), { starts: [0, undefined], turns: [{ start: 0, end: 2.5, speaker: 0 }, { start: 2.8, end: 6, speaker: 1 }] });
+  assert.deepEqual(named.results.flatMap((r) => r.segments.map((s) => s.speaker)), ['1', '2', undefined]);
+});

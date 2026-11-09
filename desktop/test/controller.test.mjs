@@ -1007,3 +1007,27 @@ test('an imported file gets its voices told apart', async () => {
   const imported = Object.values(data).find((m) => m?.title === 'rapat');
   assert.deepEqual(imported.segments.map((s) => [s.text, s.speaker]), [['one', 'Speaker 1'], ['two', 'Speaker 2']]);
 });
+
+test('other voices are told apart during the meeting too', async () => {
+  twoVoices();
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  await settle();
+  assert.deepEqual(speakers.calls, [[blob('system')]]);
+  assert.deepEqual(speakerOf().filter(([, who]) => who !== 'You'), [['satu', 'Speaker 1'], ['dua', 'Speaker 2']]);
+  assert.ok(!recStates().some((m) => m.speakers), 'the live pass showed a busy label');
+  await ctl.handle(STOP);
+  assert.deepEqual(speakerOf().map(([, who]) => who), ['Speaker 1', 'You', 'Speaker 2']);
+});
+
+test('a failed live pass keeps the live transcript and says nothing', async () => {
+  twoVoices();
+  speakers.fail = 'busy';
+  await ctl.handle(START);
+  ctl.chunkSaved();
+  await settle();
+  await settle();
+  assert.deepEqual(speakerOf().map(([, who]) => who), ['Others', 'You', 'Others']);
+  assert.ok(!recStates().some((m) => m.error), 'a live speaker failure was shown');
+});
