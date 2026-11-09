@@ -11,6 +11,21 @@
     ].sort((a, b) => a.t - b.t);
   }
 
+  const overlap = (a, b) => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+
+  function labelSpeakers(track, { starts, turns }) {
+    if (track.results.some((r) => r?.segments?.some((s) => s.speaker))) return track;
+    const numbers = new Map();
+    const results = track.results.map((r, i) => (!r?.segments ? r : { ...r, segments: r.segments.map((s) => {
+      const line = { start: starts[i] + (s.start ?? 0), end: starts[i] + (s.end ?? (s.start ?? 0) + 1) };
+      const best = turns.reduce((top, turn) => (overlap(line, turn) > (top ? overlap(line, top) : 0) ? turn : top), null);
+      if (!best) return s;
+      if (!numbers.has(best.speaker)) numbers.set(best.speaker, String(numbers.size + 1));
+      return { ...s, speaker: numbers.get(best.speaker) };
+    }) }));
+    return numbers.size < 2 ? track : { ...track, results };
+  }
+
   const hasText = (track) => track.results.some((r) => r?.segments?.length);
 
   function replaceBlocker({ system, mic }) {
@@ -26,5 +41,5 @@
     return null;
   }
 
-  globalThis.MeetTracks = { mergeTracks, replaceBlocker };
+  globalThis.MeetTracks = { mergeTracks, replaceBlocker, labelSpeakers };
 })();

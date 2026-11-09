@@ -69,6 +69,15 @@
     splitAudio: (file, seconds) => globalThis.MeetWav.speechParts(file, seconds),
     clipAudio: (blob, from, to) => globalThis.MeetWav.clipDataUrl(blob, from, to),
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
+    speakers: {
+      available: () => desktop.speakers.available(),
+      find: async (blobs) => {
+        const { wav, starts } = await globalThis.MeetWav.joinedWav(blobs);
+        const answer = await desktop.speakers.find(await wav.arrayBuffer());
+        if (!answer.ok) throw new Error(answer.error);
+        return { starts, turns: answer.value };
+      },
+    },
     now: () => Date.now(),
   });
   desktop.capture.use('');
@@ -307,6 +316,9 @@
       loginBox.checked = on;
     }).catch(() => {});
     loginBox.addEventListener('change', () => desktop.setLoginItem(loginBox.checked));
+    const speakersRow = settingToggle('localSpeakers', 'Tell other speakers apart on this computer after each recording (long meetings take a few extra minutes)', settings.localSpeakers !== false);
+    speakersRow.hidden = true;
+    desktop.speakers.available().then((on) => { speakersRow.hidden = !on; }).catch(() => {});
     return [
       engineModelRow(settings),
       el('h3', null, 'Window'),
@@ -317,6 +329,7 @@
       open,
       ...(canPickApp ? [settingToggle('askToRecord', 'Ask to record when another app starts using the microphone', settings.askToRecord !== false)] : []),
       settingToggle('liveTranscript', 'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)', settings.liveTranscript !== false),
+      speakersRow,
       el('h3', null, 'Updates'),
       globalThis.createUpdateRow({ el, mkBtn, check: () => desktop.checkForUpdate(), open: () => desktop.openUpdate() }),
     ];

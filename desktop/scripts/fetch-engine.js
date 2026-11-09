@@ -1,6 +1,6 @@
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
@@ -24,6 +24,21 @@ const MODEL = {
   url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin',
   sha256: '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898',
   file: 'ggml-base-q5_1.bin',
+};
+const SHERPA = 'https://github.com/k2-fsa/sherpa-onnx/releases/download';
+const SPEAKER_PROGRAM = {
+  win32: { url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-win-x64-shared-MT-Release.tar.bz2`, sha256: 'dc703575a68594435f53dec93df775ff4913af851a196c0537163f21d8d2364e',
+    files: ['bin/sherpa-onnx-offline-speaker-diarization.exe', 'bin/onnxruntime.dll', 'bin/onnxruntime_providers_shared.dll'] },
+  'darwin-arm64': { url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-osx-arm64-shared.tar.bz2`, sha256: '5e874d3c9b3d6b8c71f7c09e3a9fb9ae846c3009129d302b398d1f7aedb69f84',
+    files: ['bin/sherpa-onnx-offline-speaker-diarization', 'lib/libonnxruntime.dylib'] },
+  'darwin-x64': { url: `${SHERPA}/v2.0.1/sherpa-onnx-v2.0.1-osx-x64-shared.tar.bz2`, sha256: '100315fbb174de2d7fec92b67d28c4128499daf3a6f47b4da6350252680d178f',
+    files: ['bin/sherpa-onnx-offline-speaker-diarization', 'lib/libonnxruntime.dylib'] },
+};
+const SEGMENTATION = { url: `${SHERPA}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2`, sha256: '24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488' };
+const EMBEDDING = { url: `${SHERPA}/speaker-recongition-models/nemo_en_titanet_small.onnx`, sha256: 'ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e' };
+const SPEAKER_LICENSES = {
+  'LICENSE-sherpa-onnx-and-titanet.txt': { url: 'https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v2.0.1/LICENSE', sha256: 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30' },
+  'LICENSE-onnxruntime.txt': { url: 'https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/LICENSE', sha256: '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c' },
 };
 const PROGRAM_FILES = [
   'whisper-server.exe', 'whisper.dll', 'ggml.dll', 'ggml-base.dll',
@@ -78,6 +93,37 @@ async function fetchModel() {
   writeFileSync(path, await download(MODEL));
 }
 
+function untar(bytes, into, names) {
+  const temp = mkdtempSync(join(tmpdir(), 'transcripables-speakers-'));
+  try {
+    const archive = join(temp, 'archive.tar.bz2');
+    writeFileSync(archive, bytes);
+    mkdirSync(into, { recursive: true });
+    execFileSync(process.platform === 'win32' ? WINDOWS_TAR : 'tar', ['-xjf', archive, '-C', into, '--strip-components=1', ...names]);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+async function fetchSpeakers() {
+  const dir = join(OUTPUT, 'speakers');
+  const program = SPEAKER_PROGRAM[process.platform === 'win32' ? 'win32' : `${process.platform}-${process.arch}`];
+  if (!program) return;
+  const top = program.url.split('/').pop().replace('.tar.bz2', '');
+  if (!existsSync(join(dir, program.files[0]))) untar(await download(program), dir, program.files.map((file) => `${top}/${file}`));
+  if (!existsSync(join(dir, 'segmentation.onnx'))) {
+    const top = 'sherpa-onnx-pyannote-segmentation-3-0';
+    untar(await download(SEGMENTATION), dir, [`${top}/model.onnx`, `${top}/LICENSE`]);
+    renameSync(join(dir, 'model.onnx'), join(dir, 'segmentation.onnx'));
+    renameSync(join(dir, 'LICENSE'), join(dir, 'LICENSE-pyannote-segmentation.txt'));
+  }
+  const embedding = join(dir, 'embedding.onnx');
+  if (!existsSync(embedding) || digestOf(readFileSync(embedding)) !== EMBEDDING.sha256) writeFileSync(embedding, await download(EMBEDDING));
+  for (const [file, source] of Object.entries(SPEAKER_LICENSES)) {
+    if (!existsSync(join(dir, file))) writeFileSync(join(dir, file), await download(source));
+  }
+}
+
 function copyRuntime() {
   for (const file of RUNTIME_FILES) {
     if (!existsSync(join(SYSTEM_DIR, file))) throw new Error(`${file} is missing on this computer. Install the Microsoft Visual C++ Redistributable, then build again.`);
@@ -94,6 +140,7 @@ async function main() {
     copyRuntime();
   }
   await fetchModel();
+  await fetchSpeakers();
   console.log(`Speech engine ready in ${OUTPUT}`);
 }
 

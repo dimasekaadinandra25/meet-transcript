@@ -91,7 +91,7 @@ jobs:
         with:
           path: desktop/.model-cache
           key: engine-models-${{ runner.os }}-${{ hashFiles('desktop/main/models.js') }}
-      - name: Transcribe real speech with the built engine and every model
+      - name: Transcribe real speech and tell voices apart with the built engine
         run: node scripts/test-engine.js "${{ matrix.engine }}"
         env:
           MODEL_CACHE: .model-cache

@@ -53,3 +53,22 @@ test('only very large files need a warning before import', () => {
   assert.equal(isLargeFile(100 * 1048576), false);
   assert.equal(isLargeFile(600 * 1048576), true);
 });
+
+test('joinedWav puts every part in one file and says where each part starts', async () => {
+  const { joinedWav } = globalThis.MeetWav;
+  globalThis.OfflineAudioContext = class {
+    async decodeAudioData(bytes) {
+      const length = new Uint8Array(bytes)[0] * 8000;
+      if (!length) throw new Error('broken');
+      return { numberOfChannels: 1, length, getChannelData: () => new Float32Array(length).fill(0.5) };
+    }
+  };
+  const part = (seconds) => new Blob([Uint8Array.of(seconds * 2)]);
+  const { wav, starts } = await joinedWav([part(1), part(0), part(2)]);
+  assert.deepEqual(starts, [0, 1, 1]);
+  const view = new DataView(await wav.arrayBuffer());
+  assert.equal(view.byteLength, 44 + 3 * 16000 * 2);
+  assert.equal(view.getUint32(40, true), 3 * 16000 * 2);
+  assert.equal(view.getInt16(44, true), 16384);
+  delete globalThis.OfflineAudioContext;
+});

@@ -8,6 +8,7 @@ let recState = { recording: false, transcribing: false, saving: false, done: 0, 
 let progressStart = 0;
 const busyLabel = () => {
   if (recState.saving) return 'Saving recording…';
+  if (recState.speakers) return 'Telling speakers apart…';
   if (!recState.total) return 'Transcribing…';
   const left = progressStart ? M.minutesLeft(recState.done, recState.total, Date.now() - progressStart) : null;
   const count = `Transcribing… ${recState.done}/${recState.total}`;
@@ -99,7 +100,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (msg.total && !msg.done) progressStart = Date.now();
     if (!msg.transcribing) progressStart = 0;
     recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, paused: !!msg.paused, importing: !!msg.importing,
-      done: msg.done ?? 0, total: msg.total ?? 0,
+      done: msg.done ?? 0, total: msg.total ?? 0, speakers: !!msg.speakers,
       error: 'error' in msg ? msg.error : recState.error };
     if (tab === 'live' || (tab === 'history' && viewingId)) render();
   }

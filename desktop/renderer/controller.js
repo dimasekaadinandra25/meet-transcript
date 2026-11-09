@@ -6,7 +6,7 @@
   const IDLE = { recording: false, transcribing: false, meetingId: null, baseTime: null };
 
   function createController(deps) {
-    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, splitAudio, clipAudio, saveFile, now } = deps;
+    const { recorder, audioStore, storage, merge, stt, tracks, openai, notify, openExternal, onState, onWarning, probeStt, startEngine, splitAudio, clipAudio, saveFile, speakers, now } = deps;
     let rec = { ...IDLE };
     let activeId = null;
     let starting = null;
@@ -180,6 +180,17 @@
       session.run = session.run.then(() => catchUpLive(session)).catch((e) => console.error(e));
     }
 
+    async function nameSpeakers(blobs, track) {
+      const unlabeled = track.results.some((r) => r?.segments?.length) && !track.results.some((r) => r?.segments?.some((s) => s.speaker));
+      if (!speakers || !blobs?.length || !unlabeled || (await readSettings()).localSpeakers === false || !await speakers.available()) return { track };
+      broadcast({ speakers: true });
+      try {
+        return { track: tracks.labelSpeakers(track, await speakers.find(blobs)) };
+      } catch (e) {
+        return { track, error: `Speakers could not be told apart (${e.message}).` };
+      }
+    }
+
     async function sendChunks(loaded, skip, endpoint, progress, known, voices) {
       if (!loaded) return { results: [], indices: [] };
       const results = [];
@@ -219,14 +230,15 @@
         const blocked = tracks.replaceBlocker({ system: systemTrack, mic: micTrack });
         if (blocked) throw new Error(blocked);
       }
-      const segments = tracks.mergeTracks({ system: systemTrack, mic: micTrack,
+      const named = await nameSpeakers(system?.blobs, systemTrack);
+      const segments = tracks.mergeTracks({ system: named.track, mic: micTrack,
         chunkMs: source.chunkMs, baseTime: source.baseTime, imported: source.imported });
       await updateMeeting(meetingId, (meeting) => {
         merge.replaceMeetingAudio(meeting, segments, { baseTime: source.baseTime, replace });
       });
       if (!segments.length) return 'Empty transcript. STT returned no text, so check the speech-to-text address and model in Settings.';
       const failures = [...systemTrack.results, ...micTrack.results].filter((r) => r.error);
-      return failures.length ? `${failures.length}/${total} parts failed to transcribe: ${failures[0].error}` : null;
+      return [failures.length ? `${failures.length}/${total} parts failed to transcribe: ${failures[0].error}` : null, named.error].filter(Boolean).join(' ') || null;
     }
 
     async function saveToFolder(meetingId, baseTime) {
@@ -413,13 +425,15 @@
         if (!results.some((r) => r.segments?.length)) {
           throw new Error(failures[0]?.error ?? 'Transcription returned no text. Check the speech-to-text address and model in Settings.');
         }
+        const named = await nameSpeakers(parts, { results, indices: parts.map((_, i) => i) });
+        if (stopIfCancelled()) return { ok: false, cancelled: true };
         const startedAt = await audioStore.freeRecId(file.lastModified - durationMs);
         await addMeeting({ id: meetingId, title: file.name.replace(/\.[^.]*$/, ''), startedAt, endedAt: file.lastModified, keepFrom: now(), mom: null, source: 'audio',
-          segments: merge.replaceAudioSegments([], stt.mergeSttChunks(results, IMPORT_PART_MS, startedAt), { baseTime: startedAt }) });
+          segments: merge.replaceAudioSegments([], stt.mergeSttChunks(named.track.results, IMPORT_PART_MS, startedAt), { baseTime: startedAt }) });
         const notKept = await keepImportedAudio(meetingId, startedAt, parts);
         setActive(meetingId);
         const failed = failures.length ? `${failures.length}/${parts.length} parts failed to transcribe: ${failures[0].error}` : null;
-        finish([failed, notKept].filter(Boolean).join(' ') || null);
+        finish([failed, named.error, notKept].filter(Boolean).join(' ') || null);
         if (!failures.length) autoMom(meetingId).catch((e) => console.error(e));
         return { ok: true };
       } catch (e) {

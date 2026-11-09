@@ -45,6 +45,10 @@ contextBridge.exposeInMainWorld('desktop', {
       ipcRenderer.on('engine:model-progress', (_event, progress) => listener(progress));
     },
   },
+  speakers: {
+    available: () => ipcRenderer.invoke('speakers:available'),
+    find: (bytes) => ipcRenderer.invoke('speakers:find', bytes),
+  },
   net: {
     chat: (args) => ipcRenderer.invoke('net:chat', args),
     test: (args) => ipcRenderer.invoke('net:test', args),

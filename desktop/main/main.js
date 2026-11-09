@@ -8,6 +8,7 @@ const { resolveAsset, isAppUrl, SCHEME, APP_HOST } = require('./assets');
 const { createStore } = require('./store');
 const { loadLib, netCall, callChat, callTest, callStt, callShare, probe } = require('./net');
 const { createEngine } = require('./engine');
+const { createSpeakers } = require('./speakers');
 const { createModels } = require('./models');
 const { createAppAudio } = require('./appaudio');
 const { appLabel, createMicWatch } = require('./micwatch');
@@ -182,12 +183,16 @@ function serveStore() {
 
 function serveNet() {
   loadLib(sharedRoot());
-  engine = createEngine({ dir: join(app.isPackaged ? process.resourcesPath : APP_ROOT, 'engine') });
+  const engineDir = join(app.isPackaged ? process.resourcesPath : APP_ROOT, 'engine');
+  engine = createEngine({ dir: engineDir });
+  const speakers = createSpeakers({ dir: join(engineDir, 'speakers') });
   handleFromApp('net:chat', callChat);
   handleFromApp('net:test', callTest);
   handleFromApp('net:stt', (args) => callStt(args, engine.url));
   handleFromApp('engine:available', () => engine.available());
   handleFromApp('engine:start', () => netCall(engine.url));
+  handleFromApp('speakers:available', () => speakers.available());
+  handleFromApp('speakers:find', (bytes) => netCall(() => speakers.find(bytes)));
   const models = createModels({
     dir: join(app.getPath('userData'), 'models'),
     onProgress: (progress) => mainWindow?.webContents.send('engine:model-progress', progress),

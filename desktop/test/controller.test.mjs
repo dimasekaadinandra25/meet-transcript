@@ -26,6 +26,7 @@ let engineAnswer = { ok: true, value: 'http://127.0.0.1:1/v1' };
 let probeAnswer;
 let saved;
 let failWrites;
+let speakers;
 let ctl;
 
 const START = { type: 'start-recording', video: false };
@@ -48,6 +49,7 @@ beforeEach(() => {
   probeAnswer = { ok: true, value: { ok: true, status: 200 } };
   saved = [];
   failWrites = false;
+  speakers = { found: null, fail: null, calls: [] };
   fakeRecorder = {
     starts: 0,
     stops: 0,
@@ -134,6 +136,14 @@ beforeEach(() => {
     saveFile: async (name, blob, first) => {
       if (fakeStore.failSave) throw new Error(fakeStore.failSave);
       saved.push({ name, blob, first });
+    },
+    speakers: {
+      available: async () => !!speakers.found,
+      find: async (blobs) => {
+        speakers.calls.push(blobs);
+        if (speakers.fail) throw new Error(speakers.fail);
+        return speakers.found;
+      },
     },
     now: () => NOW,
   });
@@ -955,4 +965,45 @@ test('an action item can be ticked during a recording', async () => {
   const res = await ctl.handle({ type: 'edit-transcript', id: rec.meetingId, change: { toggleItem: 'a' } });
   assert.equal(res.ok, true);
   assert.deepEqual(data[key].doneItems, ['a']);
+});
+
+const twoVoices = () => {
+  speakers.found = { starts: [0], turns: [{ start: 0, end: 1, speaker: 4 }, { start: 5, end: 6, speaker: 2 }] };
+  fakeOpenAI.transcribeAudio = async ({ blob: { track } }) => (track === 'mic' ? { segments: [{ start: 2, text: 'saya' }] }
+    : { segments: [{ start: 0, end: 1, text: 'satu' }, { start: 5, end: 6, text: 'dua' }] });
+};
+const speakerOf = () => meeting().segments.map((s) => [s.text, s.speaker]);
+
+test('other voices are told apart on this computer after a recording', async () => {
+  twoVoices();
+  await runRecording();
+  assert.deepEqual(speakers.calls, [[blob('system')]]);
+  assert.deepEqual(speakerOf(), [['satu', 'Speaker 1'], ['saya', 'You'], ['dua', 'Speaker 2']]);
+  assert.ok(recStates().some((m) => m.speakers));
+  assert.equal(recStates().at(-1).error, null);
+});
+
+test('telling voices apart can be turned off', async () => {
+  twoVoices();
+  data.settings.localSpeakers = false;
+  await runRecording();
+  assert.equal(speakers.calls.length, 0);
+  assert.deepEqual(speakerOf().map(([, who]) => who), ['Others', 'You', 'Others']);
+});
+
+test('if telling voices apart fails, the transcript is kept and you are told', async () => {
+  twoVoices();
+  speakers.fail = 'boom';
+  await runRecording();
+  assert.deepEqual(speakerOf().map(([, who]) => who), ['Others', 'You', 'Others']);
+  assert.match(recStates().at(-1).error, /Speakers could not be told apart \(boom\)\./);
+});
+
+test('an imported file gets its voices told apart', async () => {
+  speakers.found = { starts: [0, 120], turns: [{ start: 0, end: 1, speaker: 0 }, { start: 120, end: 121, speaker: 1 }] };
+  fakeOpenAI.transcribeAudio = async ({ blob: { track } }) => ({ segments: [{ start: 0, end: 1, text: track }] });
+  await ctl.handle({ type: 'import-audio', file: { name: 'rapat.m4a', lastModified: NOW } });
+  assert.deepEqual(speakers.calls, [[blob('one'), blob('two')]]);
+  const imported = Object.values(data).find((m) => m?.title === 'rapat');
+  assert.deepEqual(imported.segments.map((s) => [s.text, s.speaker]), [['one', 'Speaker 1'], ['two', 'Speaker 2']]);
 });
