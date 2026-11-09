@@ -698,7 +698,7 @@ function askBox(meeting) {
 function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
   const hostOf = () => {
     try {
-      return new URL(addressOf()).host;
+      return new URL(addressOf()).origin;
     } catch {
       return '';
     }

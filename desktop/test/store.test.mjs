@@ -137,3 +137,15 @@ test('sharing secrets are encrypted like API keys', async () => {
   assert.equal(settings.notionToken, 'n');
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('a key that cannot be read is dropped when its server changes', async () => {
+  const good = createStore({ dir, cipher });
+  await good.set({ settings: { apiKey: 'rahasia', baseUrl: 'https://mine.example/v1', sttApiKey: 'suara', sttBaseUrl: 'https://speech.example/v1', notionToken: 'ntn' } });
+  const locked = createStore({ dir, cipher: { ...cipher, decrypt: () => { throw new Error('locked'); } } });
+  const { settings } = await locked.get('settings');
+  await locked.set({ settings: { ...settings, baseUrl: 'https://other.example/v1', sttBaseUrl: 'http://speech.example/v1' } });
+  const { settings: after } = await createStore({ dir, cipher }).get('settings');
+  assert.ok(!after.apiKey, 'the key went to another server');
+  assert.ok(!after.sttApiKey, 'the speech key went to an http address');
+  assert.equal(after.notionToken, 'ntn');
+});

@@ -20,13 +20,23 @@ function createStore({ dir, cipher, onChange = (_changes) => {} }) {
     return run;
   };
 
+  function serverOf(settings, field) {
+    const address = { apiKey: settings.baseUrl, sttApiKey: settings.sttBaseUrl || settings.baseUrl }[field];
+    if (field !== 'apiKey' && field !== 'sttApiKey') return 'fixed';
+    try {
+      return new URL(address).origin;
+    } catch {
+      return String(address ?? '');
+    }
+  }
+
   function seal(key, value) {
     if (key !== 'settings' || !value) return value;
     const sealed = { ...value };
     const secrets = {};
     for (const field of SECRET_FIELDS) {
       if (!sealed[field]) {
-        if (unreadable[field]) secrets[field] = unreadable[field];
+        if (unreadable[field]?.server === serverOf(sealed, field)) secrets[field] = unreadable[field].data;
         continue;
       }
       delete unreadable[field];
@@ -46,7 +56,7 @@ function createStore({ dir, cipher, onChange = (_changes) => {} }) {
         delete unreadable[field];
       } catch {
         open[field] = '';
-        unreadable[field] = data;
+        unreadable[field] = { data, server: serverOf(open, field) };
       }
     }
     return open;
