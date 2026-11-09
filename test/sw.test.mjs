@@ -32,7 +32,8 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
         if (!offscreen) throw new Error('Could not establish connection.');
         return msg.op === 'state' ? { ok: true, ...offscreen } : { ok: true };
       },
-      getURL: (p) => p,
+      id: 'ext',
+      getURL: (p) => `chrome-extension://ext/${p}`,
     },
     storage: { local: {
       get: async (keys) => {
@@ -91,8 +92,9 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
   vm.runInContext(MERGE, ctx);
   vm.runInContext(I18N, ctx);
   vm.runInContext(SRC, ctx);
-  const ask = (msg) => new Promise((resolve) => {
-    for (const f of handlers) if (f(msg, {}, resolve) === true) return;
+  const PANEL = { id: 'ext', url: 'chrome-extension://ext/panel/panel.html' };
+  const ask = (msg, sender = PANEL) => new Promise((resolve) => {
+    for (const f of handlers) if (f(msg, sender, resolve) === true) return;
     resolve(undefined);
   });
   const connect = (tabId) => {
@@ -929,4 +931,15 @@ test('Firefox leaves captions + audio too, since it cannot record', async () => 
   const sw = loadSw({ offscreen: null, store: { settings: { transcriptSource: 'both' } } });
   await wait();
   assert.equal(sw.store.settings.transcriptSource, 'caption');
+});
+
+test('a web page cannot use the messages meant for extension pages', async () => {
+  const sw = loadSw({ offscreen: null, store: { settings: { apiKey: 'k' }, meetings: ['abc-defg-hij'], 'meeting:abc-defg-hij': { id: 'abc-defg-hij', title: 'Rapat', segments: [], mom: null } } });
+  const meetPage = { id: 'ext', url: 'https://meet.google.com/abc-defg-hij', tab: { id: 3 } };
+  assert.equal(await sw.ask({ type: 'get-active' }, meetPage), undefined);
+  assert.equal(await sw.ask({ type: 'delete-meeting', id: 'abc-defg-hij' }, meetPage), undefined);
+  assert.ok(sw.store['meeting:abc-defg-hij'], 'a web page deleted a meeting');
+  assert.equal(await sw.ask({ type: 'get-active' }, { id: 'other-extension', url: 'chrome-extension://other/x.html' }), undefined);
+  assert.ok((await sw.ask({ type: 'get-active' })).rec, 'the panel lost access');
+  assert.ok((await sw.ask({ type: 'get-active' }, { id: 'ext', url: 'chrome-extension://ext/panel/mic.html', tab: { id: 9 } })).rec, 'the extension page in a tab lost access');
 });

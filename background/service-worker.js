@@ -922,7 +922,10 @@ const HANDLERS = {
   },
 };
 
+const FROM_WEB_PAGES = new Set(['ai-inject']);
+const fromExtensionPage = (sender) => sender?.id === chrome.runtime.id && String(sender.url ?? '').startsWith(chrome.runtime.getURL(''));
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) =>
-  HANDLERS[msg.type]?.(msg, sender, sendResponse) === true);
+  (FROM_WEB_PAGES.has(msg?.type) || fromExtensionPage(sender)) && HANDLERS[msg.type]?.(msg, sender, sendResponse) === true);
 
 deleteOldMeetings().catch((e) => console.warn('[cleanup]', e.message));
