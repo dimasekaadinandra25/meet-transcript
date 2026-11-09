@@ -139,3 +139,13 @@ test('bridge sends WAV parts as they are', async () => {
   assert.equal(converted, 0);
   assert.deepEqual(sent.map((args) => args.fileName), ['audio.wav', 'audio.wav']);
 });
+
+test('probe only asks a service for its model list', async () => {
+  const before = seen.length;
+  for (const url of [`${base}/audio/transcriptions`, `${base}/models?x=1`, `${base}/models/../secret`, 'file:///c:/models']) {
+    const r = await probe(url, 'k');
+    assert.equal(r.ok, false, url);
+  }
+  assert.equal(seen.length, before);
+  assert.equal((await probe(`${base}/models`, 'k')).ok, true);
+});

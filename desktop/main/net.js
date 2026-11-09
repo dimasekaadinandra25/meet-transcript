@@ -43,7 +43,10 @@ const callShare = (kind, settings, meeting) => netCall(() => globalThis.MeetShar
 
 const probe = (url, key) => netCall(async () => {
   assertHttp(url);
+  const { pathname, search, hash } = new URL(url);
+  if (!pathname.endsWith('/models') || search || hash) throw new Error(`Invalid URL: ${url}`);
   const res = await fetch(url, {
+    redirect: 'error',
     headers: key ? { Authorization: `Bearer ${key}` } : {},
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   });
