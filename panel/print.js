@@ -1,3 +1,4 @@
+// Fills the page with the meeting named in the URL (title, MoM, transcript), then opens the print dialog.
 (async () => {
   const { el, raw, markLine, meetingKey } = globalThis.MeetUi;
   await globalThis.MeetI18n.follow();
@@ -11,7 +12,10 @@
   }
   raw(document.querySelector('title'));
   document.title = meeting.title;
-  page.append(raw(el('h1', null, meeting.title)), el('p', 'muted', new Date(meeting.startedAt).toLocaleString()));
+  page.append(
+    raw(el('h1', null, meeting.title)),
+    el('p', 'muted', new Date(meeting.startedAt).toLocaleString()),
+  );
   if (meeting.mom) page.append(el('h2', null, 'Minutes of Meeting'), raw(el('div', 'mom', meeting.mom)));
   const items = globalThis.MeetMerge.timeline(meeting);
   if (items.length) page.append(el('h2', null, 'Transcript'));

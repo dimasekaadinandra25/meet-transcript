@@ -7,11 +7,14 @@ let status = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, cap
 let recState = { recording: false, transcribing: false, saving: false, done: 0, total: 0, error: null };
 
 let progressStart = 0;
+// Returns the status text shown while a recording is saved, split by speaker, or transcribed.
 const busyLabel = () => {
   if (recState.saving) return 'Saving recording…';
   if (recState.speakers) return 'Telling speakers apart…';
   if (!recState.total) return 'Transcribing…';
-  const left = progressStart ? M.minutesLeft(recState.done, recState.total, Date.now() - progressStart) : null;
+  const left = progressStart
+    ? M.minutesLeft(recState.done, recState.total, Date.now() - progressStart)
+    : null;
   const count = `Transcribing… ${recState.done}/${recState.total}`;
   return left ? `${count}, about ${left} min left` : count;
 };
@@ -20,35 +23,51 @@ const HAS_AUDIO = !!chrome.tabCapture;
 const Host = globalThis.PanelHost;
 
 let settingsCache = {};
-async function loadSettings() { settingsCache = (await chrome.storage.local.get('settings')).settings ?? {}; }
+// Reads the saved settings into settingsCache.
+async function loadSettings() {
+  settingsCache = (await chrome.storage.local.get('settings')).settings ?? {};
+}
 
-const { CAPTION_LANGUAGES, el, raw, markLine, mkBtn, mkDropdown, patchSettings, meetingKey, clearShortcut } = globalThis.MeetUi;
+const {
+  CAPTION_LANGUAGES, el, raw, markLine, mkBtn, mkDropdown, patchSettings, meetingKey, clearShortcut,
+} = globalThis.MeetUi;
 const { t } = globalThis.MeetI18n;
+// Creates an element and copies the given properties onto it.
 const mkEl = (tag, props) => Object.assign(document.createElement(tag), props);
+// Appends one <option> per [value, text] pair to a select.
 const addOptions = (select, pairs) => {
   for (const [value, textContent] of pairs) select.append(mkEl('option', { value, textContent }));
 };
+// Tells whether the meeting with this id is the one on screen right now.
 const isShowing = (id) => (tab === 'live' && id === status.id) || (tab === 'history' && id === viewingId);
 
-const badUrl = (m) => Object.assign(new Error(m), { invalidUrl: true });
+// Builds an error for an address that cannot be used at all, so callers can tell it from a denial.
+const badUrl = (message) => Object.assign(new Error(message), { invalidUrl: true });
+// Asks for host access to each address (OpenAI is already allowed) and throws if one is invalid or denied.
 async function ensureOrigins(bases) {
   const patterns = [];
-  for (const b of bases) {
-    let u;
-    try { u = new URL(b); } catch { u = null; }
-    if (!u || !/^https?:$/.test(u.protocol) || !u.hostname) throw badUrl(`Invalid URL: ${b}`);
-    if (u.hostname.startsWith('[') && !Host) {
-      throw badUrl(`Chrome does not support IPv6 addresses here: ${b}. Use 127.0.0.1 or a host name.`);
+  for (const base of bases) {
+    let url;
+    try {
+      url = new URL(base);
+    } catch {
+      url = null;
     }
-    const p = `${u.protocol}//${u.hostname}/*`;
-    if (p !== 'https://api.openai.com/*') patterns.push(p);
+    if (!url || !/^https?:$/.test(url.protocol) || !url.hostname) throw badUrl(`Invalid URL: ${base}`);
+    if (url.hostname.startsWith('[') && !Host) {
+      throw badUrl(`Chrome does not support IPv6 addresses here: ${base}. Use 127.0.0.1 or a host name.`);
+    }
+    const pattern = `${url.protocol}//${url.hostname}/*`;
+    if (pattern !== 'https://api.openai.com/*') patterns.push(pattern);
   }
   if (!patterns.length) return;
-  if (!await chrome.permissions.request({ origins: [...new Set(patterns)] }).catch(() => false)) {
+  const granted = await chrome.permissions.request({ origins: [...new Set(patterns)] }).catch(() => false);
+  if (!granted) {
     throw new Error(`Access to ${patterns.join(', ')} was denied.`);
   }
 }
 
+// Shows an unexpected error with its stack in a box at the top of the page.
 function reportError(what, e) {
   let box = document.getElementById('crash');
   if (!box) {
@@ -62,16 +81,19 @@ function reportError(what, e) {
 addEventListener('unhandledrejection', (ev) => reportError('Promise failed', ev.reason));
 addEventListener('error', (ev) => reportError('Error', ev.error ?? ev.message));
 
+// Switches to a tab and highlights its button, leaving any open meeting.
 function selectTab(name) {
   tab = name;
   viewingId = null;
-  document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x.dataset.tab === name));
+  document.querySelectorAll('nav button').forEach((button) => {
+    button.classList.toggle('active', button.dataset.tab === name);
+  });
 }
 
-document.querySelectorAll('nav button').forEach((b) =>
-  b.addEventListener('click', () => {
-    if (b.dataset.tab === tab && tab === 'settings') return;
-    selectTab(b.dataset.tab);
+document.querySelectorAll('nav button').forEach((button) =>
+  button.addEventListener('click', () => {
+    if (button.dataset.tab === tab && tab === 'settings') return;
+    selectTab(button.dataset.tab);
     render();
   })
 );
@@ -93,51 +115,72 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (isShowing(msg.id) || (tab === 'history' && !viewingId)) render();
   } else if (msg.type === 'ai-inject') {
     if (msg.ok || !msg.id) return;
-    momErrors.set(msg.id, `Could not paste into the AI tab: ${msg.error} The prompt is on your clipboard, so paste it there yourself.`);
+    momErrors.set(msg.id,
+      `Could not paste into the AI tab: ${msg.error} The prompt is on your clipboard, so paste it there yourself.`);
     if (isShowing(msg.id)) render();
   } else if (msg.type === 'rec-state') {
     const wasActive = recState.recording || recState.transcribing;
-    if (wasActive !== (msg.recording || msg.transcribing)) audioMetaKey = null;
+    const isActive = msg.recording || msg.transcribing;
+    if (wasActive !== isActive) audioMetaKey = null;
     if (msg.total && !msg.done) progressStart = Date.now();
     if (!msg.transcribing) progressStart = 0;
-    recState = { recording: msg.recording, transcribing: msg.transcribing, saving: !!msg.saving, muted: msg.muted, paused: !!msg.paused, importing: !!msg.importing,
-      done: msg.done ?? 0, total: msg.total ?? 0, speakers: !!msg.speakers,
-      error: 'error' in msg ? msg.error : recState.error };
+    recState = {
+      recording: msg.recording,
+      transcribing: msg.transcribing,
+      saving: !!msg.saving,
+      muted: msg.muted,
+      paused: !!msg.paused,
+      importing: !!msg.importing,
+      done: msg.done ?? 0,
+      total: msg.total ?? 0,
+      speakers: !!msg.speakers,
+      error: 'error' in msg ? msg.error : recState.error,
+    };
     if (tab === 'live' || (tab === 'history' && viewingId)) render();
   }
 });
 
+// Loads one meeting from storage, or null when it does not exist.
 async function getMeeting(id) {
   const key = meetingKey(id);
   return (await chrome.storage.local.get(key))[key] ?? null;
 }
 
+// Replaces characters that are not allowed in file names with a dash.
 const safeName = (s) => s.replace(/[\/\\:*?"<>|]/g, '-');
 
+// Builds the MoM prompt for a meeting with the current settings.
 const promptText = (meeting) => M.momPrompt(meeting, settingsCache);
 
+// Saves text or a Blob as a file download with a safe file name.
 function download(name, data) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: 'text/plain' }));
-  a.download = safeName(name);
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  const link = document.createElement('a');
+  const blob = data instanceof Blob ? data : new Blob([data], { type: 'text/plain' });
+  link.href = URL.createObjectURL(blob);
+  link.download = safeName(name);
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 60000);
 }
 
+// Downloads a recording's audio, zipping the parts when there are several, and returns the file count.
 async function downloadAudio(meeting, rec, suffix) {
   const saved = await globalThis.MeetAudioStore.loadAudio(rec.recId);
   if (!saved?.blobs?.length) return 0;
   if (saved.meetingId !== meeting.id) return 0;
+  const kind = saved.imported ? 'wav' : 'webm';
   if (saved.blobs.length === 1) {
-    download(`${meeting.title}${suffix}.${saved.imported ? 'wav' : 'webm'}`, saved.blobs[0]);
+    download(`${meeting.title}${suffix}.${kind}`, saved.blobs[0]);
     return 1;
   }
-  const kind = saved.imported ? 'wav' : 'webm';
-  const parts = saved.blobs.map((data, i) => ({ name: `part-${String((saved.indices?.[i] ?? i) + 1).padStart(2, '0')}.${kind}`, data }));
+  const parts = saved.blobs.map((data, i) => {
+    const number = String((saved.indices?.[i] ?? i) + 1).padStart(2, '0');
+    return { name: `part-${number}.${kind}`, data };
+  });
   download(`${meeting.title}${suffix}-audio.zip`, await globalThis.MeetBackup.makeZip(parts));
   return saved.blobs.length;
 }
 
+// Downloads a recording's video as one .webm file and tells whether it was found.
 async function downloadVideo(meeting, rec, suffix) {
   const saved = await globalThis.MeetAudioStore.loadVideo(rec.recId);
   if (!saved?.blobs?.length) return false;
@@ -146,6 +189,7 @@ async function downloadVideo(meeting, rec, suffix) {
   return true;
 }
 
+// Downloads a recording's mixed audio as one .webm file and tells whether it was found.
 async function downloadMix(meeting, rec, suffix) {
   const saved = await globalThis.MeetAudioStore.loadMix(rec.recId);
   if (!saved?.blobs?.length || saved.meetingId !== meeting.id) return false;
@@ -167,12 +211,14 @@ const CLICK_HOLD_MS = 1000;
 let clickHold = null;
 let renderWaiting = false;
 
+// Runs a render that was held back while the user was clicking or typing.
 function flushRender() {
   if (!renderWaiting) return;
   renderWaiting = false;
   render();
 }
 
+// Ends the click hold and runs any render that waited for it.
 function endClickHold() {
   clearTimeout(clickHold);
   clickHold = null;
@@ -190,9 +236,12 @@ view.addEventListener('focusout', (e) => {
   if (e.target instanceof Element && e.target.matches('[data-title-editor],[data-edit-key]')) flushRender();
 });
 
+// Redraws the current tab, unless the user is mid-click or has unsaved typing in a field.
 async function render() {
   const editing = document.activeElement;
-  const typingTitle = editing?.matches?.('[data-title-editor],[data-edit-key]') && editing.type !== 'checkbox' && editing.value !== editing.defaultValue;
+  const typingTitle = editing?.matches?.('[data-title-editor],[data-edit-key]')
+    && editing.type !== 'checkbox'
+    && editing.value !== editing.defaultValue;
   if (clickHold || typingTitle) {
     renderWaiting = true;
     return;
@@ -203,15 +252,22 @@ async function render() {
   return renderSettings(epoch);
 }
 
+// Builds the "Get started" card listing what still needs setting up, or nothing when all is ready.
 function setupCard(engineReady) {
   const speechReady = Host ? !!engineReady || !!settingsCache.sttMode : true;
   const aiReady = M.canMakeMom(settingsCache);
   if (settingsCache.setupDone || (speechReady && aiReady)) return [];
   const box = el('div', 'info');
   box.append(el('strong', null, 'Get started'));
-  const speechText = Host ? (speechReady ? 'Speech-to-text is ready.' : 'Speech-to-text: choose a service in Settings.') : 'Google Meet captions work with no setup.';
+  let speechText = 'Google Meet captions work with no setup.';
+  if (Host) {
+    speechText = speechReady ? 'Speech-to-text is ready.' : 'Speech-to-text: choose a service in Settings.';
+  }
   box.append(el('div', null, `${speechReady ? '✓' : '○'} ${speechText}`));
-  box.append(el('div', null, aiReady ? '✓ AI service is ready.' : '○ Minutes of meeting: add an AI service in Settings, or paste the prompt into Gemini or ChatGPT.'));
+  const aiText = aiReady
+    ? '✓ AI service is ready.'
+    : '○ Minutes of meeting: add an AI service in Settings, or paste the prompt into Gemini or ChatGPT.';
+  box.append(el('div', null, aiText));
   const row = el('div', 'actions');
   mkBtn('Open Settings', () => { selectTab('settings'); render(); }, row);
   mkBtn('Not now', () => patchSettings({ setupDone: true }).then(render), row);
@@ -219,14 +275,17 @@ function setupCard(engineReady) {
   return [box];
 }
 
+// Draws one meeting (live or from History): recording bar, actions, transcript, and MoM.
 async function renderMeeting(id, live, epoch) {
   const meeting = id ? await getMeeting(id) : null;
   const viewKey = `${id}|${live}`;
   const engineReady = !meeting && await Host?.hasEngine();
   let meta = audioMeta;
   let metaKey = audioMetaKey;
-  if (meeting?.source !== 'audio') { meta = null; metaKey = null; }
-  else if (audioMetaKey !== viewKey) {
+  if (meeting?.source !== 'audio') {
+    meta = null;
+    metaKey = null;
+  } else if (audioMetaKey !== viewKey) {
     const res = await globalThis.MeetAudioStore.listRecordings().catch(() => undefined);
     meta = res ?? null;
     metaKey = res === undefined ? null : viewKey;
@@ -237,7 +296,8 @@ async function renderMeeting(id, live, epoch) {
   const sameView = viewKey === lastRenderedKey;
   lastRenderedKey = viewKey;
   const focusKey = document.activeElement?.dataset?.editKey;
-  const stickToBottom = live && editingId !== id && (!sameView || view.scrollHeight - view.scrollTop - view.clientHeight < 40);
+  const nearBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
+  const stickToBottom = live && editingId !== id && (!sameView || nearBottom);
   const prevTop = sameView ? view.scrollTop : 0;
   view.replaceChildren();
   if (live && HAS_AUDIO) {
@@ -251,8 +311,10 @@ async function renderMeeting(id, live, epoch) {
       stop.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'stop-recording' }));
       stop.classList.add('danger');
       const pause = el('button', null, recState.paused ? 'Resume recording' : 'Pause recording');
-      pause.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'set-paused', on: !recState.paused }));
-      bar.append(stop, pause, el('span', 'recording', recState.paused ? 'paused, nothing is being recorded' : 'recording'));
+      pause.addEventListener('click',
+        () => chrome.runtime.sendMessage({ type: 'set-paused', on: !recState.paused }));
+      const stateText = recState.paused ? 'paused, nothing is being recorded' : 'recording';
+      bar.append(stop, pause, el('span', 'recording', stateText));
     } else {
       const needsRecord = settingsCache.transcriptSource === 'both' && status.inCall;
       bar.append(needsRecord
@@ -271,20 +333,22 @@ async function renderMeeting(id, live, epoch) {
     }, markRow);
     view.append(markRow);
   }
-  if (settingsCache.transcriptSource !== 'audio' && live && status.inCall && !status.captionsOn) {
+  const captionsExpected = settingsCache.transcriptSource !== 'audio' && live && status.inCall;
+  if (captionsExpected && !status.captionsOn) {
     view.append(el('p', 'muted',
       'Captions are off. Turn on CC in the Meet toolbar to fill the transcript.'));
   }
   const quietSince = Math.max(status.lastSegmentAt || 0, status.captionsOnAt || 0);
-  if (settingsCache.transcriptSource !== 'audio' && live && status.inCall && status.captionsOn && quietSince && Date.now() - quietSince > 30000) {
+  if (captionsExpected && status.captionsOn && quietSince && Date.now() - quietSince > 30000) {
     view.append(el('p', 'muted',
       'Captions are on, but no text arrived in the last 30 seconds. If someone is speaking, Meet may have changed its page: update content/selectors.js.'));
   }
   if (!meeting) {
     if (live) view.append(...setupCard(engineReady));
-    view.append(el('p', 'muted',
-      !live ? 'Meeting not found.'
-        : Host?.emptyLiveText ?? 'No active Meet meeting. Recordings from other tabs, such as Discord, go to History.'));
+    const emptyText = !live
+      ? 'Meeting not found.'
+      : Host?.emptyLiveText ?? 'No active Meet meeting. Recordings from other tabs, such as Discord, go to History.';
+    view.append(el('p', 'muted', emptyText));
     return;
   }
   if (!live) {
@@ -299,18 +363,23 @@ async function renderMeeting(id, live, epoch) {
   const issues = el('div');
   view.append(issues);
   if (momErrors.has(meeting.id)) issues.append(el('div', 'error', momErrors.get(meeting.id)));
-  const recError = !live && recState.error && (audioMeta ?? []).some((r) => r.meetingId === meeting.id) ? el('div', 'err', recState.error) : null;
+  const recordedHere = (audioMeta ?? []).some((r) => r.meetingId === meeting.id);
+  const recError = !live && recState.error && recordedHere ? el('div', 'err', recState.error) : null;
   if (recError) view.append(recError);
   const actions = el('div', 'actions');
+  // Adds a button to the main action row (or to the given box).
   const btn = (label, fn, box = actions) => mkBtn(label, fn, box);
-  const flash = (b, label, ms = 2000) => {
-    const asli = b.dataset.label ?? (b.dataset.label = b.textContent);
-    b.textContent = label;
-    clearTimeout(Number(b.dataset.timer));
-    b.dataset.timer = String(setTimeout(() => { b.textContent = asli; }, ms));
+  // Shows a short-lived label on a button, then puts its own label back.
+  const flash = (button, label, ms = 2000) => {
+    const original = button.dataset.label ?? (button.dataset.label = button.textContent);
+    button.textContent = label;
+    clearTimeout(Number(button.dataset.timer));
+    button.dataset.timer = String(setTimeout(() => { button.textContent = original; }, ms));
   };
+  // Adds a dropdown menu to the main action row.
   const dropdown = (key, label) => mkDropdown(actions, key, label);
   const copy = dropdown('copy', 'Copy');
+  // Makes a click handler that copies the given text and reports the result on the Copy button.
   const copyTo = (text) => async () => {
     try {
       await navigator.clipboard.writeText(text());
@@ -322,6 +391,7 @@ async function renderMeeting(id, live, epoch) {
   copy.item('Copy transcript', copyTo(() => M.formatWithMarks(meeting)));
   if (meeting.segments.length) copy.item('Copy prompt + transcript', copyTo(() => promptText(meeting)));
   const mom = dropdown('mom', meeting.mom ? 'Regenerate MoM' : 'Generate MoM');
+  // Asks the service worker to make the MoM and remembers any failure to show.
   const makeMom = async () => {
     mom.head.textContent = 'Generating…';
     momErrors.delete(meeting.id);
@@ -349,10 +419,12 @@ async function renderMeeting(id, live, epoch) {
     }
   }
   if (meeting.mom) {
+    // Shows a sharing error above the meeting.
     const showFailure = (e) => {
       momErrors.set(meeting.id, e?.message ?? String(e));
       render();
     };
+    // Makes a click handler that sends the MoM to Slack or Notion, one send at a time per meeting.
     const sendTo = (kind, origin) => async () => {
       if (momSending.has(meeting.id)) return;
       momSending.add(meeting.id);
@@ -386,26 +458,35 @@ async function renderMeeting(id, live, epoch) {
     mom.item('Send to Slack', sendTo('slack', 'https://hooks.slack.com/'));
     mom.item('Send to Notion', sendTo('notion', 'https://api.notion.com/'));
   }
-  const dl = dropdown('unduh', 'Download');
-  dl.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatWithMarks(meeting)));
-  dl.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
-  dl.item('Download .docx', async () => download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting)));
+  const downloads = dropdown('unduh', 'Download');
+  downloads.item('Download .txt', () => download(`${meeting.title}.txt`, M.formatWithMarks(meeting)));
+  downloads.item('Download .md', () => download(`${meeting.title}.md`, M.formatMarkdown(meeting)));
+  downloads.item('Download .docx', async () => {
+    download(`${meeting.title}.docx`, await globalThis.MeetExport.makeDocx(meeting));
+  });
+  // Returns the time the subtitle clock starts from, based on the meeting's recordings.
   const subtitleStart = () => M.subtitleOrigin(meeting, recs.map((r) => r.baseTime));
-  dl.item('Download .srt', () => download(`${meeting.title}.srt`, M.formatSubtitles(meeting.segments, 'srt', subtitleStart())));
-  dl.item('Download .vtt', () => download(`${meeting.title}.vtt`, M.formatSubtitles(meeting.segments, 'vtt', subtitleStart())));
-  dl.item('Save as PDF', async () => {
+  downloads.item('Download .srt', () => {
+    download(`${meeting.title}.srt`, M.formatSubtitles(meeting.segments, 'srt', subtitleStart()));
+  });
+  downloads.item('Download .vtt', () => {
+    download(`${meeting.title}.vtt`, M.formatSubtitles(meeting.segments, 'vtt', subtitleStart()));
+  });
+  downloads.item('Save as PDF', async () => {
     if (!Host) {
-      chrome.tabs.create({ url: chrome.runtime.getURL(`panel/print.html?id=${encodeURIComponent(meeting.id)}`) });
+      const printPage = `panel/print.html?id=${encodeURIComponent(meeting.id)}`;
+      chrome.tabs.create({ url: chrome.runtime.getURL(printPage) });
       return;
     }
     try {
-      download(`${meeting.title}.pdf`, new Blob([await Host.makePdf()], { type: 'application/pdf' }));
+      const pdf = new Blob([await Host.makePdf()], { type: 'application/pdf' });
+      download(`${meeting.title}.pdf`, pdf);
     } catch (e) {
-      flash(dl.head, 'PDF failed', 3000);
+      flash(downloads.head, 'PDF failed', 3000);
       console.error(e);
     }
   });
-  if (!live && recState.transcribing && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
+  if (!live && recState.transcribing && recordedHere) {
     actions.append(el('span', 'muted', busyLabel()));
   }
   let retry = null;
@@ -414,41 +495,52 @@ async function renderMeeting(id, live, epoch) {
     && (r.count > 0 || r.videoCount > 0 || r.mixCount > 0 || r.systemCount > 0 || r.micCount > 0));
   if (recs.length && !recState.recording && !recState.transcribing) {
     const many = recs.length > 1;
-    const jam = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    for (const r of recs) {
-      const tag = many ? ` — ${jam(r.baseTime)}` : '';
-      const sfx = many ? `-${jam(r.baseTime).replace(/\D/g, '')}` : '';
-      if (r.mixCount > 0) {
-        dl.item(`Download recording${tag}`, async () => {
-          const ok = await downloadMix(meeting, r, sfx).catch(() => false);
-          flash(dl.head, ok ? 'Downloaded ✓' : 'Recording not found', 3000);
+    // Formats a time as hours and minutes, used to tell several recordings apart.
+    const clockTime = (time) => new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    for (const rec of recs) {
+      const labelSuffix = many ? ` — ${clockTime(rec.baseTime)}` : '';
+      const fileSuffix = many ? `-${clockTime(rec.baseTime).replace(/\D/g, '')}` : '';
+      if (rec.mixCount > 0) {
+        downloads.item(`Download recording${labelSuffix}`, async () => {
+          const ok = await downloadMix(meeting, rec, fileSuffix).catch(() => false);
+          flash(downloads.head, ok ? 'Downloaded ✓' : 'Recording not found', 3000);
         });
       }
-      if (r.count > 0) {
-        dl.item(`Download audio${tag}${r.count > 1 ? ` (${r.count} files)` : ''}`, async () => {
-          const n = await downloadAudio(meeting, r, sfx).catch(() => 0);
-          flash(dl.head, n ? `Downloaded ✓${n > 1 ? ` (${n} files)` : ''}` : 'Audio not found', 3000);
+      if (rec.count > 0) {
+        const fileCount = rec.count > 1 ? ` (${rec.count} files)` : '';
+        downloads.item(`Download audio${labelSuffix}${fileCount}`, async () => {
+          const n = await downloadAudio(meeting, rec, fileSuffix).catch(() => 0);
+          const savedCount = n > 1 ? ` (${n} files)` : '';
+          flash(downloads.head, n ? `Downloaded ✓${savedCount}` : 'Audio not found', 3000);
         });
       }
-      if (r.videoCount > 0) {
-        dl.item(`Download video${tag}`, async () => {
-          const ok = await downloadVideo(meeting, r, sfx).catch(() => false);
-          flash(dl.head, ok ? 'Downloaded ✓' : 'Video not found', 3000);
+      if (rec.videoCount > 0) {
+        downloads.item(`Download video${labelSuffix}`, async () => {
+          const ok = await downloadVideo(meeting, rec, fileSuffix).catch(() => false);
+          flash(downloads.head, ok ? 'Downloaded ✓' : 'Video not found', 3000);
         });
       }
     }
-    const reable = recs.filter((r) => r.count > 0 || r.systemCount > 0 || r.micCount > 0);
-    const transcribed = (r) => meeting.segments.some((s) => String(s.id ?? '').startsWith(`audio:${r.baseTime}:`));
-    const label = (r) => (transcribed(r) ? 'Retranscribe' : 'Generate transcript');
-    if (reable.length) {
-      const jalankan = async (r, setLabel) => {
-        const tag = `audio:${r.baseTime}:`;
-        const editedHere = meeting.deletedFrom?.includes(r.baseTime) || meeting.segments.some((s) => s.edited && String(s.id ?? '').startsWith(tag));
-        if (editedHere && !confirm(t('Retranscribing replaces your edits to the lines from this recording. Continue?'))) {
+    const transcribable = recs.filter((r) => r.count > 0 || r.systemCount > 0 || r.micCount > 0);
+    // Tells whether the meeting already has lines transcribed from this recording.
+    const transcribed = (r) => {
+      return meeting.segments.some((s) => String(s.id ?? '').startsWith(`audio:${r.baseTime}:`));
+    };
+    // Picks the button label for transcribing a recording, first time or again.
+    const transcribeLabel = (r) => (transcribed(r) ? 'Retranscribe' : 'Generate transcript');
+    if (transcribable.length) {
+      // Transcribes one recording again after the user agrees to lose edits and speaker names.
+      const transcribe = async (r, setLabel) => {
+        const prefix = `audio:${r.baseTime}:`;
+        const editedHere = meeting.deletedFrom?.includes(r.baseTime)
+          || meeting.segments.some((s) => s.edited && String(s.id ?? '').startsWith(prefix));
+        if (editedHere
+          && !confirm(t('Retranscribing replaces your edits to the lines from this recording. Continue?'))) {
           render();
           return;
         }
-        if (globalThis.MeetStt.namesCanMove(meeting, globalThis.MeetStt.sttEndpoint(settingsCache).model)
+        const sttModel = globalThis.MeetStt.sttEndpoint(settingsCache).model;
+        if (globalThis.MeetStt.namesCanMove(meeting, sttModel)
           && !confirm(t('Speaker letters can change when retranscribing, so names you gave may land on the wrong person. Continue?'))) {
           render();
           return;
@@ -456,7 +548,8 @@ async function renderMeeting(id, live, epoch) {
         setLabel('Transcribing…');
         momErrors.delete(meeting.id);
         try {
-          await ensureOrigins([globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl].filter((url) => url && url !== globalThis.MeetStt.BUILTIN_URL));
+          const sttBase = globalThis.MeetStt.sttEndpoint(settingsCache).baseUrl;
+          await ensureOrigins([sttBase].filter((url) => url && url !== globalThis.MeetStt.BUILTIN_URL));
         } catch (e) {
           momErrors.set(meeting.id, e.message + ' Transcription did not run. Check the Speech-to-text address in Settings.');
           render();
@@ -469,34 +562,42 @@ async function renderMeeting(id, live, epoch) {
           render();
         }
       };
-      retry = jalankan;
-      for (const r of reable) retryable.set(r.baseTime, r);
-      if (reable.length === 1) {
-        const reBtn = btn(label(reable[0]), () => {
-          reBtn.disabled = true;
-          return jalankan(reable[0], (t) => { reBtn.textContent = t; });
+      retry = transcribe;
+      for (const r of transcribable) retryable.set(r.baseTime, r);
+      if (transcribable.length === 1) {
+        const transcribeBtn = btn(transcribeLabel(transcribable[0]), () => {
+          transcribeBtn.disabled = true;
+          return transcribe(transcribable[0], (text) => { transcribeBtn.textContent = text; });
         });
       } else {
-        const re = dropdown('retranskrip', reable.some(transcribed) ? 'Transcribe audio' : 'Generate transcript');
-        for (const r of reable) {
-          re.item(`${label(r)} — recording ${jam(r.baseTime)}`,
-            () => jalankan(r, (t) => { re.head.textContent = t; }));
+        const anyTranscribed = transcribable.some(transcribed);
+        const menu = dropdown('retranskrip', anyTranscribed ? 'Transcribe audio' : 'Generate transcript');
+        for (const r of transcribable) {
+          menu.item(`${transcribeLabel(r)} — recording ${clockTime(r.baseTime)}`,
+            () => transcribe(r, (text) => { menu.head.textContent = text; }));
         }
       }
     }
   }
   if (!live && !recState.recording && !recState.transcribing) {
     for (const { baseTime, count } of M.failedParts(meeting)) {
-      const r = retryable.get(baseTime);
-      const text = r
-        ? (count === 1 ? 'The recording is saved, but one part could not be transcribed.' : `The recording is saved, but ${count} parts could not be transcribed.`)
-        : (count === 1 ? 'One part could not be transcribed, and its audio is no longer saved.' : `${count} parts could not be transcribed, and their audio is no longer saved.`);
+      const savedRec = retryable.get(baseTime);
+      let text;
+      if (savedRec) {
+        text = count === 1
+          ? 'The recording is saved, but one part could not be transcribed.'
+          : `The recording is saved, but ${count} parts could not be transcribed.`;
+      } else {
+        text = count === 1
+          ? 'One part could not be transcribed, and its audio is no longer saved.'
+          : `${count} parts could not be transcribed, and their audio is no longer saved.`;
+      }
       const card = el('div', 'error', text);
       if (recError) card.append(recError);
-      if (r && retry) {
+      if (savedRec && retry) {
         const again = mkBtn('Try transcription again', () => {
           again.disabled = true;
-          return retry(r, (t) => { again.textContent = t; });
+          return retry(savedRec, (label) => { again.textContent = label; });
         }, card);
       }
       issues.append(card);
@@ -514,10 +615,12 @@ async function renderMeeting(id, live, epoch) {
   }
   if (!live) {
     const remove = btn('Delete', async () => {
-      const question = t('Delete "{}" and its recordings? This cannot be undone.').replace('{}', () => meeting.title);
+      const question = t('Delete "{}" and its recordings? This cannot be undone.')
+        .replace('{}', () => meeting.title);
       if (!confirm(question + t(Host?.deleteNote ?? ''))) return;
       momErrors.delete(meeting.id);
-      const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id }).catch(() => null);
+      const res = await chrome.runtime.sendMessage({ type: 'delete-meeting', id: meeting.id })
+        .catch(() => null);
       if (res?.ok) viewingId = null;
       else momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
       render();
@@ -527,7 +630,8 @@ async function renderMeeting(id, live, epoch) {
   view.append(actions);
   if (more.childElementCount) view.append(more);
   if (editing) {
-    view.append(el('p', 'muted', 'Changes save when you leave a field. A new speaker name applies to every line with the old name. Empty a line to delete it.'));
+    view.append(el('p', 'muted',
+      'Changes save when you leave a field. A new speaker name applies to every line with the old name. Empty a line to delete it.'));
     if (meeting.mom) view.append(el('p', 'muted', 'The existing MoM changes only when you regenerate it.'));
     if (Host?.editHint) view.append(el('p', 'muted', Host.editHint));
   }
@@ -535,20 +639,28 @@ async function renderMeeting(id, live, epoch) {
   const shares = editing || live ? [] : M.speakerShares(meeting.segments);
   if (shares.length) view.append(talkShare(shares));
   const list = raw(el('div'));
-  const playable = running ? [] : recs.filter((r) => !r.legacy && (r.count > 0 || r.systemCount > 0 || r.micCount > 0));
-  const recordingAt = (t) => playable.find((r) => M.coversLine(r, t));
+  const playable = running
+    ? []
+    : recs.filter((r) => !r.legacy && (r.count > 0 || r.systemCount > 0 || r.micCount > 0));
+  // Finds the playable recording that covers a transcript line's time.
+  const recordingAt = (time) => playable.find((r) => M.coversLine(r, time));
   if (editing) {
     for (const s of meeting.segments) list.append(segmentEditor(meeting, s));
   } else {
     const settling = (recState.recording || recState.transcribing) && meeting.id === status.id;
+    // Tells whether a line came from the recording rather than from captions.
     const fromAudio = (s) => String(s.id ?? '').startsWith('audio:');
-    if (settling && meeting.segments.some(fromAudio)) view.append(el('p', 'muted', 'Lines from the recording may still change. The final transcript replaces them when you stop.'));
+    if (settling && meeting.segments.some(fromAudio)) {
+      view.append(el('p', 'muted',
+        'Lines from the recording may still change. The final transcript replaces them when you stop.'));
+    }
     const lines = meeting.segments.map((s, i) => {
       const rec = recordingAt(s.t);
       const next = meeting.segments[i + 1];
-      return { t: s.t, node: segmentLine(s, rec && (() => playLine(meeting, s, next, rec)), settling && fromAudio(s)) };
+      const play = rec && (() => playLine(meeting, s, next, rec));
+      return { t: s.t, node: segmentLine(s, play, settling && fromAudio(s)) };
     });
-    const marks = (meeting.marks ?? []).map((t) => ({ t, node: markLine(t) }));
+    const marks = (meeting.marks ?? []).map((time) => ({ t: time, node: markLine(time) }));
     for (const { node } of [...lines, ...marks].sort((a, b) => a.t - b.t)) list.append(node);
   }
   if (!meeting.segments.length) view.append(el('p', 'muted', Host?.emptySegmentsText ?? 'No captions yet.'));
@@ -570,7 +682,9 @@ async function renderMeeting(id, live, epoch) {
       momBox.append(row);
     }
     view.append(momBox);
-    if (M.changedSince(meeting, meeting.momBasedOn)) view.append(el('p', 'muted stale', 'The transcript changed after this MoM was made. Regenerate it to update.'));
+    if (M.changedSince(meeting, meeting.momBasedOn)) {
+      view.append(el('p', 'muted stale', 'The transcript changed after this MoM was made. Regenerate it to update.'));
+    }
   }
   if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
@@ -586,12 +700,14 @@ const PLAY_MIN_SECONDS = 3;
 const PLAY_MAX_SECONDS = 30;
 let playing = null;
 
+// Stops the line that is playing, if any.
 function stopPlaying() {
   clearTimeout(playing?.timer);
   playing?.context.close().catch(() => {});
   playing = null;
 }
 
+// Loads the saved audio part with this index (system and mic on desktop, one track in the browser).
 async function loadLineAudio(rec, index) {
   const loads = Host
     ? [globalThis.MeetAudioStore.loadSystem, globalThis.MeetAudioStore.loadMic]
@@ -600,6 +716,7 @@ async function loadLineAudio(rec, index) {
   return saved.map((s) => s?.blobs[s.indices.indexOf(index)]).filter(Boolean);
 }
 
+// Plays the recorded audio behind one transcript line, or stops it when it is already playing.
 async function playLine(meeting, s, next, rec) {
   const same = playing?.segmentId === s.id;
   stopPlaying();
@@ -609,11 +726,13 @@ async function playLine(meeting, s, next, rec) {
   playing = session;
   render();
   try {
-    const seconds = Math.min(PLAY_MAX_SECONDS, Math.max(PLAY_MIN_SECONDS, next ? (next.t - s.t) / 1000 + 1 : PLAY_MIN_SECONDS * 3));
+    const untilNext = next ? (next.t - s.t) / 1000 + 1 : PLAY_MIN_SECONDS * 3;
+    const seconds = Math.min(PLAY_MAX_SECONDS, Math.max(PLAY_MIN_SECONDS, untilNext));
     const parts = M.playPlan(s.t, rec.baseTime, rec.chunkMs, seconds);
     const decoded = await Promise.all(parts.map(async (part) => {
       const blobs = await loadLineAudio(rec, part.index);
-      const buffers = await Promise.all(blobs.map(async (b) => session.context.decodeAudioData(await b.arrayBuffer())));
+      const buffers = await Promise.all(
+        blobs.map(async (blob) => session.context.decodeAudioData(await blob.arrayBuffer())));
       return { part, buffers: buffers.filter((buffer) => part.offset < buffer.duration) };
     }));
     if (playing !== session) return undefined;
@@ -641,6 +760,7 @@ async function playLine(meeting, s, next, rec) {
   return undefined;
 }
 
+// Builds the meeting title field, which renames the meeting when changed.
 function titleEditor(meeting) {
   const input = mkEl('input', { value: meeting.title, defaultValue: meeting.title });
   input.dataset.titleEditor = '';
@@ -652,14 +772,21 @@ function titleEditor(meeting) {
       return;
     }
     input.defaultValue = input.value;
-    chrome.runtime.sendMessage({ type: 'rename-meeting', id: meeting.id, title: input.value }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'rename-meeting', id: meeting.id, title: input.value })
+      .catch(() => {});
   });
   return input;
 }
 
+// Builds the comma-separated tags field, which saves cleaned-up tags when changed.
 function tagsEditor(meeting) {
   const text = (meeting.tags ?? []).join(', ');
-  const input = mkEl('input', { className: 'tags-input', value: text, defaultValue: text, placeholder: t('Tags, separated by commas') });
+  const input = mkEl('input', {
+    className: 'tags-input',
+    value: text,
+    defaultValue: text,
+    placeholder: t('Tags, separated by commas'),
+  });
   input.dataset.editKey = 'tags';
   input.setAttribute('aria-label', t('Tags'));
   input.addEventListener('change', () => {
@@ -670,6 +797,7 @@ function tagsEditor(meeting) {
   return input;
 }
 
+// Fills a datalist with the model names the AI service offers, quietly doing nothing on failure.
 async function fillModels(list, base, key) {
   const res = await (Host?.fetch ?? fetch)(`${base}/models`, {
     ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
@@ -680,6 +808,7 @@ async function fillModels(list, base, key) {
   list.replaceChildren(...ids.map((id) => mkEl('option', { value: id })));
 }
 
+// Builds the "Ask about this meeting" box with the saved answers below it.
 function askBox(meeting) {
   const box = el('div', 'ask');
   const row = el('div', 'ask-row');
@@ -688,6 +817,7 @@ function askBox(meeting) {
   input.dataset.editKey = 'ask';
   input.addEventListener('input', () => askDrafts.set(meeting.id, input.value));
   input.setAttribute('aria-label', 'Ask about this meeting');
+  // Sends the typed question to the AI service and redraws with the answer or error.
   const send = async () => {
     const question = input.value.trim();
     if (!question || asking) return;
@@ -697,7 +827,8 @@ function askBox(meeting) {
     askDrafts.delete(meeting.id);
     momErrors.delete(meeting.id);
     render();
-    const res = await chrome.runtime.sendMessage({ type: 'ask-meeting', id: meeting.id, question }).catch(() => null);
+    const res = await chrome.runtime.sendMessage({ type: 'ask-meeting', id: meeting.id, question })
+      .catch(() => null);
     asking = null;
     if (!res?.ok) momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
     render();
@@ -712,9 +843,13 @@ function askBox(meeting) {
   for (const { question, answer, basedOn } of meeting.answers ?? []) {
     const item = el('div', 'mom');
     item.append(raw(el('strong', null, question)), raw(el('div', null, answer)));
-    if (M.changedSince(meeting, basedOn)) item.append(el('p', 'muted', 'The transcript changed after this answer.'));
+    if (M.changedSince(meeting, basedOn)) {
+      item.append(el('p', 'muted', 'The transcript changed after this answer.'));
+    }
     const remove = mkBtn('Delete answer', async () => {
-      const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change: { deleteAnswer: { question, answer } } }).catch(() => null);
+      const change = { deleteAnswer: { question, answer } };
+      const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change })
+        .catch(() => null);
       if (!res?.ok) {
         momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
         render();
@@ -726,7 +861,9 @@ function askBox(meeting) {
   return box;
 }
 
+// Empties a key field when its address moves to another host, and brings the key back on return.
 function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
+  // Returns the origin of the current address, or '' when it is not a valid URL.
   const hostOf = () => {
     try {
       return new URL(addressOf()).origin;
@@ -736,6 +873,7 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
   };
   let saved = { host: hostOf(), key: key.value };
   let cleared = false;
+  // Clears or restores the key to match the host now typed in the address field.
   const sync = () => {
     if (paused()) return;
     const sameHost = hostOf() === saved.host;
@@ -748,6 +886,7 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
     }
   };
   for (const input of fields) input.addEventListener('input', sync);
+  // Records the current host and key as the saved pair after Save.
   const remember = () => {
     if (paused()) return;
     saved = { host: hostOf(), key: key.value };
@@ -756,6 +895,7 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
   return { sync, remember };
 }
 
+// Builds the "Who spoke" bars showing each speaker's share of words.
 function talkShare(shares) {
   const box = el('div', 'talk');
   box.setAttribute('role', 'list');
@@ -772,6 +912,7 @@ function talkShare(shares) {
   return box;
 }
 
+// Builds one transcript line: speaker, guessed tag, time, play button, text, and caption correction.
 function segmentLine(s, play, provisional) {
   const seg = el('div', provisional ? 'seg provisional' : 'seg');
   if (s.id !== undefined) seg.dataset.segId = s.id;
@@ -779,7 +920,10 @@ function segmentLine(s, play, provisional) {
   head.append(el('span', 'who', s.speaker));
   if (M.isGuessedSpeaker(s.speaker) || s.matched) {
     const guess = el('span', 'guess', globalThis.MeetI18n.t('guessed'));
-    guess.title = globalThis.MeetI18n.t(s.matched ? 'Matched to a saved voice, so it can be wrong. Rename it in Edit transcript.' : 'Told apart by voice, so it can be wrong. Rename it in Edit transcript.');
+    const why = s.matched
+      ? 'Matched to a saved voice, so it can be wrong. Rename it in Edit transcript.'
+      : 'Told apart by voice, so it can be wrong. Rename it in Edit transcript.';
+    guess.title = globalThis.MeetI18n.t(why);
     head.append(guess);
   }
   head.append(el('span', 'time', new Date(s.t).toLocaleTimeString()));
@@ -793,15 +937,21 @@ function segmentLine(s, play, provisional) {
   seg.append(head, el('div', null, s.text));
   if (s.captionText) {
     const note = el('details', 'corrected');
-    note.append(el('summary', null, globalThis.MeetI18n.t('Corrected from audio')), raw(el('div', null, s.captionText)));
+    note.append(
+      el('summary', null, globalThis.MeetI18n.t('Corrected from audio')),
+      raw(el('div', null, s.captionText)),
+    );
     seg.append(note);
   }
   return seg;
 }
 
+// Builds the editable speaker and text fields for one transcript line.
 function segmentEditor(meeting, s) {
+  // Sends one transcript edit and shows the error if it was not saved.
   const save = async (change) => {
-    const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change }).catch(() => null);
+    const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change })
+      .catch(() => null);
     if (res?.ok) return;
     momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
     render();
@@ -818,7 +968,11 @@ function segmentEditor(meeting, s) {
     who.defaultValue = who.value;
     save({ from: s.speaker ?? '', to: who.value });
   });
-  const text = mkEl('textarea', { value: s.text, rows: Math.max(1, Math.ceil(s.text.length / EDIT_LINE_CHARS)), disabled: !s.id });
+  const text = mkEl('textarea', {
+    value: s.text,
+    rows: Math.max(1, Math.ceil(s.text.length / EDIT_LINE_CHARS)),
+    disabled: !s.id,
+  });
   text.defaultValue = s.text;
   text.dataset.editKey = `text:${s.id}`;
   text.setAttribute('aria-label', t('Transcript line'));
@@ -837,8 +991,10 @@ function segmentEditor(meeting, s) {
 
 let historyQuery = '';
 let historyTag = null;
+// Tells whether a meeting has the tag (ignoring case); no tag matches every meeting.
 const hasTag = (m, tag) => !tag || (m.tags ?? []).some((x) => x.toLowerCase() === tag.toLowerCase());
 
+// Builds the row of tag buttons that filter the History list, starting with "All".
 function tagChips(tags) {
   const row = el('div', 'tag-chips');
   row.setAttribute('role', 'group');
@@ -857,7 +1013,9 @@ function tagChips(tags) {
 const IMPORT_PART_MS = 120000;
 let importNote = null;
 
+// Imports an audio file as a new meeting, saves its parts, and starts transcribing it.
 async function importFile(file) {
+  // Sends a message to the service worker.
   const send = (msg) => chrome.runtime.sendMessage(msg);
   const store = globalThis.MeetAudioStore;
   importNote = el('span', 'muted', 'Reading the file…');
@@ -869,10 +1027,15 @@ async function importFile(file) {
     const { parts, durationMs } = await globalThis.MeetWav.speechParts(file, IMPORT_PART_MS / 1000);
     if (!parts.length) throw new Error('This file has no audio to transcribe.');
     const baseTime = await store.freeRecId(file.lastModified - durationMs);
-    const added = await send({ type: 'add-imported-meeting', title: file.name.replace(/\.[^.]*$/, ''), startedAt: baseTime, endedAt: file.lastModified });
+    const title = file.name.replace(/\.[^.]*$/, '');
+    const added = await send({
+      type: 'add-imported-meeting', title, startedAt: baseTime, endedAt: file.lastModified,
+    });
     if (!added?.ok) throw new Error(added?.error ?? 'Could not reach the service worker.');
     id = added.id;
-    await store.beginAudio({ meetingId: id, chunkMs: IMPORT_PART_MS, baseTime, keep: settingsCache.keepRecordings, imported: true });
+    await store.beginAudio({
+      meetingId: id, chunkMs: IMPORT_PART_MS, baseTime, keep: settingsCache.keepRecordings, imported: true,
+    });
     for (const part of parts) await store.appendChunk(part, baseTime);
     importNote = null;
     audioMetaKey = null;
@@ -881,7 +1044,10 @@ async function importFile(file) {
       momErrors.set(id, `${denied} Press Generate transcript to try again.`);
     } else {
       const res = await send({ type: 'regenerate-transcript', id, recId: baseTime }).catch(() => null);
-      if (!res?.ok) momErrors.set(id, `${res?.error ?? 'Could not reach the service worker.'} Press Generate transcript to try again.`);
+      if (!res?.ok) {
+        const reason = res?.error ?? 'Could not reach the service worker.';
+        momErrors.set(id, `${reason} Press Generate transcript to try again.`);
+      }
     }
   } catch (e) {
     if (id) await send({ type: 'delete-meeting', id }).catch(() => {});
@@ -890,6 +1056,7 @@ async function importFile(file) {
   render();
 }
 
+// Builds the action row above History, with the audio import button in the browser.
 function historyActions() {
   const box = el('div', 'actions');
   if (!HAS_AUDIO || Host) return box;
@@ -898,8 +1065,11 @@ function historyActions() {
   return box;
 }
 
+// Builds the History entries that match the search and tag, newest first, under date headings.
 function historyList(items) {
-  const found = items.filter((m) => hasTag(m, historyTag) && M.matchesSearch(m, historyQuery)).sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+  const found = items
+    .filter((m) => hasTag(m, historyTag) && M.matchesSearch(m, historyQuery))
+    .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   if (!found.length) return [el('p', 'muted', 'No meetings match.')];
   const now = Date.now();
   let group = null;
@@ -908,10 +1078,12 @@ function historyList(items) {
     const headed = heading === group ? [] : [el('h3', 'group', heading)];
     group = heading;
     const item = el('button', 'item');
+    const count = m.segments.length;
+    const segmentWord = count === 1 ? 'segment' : 'segments';
+    const momMark = m.mom ? ' — MoM ✓' : '';
     item.append(
       raw(el('div', 'who', m.title)),
-      el('div', 'muted',
-        `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} ${m.segments.length === 1 ? 'segment' : 'segments'}${m.mom ? ' — MoM ✓' : ''}`)
+      el('div', 'muted', `${new Date(m.startedAt).toLocaleString()} — ${count} ${segmentWord}${momMark}`)
     );
     if (m.tags?.length) item.append(raw(el('div', 'tags muted', m.tags.map((tag) => `#${tag}`).join(' '))));
     const snippet = M.searchSnippet(m, historyQuery);
@@ -926,15 +1098,21 @@ let historyMode = 'list';
 let askAllDraft = '';
 let askAllState = { asking: false, question: '', answer: '', note: '', error: '' };
 
+// Builds the "Ask all meetings" box with the last answer below it.
 function askAllBox() {
   const box = el('div', 'ask');
   box.append(el('h3', null, 'Ask all meetings'));
   box.append(el('p', 'muted', 'Sends your MoMs, or transcripts where there is no MoM, to your AI service.'));
   const row = el('div', 'ask-row');
-  const input = mkEl('input', { placeholder: 'Ask about all your meetings', value: askAllDraft, defaultValue: askAllDraft });
+  const input = mkEl('input', {
+    placeholder: 'Ask about all your meetings',
+    value: askAllDraft,
+    defaultValue: askAllDraft,
+  });
   input.dataset.editKey = 'ask-all';
   input.setAttribute('aria-label', t('Ask about all your meetings'));
   input.addEventListener('input', () => { askAllDraft = input.value; });
+  // Sends the typed question about all meetings and redraws with the answer or error.
   const send = async () => {
     const question = input.value.trim();
     if (!question || askAllState.asking) return;
@@ -944,12 +1122,15 @@ function askAllBox() {
     askAllState = { asking: true, question, answer: '', note: '', error: '' };
     render();
     const res = await chrome.runtime.sendMessage({ type: 'ask-all', question }).catch(() => null);
+    const note = res?.ok && res.left
+      ? 'Some older or very long meetings did not fit, so they were cut short or left out.'
+      : '';
     askAllState = {
       asking: false,
       question,
       answer: res?.ok ? res.answer : '',
       error: res?.ok ? '' : res?.error ?? 'Could not reach the service worker.',
-      note: res?.ok && res.left ? 'Some older or very long meetings did not fit, so they were cut short or left out.' : '',
+      note,
     };
     render();
   };
@@ -970,19 +1151,26 @@ function askAllBox() {
   return box;
 }
 
+// Builds the checklist of action items from every MoM, grouped by meeting, newest first.
 function actionItemsView(items) {
   const box = el('div');
   box.append(el('h3', null, 'Action items'));
-  const withItems = items.map((meeting) => ({ meeting, list: M.actionItems(meeting) })).filter(({ list }) => list.length)
+  const withItems = items
+    .map((meeting) => ({ meeting, list: M.actionItems(meeting) }))
+    .filter(({ list }) => list.length)
     .sort((a, b) => (b.meeting.startedAt ?? 0) - (a.meeting.startedAt ?? 0));
-  if (!withItems.length) box.append(el('p', 'muted', 'No action items yet. They come from the action sections of your MoMs.'));
+  if (!withItems.length) {
+    box.append(el('p', 'muted', 'No action items yet. They come from the action sections of your MoMs.'));
+  }
   for (const { meeting, list } of withItems) {
     box.append(raw(el('div', 'who', meeting.title)));
     for (const { text, done } of list) {
       const check = mkEl('input', { type: 'checkbox', checked: done });
       check.dataset.editKey = `item:${meeting.id}:${text}`;
       check.addEventListener('change', async () => {
-        const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change: { toggleItem: text } }).catch(() => null);
+        const change = { toggleItem: text };
+        const res = await chrome.runtime.sendMessage({ type: 'edit-transcript', id: meeting.id, change })
+          .catch(() => null);
         if (!res?.ok) check.checked = !check.checked;
       });
       const label = el('label', done ? 'action-item done' : 'action-item');
@@ -1006,6 +1194,7 @@ function actionItemsView(items) {
   return box;
 }
 
+// Draws the History tab: import row, mode switch, ask box, tag filter, search, and meeting list.
 async function renderHistory(epoch) {
   const { meetings = [] } = await chrome.storage.local.get('meetings');
   const items = (await Promise.all(meetings.map(getMeeting))).filter(Boolean);
@@ -1026,6 +1215,7 @@ async function renderHistory(epoch) {
     render();
   }, modeRow);
   view.append(modeRow);
+  // Puts focus back on the field that had it before the redraw.
   const refocus = () => {
     if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();
   };
@@ -1038,7 +1228,12 @@ async function renderHistory(epoch) {
   const tags = M.allTags(items);
   if (historyTag && !tags.some((tag) => tag.toLowerCase() === historyTag.toLowerCase())) historyTag = null;
   if (tags.length) view.append(tagChips(tags));
-  const search = mkEl('input', { type: 'search', id: 'history-search', value: historyQuery, placeholder: 'Search titles, transcripts, and MoM' });
+  const search = mkEl('input', {
+    type: 'search',
+    id: 'history-search',
+    value: historyQuery,
+    placeholder: 'Search titles, transcripts, and MoM',
+  });
   search.setAttribute('aria-label', 'Search meetings');
   const list = el('div');
   list.append(...historyList(items));
@@ -1054,6 +1249,7 @@ async function renderHistory(epoch) {
   }
 }
 
+// Draws the Settings tab: language, AI service, transcript, speech-to-text, sharing, storage, backup.
 async function renderSettings(epoch) {
   const { settings = {} } = await chrome.storage.local.get('settings');
   const hasEngine = await Host?.hasEngine();
@@ -1070,6 +1266,7 @@ async function renderSettings(epoch) {
   languageRow.append(el('label', null, 'Language'), language);
   view.append(languageRow);
   const rowOf = new WeakMap();
+  // Adds a labelled row holding the input to the page and returns the input.
   const field = (label, input) => {
     const row = el('div');
     row.append(el('label', null, label), input);
@@ -1077,7 +1274,10 @@ async function renderSettings(epoch) {
     rowOf.set(input, row);
     return input;
   };
-  const show = (input, on) => { rowOf.get(input).hidden = !on; };
+  // Shows or hides the row that holds an input.
+  const show = (input, on) => {
+    rowOf.get(input).hidden = !on;
+  };
   const { DEFAULT_BASE_URL: DEFAULT_BASE, DEFAULT_MODEL } = globalThis.MeetOpenAI;
   view.append(el('h3', null, 'AI for minutes of meeting'));
   const preset = field('AI service', document.createElement('select'));
@@ -1085,6 +1285,7 @@ async function renderSettings(epoch) {
   addOptions(preset, [...LLM_PRESETS.map((p) => [p.baseUrl, p.name]), ['', 'Other']]);
   const baseUrl = field('AI service address (OpenAI-compatible)',
     mkEl('input', { value: settings.baseUrl ?? DEFAULT_BASE }));
+  // Selects the AI service preset whose address matches the typed one, or "Other".
   const matchPreset = () => {
     const typed = baseUrl.value.trim().replace(/\/+$/, '');
     preset.value = LLM_PRESETS.some((p) => p.baseUrl === typed) ? typed : '';
@@ -1111,6 +1312,7 @@ async function renderSettings(epoch) {
   addOptions(momType, [...M.MOM_PRESETS.map((p) => [p.name, p.name]), ['', 'Custom']]);
   const template = field('MoM template ({{transcript}} = transcript)',
     mkEl('textarea', { value: M.momTemplateOf(settings.momTemplate) }));
+  // Selects the MoM type whose template matches the text, or "Custom".
   const matchMomType = () => {
     momType.value = M.MOM_PRESETS.find((p) => p.template === template.value)?.name ?? '';
   };
@@ -1128,9 +1330,14 @@ async function renderSettings(epoch) {
   view.append(el('h3', null, 'Transcript'));
   const source = field('Transcript source',
     document.createElement('select'));
-  addOptions(source, [['caption', 'Meet captions'], ['both', 'Meet captions + recorded audio'], ['audio', 'Record audio']]);
+  addOptions(source, [
+    ['caption', 'Meet captions'],
+    ['both', 'Meet captions + recorded audio'],
+    ['audio', 'Record audio'],
+  ]);
   source.value = Host ? 'audio' : settings.transcriptSource ?? 'caption';
-  const sourceInfo = el('div', 'muted', 'Captions keep the speaker names. When you stop, recorded audio fixes lines it clearly heard differently and adds what the captions missed. Press Record in each meeting, and turn on Record microphone so your own voice is covered too.');
+  const sourceInfo = el('div', 'muted',
+    'Captions keep the speaker names. When you stop, recorded audio fixes lines it clearly heard differently and adds what the captions missed. Press Record in each meeting, and turn on Record microphone so your own voice is covered too.');
   rowOf.get(source).append(sourceInfo);
   source.addEventListener('change', () => applyMode());
   const hideBox = mkEl('input', { type: 'checkbox', checked: settings.hideCaptions !== false });
@@ -1147,12 +1354,14 @@ async function renderSettings(epoch) {
   show(captionLang, !Host);
   captionLang.addEventListener('change', () => patchSettings({ captionLang: captionLang.value }));
   const micWrap = el('div');
-  const micBox = mkEl('input', { type: 'checkbox', checked: Host ? settings.mic !== false : !!settings.mic });
+  const micOn = Host ? settings.mic !== false : !!settings.mic;
+  const micBox = mkEl('input', { type: 'checkbox', checked: micOn });
   micBox.addEventListener('change', () => patchSettings({ mic: micBox.checked }));
   const micLabel = el('label');
   micLabel.append(micBox, 'Record microphone');
   const micBtn = el('button', null, 'Allow microphone');
-  micBtn.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-mic-permission' }).catch(() => {}));
+  micBtn.addEventListener('click',
+    () => chrome.runtime.sendMessage({ type: 'open-mic-permission' }).catch(() => {}));
   const micRow = el('div', 'actions');
   micRow.append(micBtn);
   micBtn.hidden = !!Host;
@@ -1165,7 +1374,10 @@ async function renderSettings(epoch) {
     document.createElement('select'));
   const engineSaved = ST.sttMode(settings) === 'builtin';
   if (hasEngine || engineSaved) addOptions(sttModeSel, [['builtin', 'Built-in (on this computer)']]);
-  addOptions(sttModeSel, [['whisper-local', 'Your own Whisper server'], ['api', 'Online speech-to-text service']]);
+  addOptions(sttModeSel, [
+    ['whisper-local', 'Your own Whisper server'],
+    ['api', 'Online speech-to-text service'],
+  ]);
   sttModeSel.value = ST.sttMode(settings);
   const INFO = {
     builtin: 'Audio stays on this computer, and no server or internet is needed. Speed depends on your computer. Choose higher accuracy below.',
@@ -1182,32 +1394,41 @@ async function renderSettings(epoch) {
     mkEl('input', { value: initialUrl }));
   const sttApiKey = field('Speech-to-text API key (empty if none)',
     mkEl('input', { type: 'password', value: settings.sttApiKey ?? '' }));
-  const sttKeyGuard = keepKeyWithAddress(() => sttBaseUrl.value.trim() || baseUrl.value.trim() || DEFAULT_BASE, [sttBaseUrl, baseUrl], sttApiKey, () => sttModeSel.value === 'builtin');
+  const sttKeyGuard = keepKeyWithAddress(
+    () => sttBaseUrl.value.trim() || baseUrl.value.trim() || DEFAULT_BASE,
+    [sttBaseUrl, baseUrl],
+    sttApiKey,
+    () => sttModeSel.value === 'builtin',
+  );
   const sttModel = field('Speech-to-text model',
     mkEl('input', { value: settings.sttModel ?? ST.DEFAULT_API_MODEL }));
   const sttLanguage = field('Speech language (empty = detect automatically, or a code such as id, en, ja)',
     mkEl('input', { value: settings.sttLanguage ?? ST.DEFAULT_LANGUAGE }));
   const sttVocabulary = field('Names and terms to spell correctly (optional, separated by commas)',
     mkEl('textarea', { value: settings.sttVocabulary ?? '', rows: 2 }));
+  // Shows only the transcript and speech-to-text fields that the chosen source and engine use.
   function applyMode() {
     const audio = HAS_AUDIO;
-    const m = sttModeSel.value;
+    const mode = sttModeSel.value;
     show(source, HAS_AUDIO && !Host);
     sourceInfo.hidden = source.value !== 'both';
     show(sttModeSel, audio);
-    show(sttBaseUrl, audio && m !== 'builtin');
-    show(sttApiKey, audio && m === 'api');
-    show(sttModel, audio && m === 'api');
+    show(sttBaseUrl, audio && mode !== 'builtin');
+    show(sttApiKey, audio && mode === 'api');
+    show(sttModel, audio && mode === 'api');
     show(sttLanguage, audio);
     show(sttVocabulary, audio);
-    const info = audio && INFO[m];
-    sttInfo.textContent = info ? 'ⓘ ' + INFO[m] : '';
+    const info = audio && INFO[mode];
+    sttInfo.textContent = info ? 'ⓘ ' + INFO[mode] : '';
     sttInfo.hidden = !info;
   }
   const urlByMode = { 'whisper-local': ST.WHISPER_DEFAULT, api: '', builtin: '' };
   let urlMode = savedMode;
   urlByMode[urlMode] = initialUrl;
-  if (savedMode === 'builtin' && settings.sttBaseUrl) urlByMode[ST.isLocalUrl(settings.sttBaseUrl) ? 'whisper-local' : 'api'] = settings.sttBaseUrl;
+  if (savedMode === 'builtin' && settings.sttBaseUrl) {
+    const urlKind = ST.isLocalUrl(settings.sttBaseUrl) ? 'whisper-local' : 'api';
+    urlByMode[urlKind] = settings.sttBaseUrl;
+  }
   sttModeSel.addEventListener('change', () => {
     urlByMode[urlMode] = sttBaseUrl.value.trim();
     urlMode = sttModeSel.value;
@@ -1217,11 +1438,21 @@ async function renderSettings(epoch) {
   });
   applyMode();
   const note = el('span', 'muted', '');
-  const setNote = (cls, text) => { note.className = cls; note.textContent = ' ' + text; };
+  // Shows a result message next to the Test connection and Save buttons.
+  const setNote = (cls, text) => {
+    note.className = cls;
+    note.textContent = ' ' + text;
+  };
+  // Returns the AI service address without trailing slashes, falling back to the default.
   const normalizedBase = () => (baseUrl.value.trim() || DEFAULT_BASE).replace(/\/+$/, '');
+  // Returns the typed speech-to-text address without trailing slashes.
   const sttBaseValue = () => sttBaseUrl.value.trim().replace(/\/+$/, '');
-  const sttBaseForSave = () => (HAS_AUDIO && source.value !== 'caption' && sttModeSel.value !== 'builtin' ? sttBaseValue() : '');
-  const sttBaseForTest = sttBaseForSave;
+  // Returns the speech-to-text address to save and test, or '' when no STT server is used.
+  const sttBaseForSave = () => {
+    const usesSttServer = HAS_AUDIO && source.value !== 'caption' && sttModeSel.value !== 'builtin';
+    return usesSttServer ? sttBaseValue() : '';
+  };
+  // Checks that the speech-to-text server answers, returning a note when it cannot list models.
   async function probeStt(base, key) {
     const host = new URL(base).hostname;
     let res;
@@ -1249,7 +1480,7 @@ async function renderSettings(epoch) {
     setNote('muted', 'Testing…');
     try {
       const base = normalizedBase();
-      const sttBase = sttBaseForTest();
+      const sttBase = sttBaseForSave();
       await ensureOrigins(sttBase ? [base, sttBase] : [base]);
       await globalThis.MeetOpenAI.testConnection({
         apiKey: apiKey.value.trim(),
@@ -1257,7 +1488,8 @@ async function renderSettings(epoch) {
         baseUrl: base,
       });
       const sttNote = sttBase ? await probeStt(sttBase, sttApiKey.value.trim()) : '';
-      setNote('ok', `✓ Connection OK${sttBase ? ' (chat + STT)' : ''}: URL, API key, and model are valid.${sttNote}`);
+      const tested = sttBase ? ' (chat + STT)' : '';
+      setNote('ok', `✓ Connection OK${tested}: URL, API key, and model are valid.${sttNote}`);
     } catch (e) {
       setNote('err', '✗ Failed: ' + (e?.message ?? e));
     } finally {
@@ -1275,6 +1507,7 @@ async function renderSettings(epoch) {
       save.disabled = false;
     }
   });
+  // Asks for host access, writes every field to the settings, and reports the outcome.
   async function doSave() {
     const base = normalizedBase();
     const sttBase = sttBaseForSave();
@@ -1308,14 +1541,19 @@ async function renderSettings(epoch) {
     apiKeyGuard.remember();
     sttKeyGuard.remember();
     const noPlaceholder = !template.value.includes('{{transcript}}');
-    if (warning) setNote('err', `Saved, but ${warning} Requests may fail.`);
-    else if (noPlaceholder) setNote('err', 'Saved, but the MoM template has no {{transcript}}, so MoM will be made without the transcript.');
-    else setNote('ok', 'Saved.');
+    if (warning) {
+      setNote('err', `Saved, but ${warning} Requests may fail.`);
+    } else if (noPlaceholder) {
+      setNote('err', 'Saved, but the MoM template has no {{transcript}}, so MoM will be made without the transcript.');
+    } else {
+      setNote('ok', 'Saved.');
+    }
   }
   const actions = el('div', 'actions');
   actions.append(test, save, note);
   view.append(actions);
   view.append(el('h3', null, 'Sending the MoM'));
+  // Adds a field that saves its trimmed value to the given settings key when changed.
   const secretField = (key, label, type) => {
     const input = field(label, mkEl('input', { type, value: settings[key] ?? '' }));
     input.addEventListener('change', () => patchSettings({ [key]: input.value.trim() }));
@@ -1329,7 +1567,8 @@ async function renderSettings(epoch) {
   let keptDays = settings.deleteAfterDays ?? '';
   keepDays.addEventListener('change', async () => {
     const days = Number(keepDays.value);
-    if (days > 0 && !confirm(globalThis.MeetI18n.t('Older meetings and their recordings are deleted now, and whenever the app starts. This cannot be undone. Continue?'))) {
+    if (days > 0
+      && !confirm(globalThis.MeetI18n.t('Older meetings and their recordings are deleted now, and whenever the app starts. This cannot be undone. Continue?'))) {
       keepDays.value = keptDays;
       return;
     }
@@ -1338,7 +1577,12 @@ async function renderSettings(epoch) {
     await chrome.runtime.sendMessage({ type: 'delete-old-meetings' }).catch(() => {});
   });
   const keepRecordings = field('Recordings to keep (older ones are deleted when a new recording starts)',
-    mkEl('input', { type: 'number', min: 1, max: 100, value: globalThis.MeetAudioStore.keepCount(settings.keepRecordings) }));
+    mkEl('input', {
+      type: 'number',
+      min: 1,
+      max: 100,
+      value: globalThis.MeetAudioStore.keepCount(settings.keepRecordings),
+    }));
   show(keepRecordings, HAS_AUDIO);
   keepRecordings.addEventListener('change', () => {
     const count = globalThis.MeetAudioStore.keepCount(keepRecordings.value);
@@ -1347,49 +1591,64 @@ async function renderSettings(epoch) {
   });
   for (const row of Host?.settingsRows(settings) ?? []) view.append(row);
   view.append(el('h3', null, 'Backup'));
-  const bnote = el('span', 'muted', '');
-  const setBnote = (cls, text) => { bnote.className = cls; bnote.textContent = ' ' + text; };
+  const backupNote = el('span', 'muted', '');
+  // Shows a result message next to the backup buttons.
+  const setBackupNote = (cls, text) => {
+    backupNote.className = cls;
+    backupNote.textContent = ' ' + text;
+  };
   const exportBtn = el('button', null, 'Export backup (.zip)');
   exportBtn.addEventListener('click', async () => {
     if (recState.recording || recState.transcribing || status.inCall) {
-      return setBnote('err', '✗ A recording, transcript, or meeting is running, so the backup would be incomplete. Wait until it finishes.');
+      return setBackupNote('err',
+        '✗ A recording, transcript, or meeting is running, so the backup would be incomplete. Wait until it finishes.');
     }
     exportBtn.disabled = true;
-    setBnote('muted', 'Building zip…');
+    setBackupNote('muted', 'Building zip…');
     try {
-      const zip = await globalThis.MeetBackup.exportBackup({ includeKeys: keysBox.checked, password: passwordBox.value });
+      const zip = await globalThis.MeetBackup.exportBackup({
+        includeKeys: keysBox.checked,
+        password: passwordBox.value,
+      });
       download(`transcripables-backup-${new Date().toISOString().slice(0, 10)}.zip`, zip);
-      setBnote('ok', `✓ Backup ready (${zip.size < 1048576
+      const size = zip.size < 1048576
         ? `${Math.max(1, Math.round(zip.size / 1024))} KB`
-        : `${(zip.size / 1048576).toFixed(1)} MB`}).`);
+        : `${(zip.size / 1048576).toFixed(1)} MB`;
+      setBackupNote('ok', `✓ Backup ready (${size}).`);
     } catch (e) {
-      setBnote('err', '✗ Export failed: ' + (e?.message ?? e));
+      setBackupNote('err', '✗ Export failed: ' + (e?.message ?? e));
     } finally {
       exportBtn.disabled = false;
     }
   });
   const importInput = mkEl('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
   const importBtn = el('button', null, 'Import backup');
-  importBtn.addEventListener('click', () => { importInput.value = ''; importInput.click(); });
+  importBtn.addEventListener('click', () => {
+    importInput.value = '';
+    importInput.click();
+  });
   importInput.addEventListener('change', async () => {
     const file = importInput.files?.[0];
     if (!file) return;
     if (recState.recording || recState.transcribing || status.inCall) {
-      return setBnote('err', '✗ A recording, transcript, or meeting is running. Stop it or leave before importing.');
+      return setBackupNote('err',
+        '✗ A recording, transcript, or meeting is running. Stop it or leave before importing.');
     }
     if (!confirm(t('Import REPLACES all current data (history, settings, saved recordings). Continue?'))) return;
     importBtn.disabled = true;
-    setBnote('muted', 'Importing…');
+    setBackupNote('muted', 'Importing…');
     try {
-      const r = await globalThis.MeetBackup.importBackup(file, { password: passwordBox.value });
+      const result = await globalThis.MeetBackup.importBackup(file, { password: passwordBox.value });
       await loadSettings();
       audioMetaKey = null;
-      alert(t(r.audioError
-        ? `Import PARTLY finished: ${r.meetings} meetings restored, but audio and video could not be restored (${r.audioError}). The old data has been replaced.`
-        : `Import finished: ${r.meetings} meetings${r.chunks ? `, ${r.chunks} recording parts` : ''}.`));
+      const recordingParts = result.chunks ? `, ${result.chunks} recording parts` : '';
+      const message = result.audioError
+        ? `Import PARTLY finished: ${result.meetings} meetings restored, but audio and video could not be restored (${result.audioError}). The old data has been replaced.`
+        : `Import finished: ${result.meetings} meetings${recordingParts}.`;
+      alert(t(message));
       render();
     } catch (e) {
-      setBnote('err', '✗ Import failed: ' + (e?.message ?? e));
+      setBackupNote('err', '✗ Import failed: ' + (e?.message ?? e));
     } finally {
       importBtn.disabled = false;
     }
@@ -1397,13 +1656,18 @@ async function renderSettings(epoch) {
   const keysBox = mkEl('input', { type: 'checkbox' });
   const keysLabel = el('label');
   keysLabel.append(keysBox, 'Include API keys in the backup, locked with a password');
-  const passwordBox = mkEl('input', { type: 'password', autocomplete: 'new-password', placeholder: t('Backup password') });
+  const passwordBox = mkEl('input', {
+    type: 'password',
+    autocomplete: 'new-password',
+    placeholder: t('Backup password'),
+  });
   passwordBox.setAttribute('aria-label', t('Backup password'));
-  const passwordRow = el('label', 'muted', 'Backup password, needed to export with API keys and to import a backup that has them');
+  const passwordRow = el('label', 'muted',
+    'Backup password, needed to export with API keys and to import a backup that has them');
   passwordRow.append(passwordBox);
   view.append(keysLabel, passwordRow);
   const backupRow = el('div', 'actions');
-  backupRow.append(exportBtn, importBtn, importInput, bnote);
+  backupRow.append(exportBtn, importBtn, importInput, backupNote);
   view.append(backupRow);
   view.append(el('div', 'muted',
     'Backups hold transcripts, MoM, and Settings, not recording files. Audio and '
@@ -1412,31 +1676,54 @@ async function renderSettings(epoch) {
     + 'the recordings saved at that moment.'));
 }
 
-chrome.storage.onChanged.addListener((c, area) => {
-  if (area === 'local' && c.settings) { settingsCache = c.settings.newValue ?? {}; if (tab === 'live') render(); }
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings) {
+    settingsCache = changes.settings.newValue ?? {};
+    if (tab === 'live') render();
+  }
 });
 
+// Loads the language and settings, picks up the active meeting and recording, then draws the panel.
 (async () => {
   await globalThis.MeetI18n.follow();
   await loadSettings();
-  const a = await chrome.runtime.sendMessage({ type: 'get-active' }).catch(() => null);
-  if (a) status = a;
-  if (a?.rec) recState = { ...recState, recording: a.rec.recording, transcribing: a.rec.transcribing, muted: a.rec.muted, paused: !!a.rec.paused,
-    saving: a.rec.transcribing && a.rec.autoStt === false };
-  if (a?.panelTab) selectTab(a.panelTab);
-  if (a?.panelMeetingId) viewingId = a.panelMeetingId;
+  const active = await chrome.runtime.sendMessage({ type: 'get-active' }).catch(() => null);
+  if (active) status = active;
+  if (active?.rec) {
+    recState = {
+      ...recState,
+      recording: active.rec.recording,
+      transcribing: active.rec.transcribing,
+      muted: active.rec.muted,
+      paused: !!active.rec.paused,
+      saving: active.rec.transcribing && active.rec.autoStt === false,
+    };
+  }
+  if (active?.panelTab) selectTab(active.panelTab);
+  if (active?.panelMeetingId) viewingId = active.panelMeetingId;
   render();
 })();
 
+// Lists what the Ctrl+K palette can do: switch tabs, press a visible button, or open a meeting.
 function paletteEntries(meetings) {
   const tabs = [['live', 'Live'], ['history', 'History'], ['settings', 'Settings']]
-    .map(([name, label]) => ({ kind: 'Tab', label: t(`Go to ${label}`), run: () => { selectTab(name); render(); } }));
-  const buttons = [...view.querySelectorAll('button')].filter((b) => !b.disabled && !b.matches('.play, .item') && b.textContent.trim())
+    .map(([name, label]) => ({
+      kind: 'Tab',
+      label: t(`Go to ${label}`),
+      run: () => { selectTab(name); render(); },
+    }));
+  const buttons = [...view.querySelectorAll('button')]
+    .filter((b) => !b.disabled && !b.matches('.play, .item') && b.textContent.trim())
     .map((b) => ({ kind: 'Action', label: b.textContent.trim(), run: () => b.click() }));
-  const opened = meetings.map((m) => ({ kind: 'Meeting', label: m.title, run: () => { selectTab('history'); viewingId = m.id; render(); } }));
+  const opened = meetings.map((m) => ({
+    kind: 'Meeting',
+    label: m.title,
+    run: () => { selectTab('history'); viewingId = m.id; render(); },
+  }));
   return [...tabs, ...buttons, ...opened];
 }
 
+// Opens the Ctrl+K palette, which filters entries as you type and runs the chosen one.
 async function openPalette() {
   if (document.querySelector('dialog.palette[open]')) return;
   document.querySelectorAll('dialog.palette').forEach((closed) => closed.remove());
@@ -1450,13 +1737,17 @@ async function openPalette() {
   list.setAttribute('role', 'listbox');
   let shown = [];
   let at = 0;
+  // Closes the palette and runs the chosen entry.
   const choose = (entry) => {
     palette.close();
     entry.run();
   };
+  // Redraws the list with up to 50 entries that contain every typed word, highlighting the current one.
   const draw = () => {
     const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
-    shown = entries.filter((entry) => words.every((word) => entry.label.toLowerCase().includes(word))).slice(0, 50);
+    shown = entries
+      .filter((entry) => words.every((word) => entry.label.toLowerCase().includes(word)))
+      .slice(0, 50);
     at = Math.min(at, Math.max(0, shown.length - 1));
     list.replaceChildren(...shown.map((entry, i) => {
       const row = el('button', i === at ? 'palette-row active' : 'palette-row');
@@ -1469,11 +1760,15 @@ async function openPalette() {
     if (!shown.length) list.append(el('div', 'muted', 'No matches'));
     list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
   };
-  input.addEventListener('input', () => { at = 0; draw(); });
+  input.addEventListener('input', () => {
+    at = 0;
+    draw();
+  });
   input.addEventListener('keydown', (ev) => {
     if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && shown.length) {
       ev.preventDefault();
-      at = (at + (ev.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length;
+      const step = ev.key === 'ArrowDown' ? 1 : -1;
+      at = (at + step + shown.length) % shown.length;
       draw();
     } else if (ev.key === 'Enter' && shown[at]) {
       ev.preventDefault();
