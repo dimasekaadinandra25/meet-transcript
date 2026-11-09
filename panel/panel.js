@@ -161,6 +161,7 @@ const EDIT_LINE_CHARS = 40;
 let audioMeta = null;
 let audioMetaKey = null;
 const momErrors = new Map();
+const momFailures = new Map();
 
 const CLICK_HOLD_MS = 1000;
 let clickHold = null;
@@ -294,10 +295,11 @@ async function renderMeeting(id, live, epoch) {
   view.append(titleEditor(meeting));
   const startedText = new Date(meeting.startedAt).toLocaleString();
   if (meeting.title !== startedText) view.append(el('p', 'muted', startedText));
-  if (momErrors.has(meeting.id)) view.append(el('div', 'error', momErrors.get(meeting.id)));
-  if (!live && recState.error && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
-    view.append(el('div', 'err', recState.error));
-  }
+  const issues = el('div');
+  view.append(issues);
+  if (momErrors.has(meeting.id)) issues.append(el('div', 'error', momErrors.get(meeting.id)));
+  const recError = !live && recState.error && (audioMeta ?? []).some((r) => r.meetingId === meeting.id) ? el('div', 'err', recState.error) : null;
+  if (recError) view.append(recError);
   const actions = el('div', 'actions');
   const btn = (label, fn, box = actions) => mkBtn(label, fn, box);
   const flash = (b, label, ms = 2000) => {
@@ -319,14 +321,21 @@ async function renderMeeting(id, live, epoch) {
   copy.item('Copy transcript', copyTo(() => M.formatWithMarks(meeting)));
   if (meeting.segments.length) copy.item('Copy prompt + transcript', copyTo(() => promptText(meeting)));
   const mom = dropdown('mom', meeting.mom ? 'Regenerate MoM' : 'Generate MoM');
-  mom.item(meeting.mom ? 'Regenerate MoM' : 'Generate MoM', async () => {
+  const makeMom = async () => {
     mom.head.textContent = 'Generating…';
     momErrors.delete(meeting.id);
+    momFailures.delete(meeting.id);
     const res = await chrome.runtime.sendMessage({ type: 'generate-mom', id: meeting.id })
       .catch(() => null);
-    if (!res?.ok) momErrors.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
+    if (!res?.ok) momFailures.set(meeting.id, res?.error ?? 'Could not reach the service worker.');
     render();
-  });
+  };
+  mom.item(meeting.mom ? 'Regenerate MoM' : 'Generate MoM', makeMom);
+  if (momFailures.has(meeting.id)) {
+    const card = el('div', 'error', `MoM could not be made: ${momFailures.get(meeting.id)}`);
+    mkBtn('Try MoM again', makeMom, card);
+    issues.append(card);
+  }
   if (meeting.segments.length) {
     for (const [name, target] of [['Gemini', 'gemini'], ['ChatGPT', 'chatgpt']]) {
       mom.item(Host ? Host.aiLabel(name) : 'Paste into ' + name, async () => {
@@ -398,6 +407,8 @@ async function renderMeeting(id, live, epoch) {
   if (!live && recState.transcribing && (audioMeta ?? []).some((r) => r.meetingId === meeting.id)) {
     actions.append(el('span', 'muted', busyLabel()));
   }
+  let retry = null;
+  const retryable = new Map();
   const recs = (audioMeta ?? []).filter((r) => r.meetingId === meeting.id
     && (r.count > 0 || r.videoCount > 0 || r.mixCount > 0 || r.systemCount > 0 || r.micCount > 0));
   if (recs.length && !recState.recording && !recState.transcribing) {
@@ -457,6 +468,8 @@ async function renderMeeting(id, live, epoch) {
           render();
         }
       };
+      retry = jalankan;
+      for (const r of reable) retryable.set(r.baseTime, r);
       if (reable.length === 1) {
         const reBtn = btn(label(reable[0]), () => {
           reBtn.disabled = true;
@@ -469,6 +482,23 @@ async function renderMeeting(id, live, epoch) {
             () => jalankan(r, (t) => { re.head.textContent = t; }));
         }
       }
+    }
+  }
+  if (!live && !recState.recording && !recState.transcribing) {
+    for (const { baseTime, count } of M.failedParts(meeting)) {
+      const r = retryable.get(baseTime);
+      const text = r
+        ? (count === 1 ? 'The recording is saved, but one part could not be transcribed.' : `The recording is saved, but ${count} parts could not be transcribed.`)
+        : (count === 1 ? 'One part could not be transcribed, and its audio is no longer saved.' : `${count} parts could not be transcribed, and their audio is no longer saved.`);
+      const card = el('div', 'error', text);
+      if (recError) card.append(recError);
+      if (r && retry) {
+        const again = mkBtn('Try transcription again', () => {
+          again.disabled = true;
+          return retry(r, (t) => { again.textContent = t; });
+        }, card);
+      }
+      issues.append(card);
     }
   }
   const running = recState.recording || recState.transcribing || (status.inCall && status.id === meeting.id);

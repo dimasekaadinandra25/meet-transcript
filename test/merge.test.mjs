@@ -578,3 +578,16 @@ test('an action item points to the transcript line it came from', () => {
   assert.equal(sourceLine(meeting, 'Laporan'), null);
   assert.equal(sourceLine({ segments: [] }, 'kirim laporan anggaran'), null);
 });
+
+test('failed parts are counted per recording', () => {
+  const { failedParts } = globalThis.MeetMerge;
+  const meeting = { segments: [
+    { id: 'audio:100:0', text: 'ok', t: 1 },
+    { id: 'audio:100:1', text: '[transcript failed]', failed: true, t: 2 },
+    { id: 'audio:100:2', text: '[transcript failed]', failed: true, t: 3 },
+    { id: 'audio:200:0', text: '[transcript failed]', failed: true, t: 4 },
+    { id: 'c1', text: 'caption', t: 5 },
+  ] };
+  assert.deepEqual(failedParts(meeting), [{ baseTime: 100, count: 2 }, { baseTime: 200, count: 1 }]);
+  assert.deepEqual(failedParts({ segments: [{ id: 'audio:1:0', text: 'fine' }] }), []);
+});
