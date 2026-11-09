@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const { createSpeakers, parseTurns } = require('../main/speakers.js');
@@ -29,7 +29,7 @@ test('runs the program on the audio with both models, then removes the audio', a
   assert.ok(call.args.includes('--segmentation.pyannote-model=segmentation.onnx'));
   assert.ok(call.args.includes('--embedding.model=embedding.onnx'));
   assert.ok(call.args.some((a) => a.startsWith('--clustering.cluster-threshold=')));
-  assert.ok(!isAbsolute(call.args.at(-1)));
+  assert.equal(call.args.at(-1), relative(dir, call.audio));
   assert.deepEqual(call.bytes, [1, 2, 3]);
   assert.ok(!existsSync(call.audio));
 });
