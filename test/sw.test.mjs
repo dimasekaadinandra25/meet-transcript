@@ -113,6 +113,7 @@ function loadSw({ offscreen, recordings = [], store = {}, removeRecordings = asy
 
 const idOf = loadSw({ offscreen: null }).meetingIdFromUrl;
 
+const IDLE = { recording: false, transcribing: false, meetingId: null, tabId: null, autoStt: undefined, paused: false };
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 test('get-active memulihkan rekaman yang masih jalan di offscreen', async () => {
@@ -120,7 +121,7 @@ test('get-active memulihkan rekaman yang masih jalan di offscreen', async () => 
     tabId: 42, autoStt: false } });
   const a = await sw.ask({ type: 'get-active' });
   assert.deepEqual({ ...a.rec },
-    { recording: true, transcribing: false, meetingId: 'discord-1-2', tabId: 42, autoStt: false });
+    { ...IDLE, recording: true, meetingId: 'discord-1-2', tabId: 42, autoStt: false });
   assert.equal(sw.badge(), '●');
   assert.ok(sw.sent.some((m) => m.target === 'offscreen' && m.op === 'state'));
 });
@@ -130,20 +131,20 @@ test('transkrip yang masih jalan ikut dipulihkan', async () => {
     tabId: null, autoStt: true } });
   const a = await sw.ask({ type: 'get-active' });
   assert.deepEqual({ ...a.rec },
-    { recording: false, transcribing: true, meetingId: 'abc-defg-hij', tabId: null, autoStt: true });
+    { ...IDLE, transcribing: true, meetingId: 'abc-defg-hij', autoStt: true });
 });
 
 test('tanpa dokumen offscreen, rec tetap kosong', async () => {
   const sw = loadSw({ offscreen: null });
   const a = await sw.ask({ type: 'get-active' });
-  assert.deepEqual({ ...a.rec }, { recording: false, transcribing: false, meetingId: null });
+  assert.deepEqual({ ...a.rec }, IDLE);
   assert.ok(!sw.sent.some((m) => m.target === 'offscreen'));
 });
 
 test('offscreen yang idle tidak memalsukan rekaman', async () => {
   const sw = loadSw({ offscreen: { recording: false, transcribing: false, meetingId: null } });
   const a = await sw.ask({ type: 'get-active' });
-  assert.deepEqual({ ...a.rec }, { recording: false, transcribing: false, meetingId: null });
+  assert.deepEqual({ ...a.rec }, IDLE);
   assert.ok(!sw.badge());
 });
 
@@ -159,7 +160,7 @@ test('audio-saved melepas status transkrip', async () => {
   assert.equal((await sw.ask({ type: 'get-active' })).rec.transcribing, true);
   await sw.ask({ type: 'audio-saved', meetingId: 'abc-defg-hij' });
   const a = await sw.ask({ type: 'get-active' });
-  assert.deepEqual({ ...a.rec }, { recording: false, transcribing: false, meetingId: null });
+  assert.deepEqual({ ...a.rec }, IDLE);
   assert.equal(sw.badge(), '');
 });
 

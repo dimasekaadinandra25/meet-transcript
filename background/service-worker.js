@@ -75,7 +75,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   updateBadge();
 });
 
-const REC_IDLE = { recording: false, transcribing: false, meetingId: null };
+const REC_IDLE = { recording: false, transcribing: false, meetingId: null, tabId: null, autoStt: undefined, paused: false };
 let rec = { ...REC_IDLE };
 const recBusy = () => rec.recording || rec.transcribing;
 
@@ -133,8 +133,8 @@ const recRestored = (async () => {
     .catch(() => null);
   if (!res?.ok || (!res.recording && !res.transcribing)) return;
   if (recBusy()) return;
-  rec = { recording: res.recording, transcribing: res.transcribing, meetingId: res.meetingId,
-    tabId: res.tabId ?? null, autoStt: res.autoStt, ...(res.paused ? { paused: true } : {}) };
+  rec = { ...REC_IDLE, recording: res.recording, transcribing: res.transcribing, meetingId: res.meetingId,
+    tabId: res.tabId ?? null, autoStt: res.autoStt, paused: !!res.paused };
   updateBadge();
   broadcastRec();
 })().catch((e) => console.warn('[rec] could not restore state', e.message));
@@ -298,7 +298,7 @@ let startPromise = null;
 async function startRecording({ streamId, meetingId, title, video, tabId }) {
   if (recBusy()) throw new Error('A recording is still running.');
   const baseTime = Date.now();
-  rec = { recording: true, transcribing: false, meetingId, tabId };
+  rec = { ...REC_IDLE, recording: true, meetingId, tabId };
   updateBadge();
   startPromise = (async () => {
     if (await hasOffscreen()) throw new Error('A recording is still running.');
@@ -336,7 +336,7 @@ async function regenerateTranscript(meetingId, recId) {
   if (!Number.isFinite(Number(recId))) {
     throw new Error('No recording was named for retranscribing (empty recId).');
   }
-  rec = { recording: false, transcribing: true, meetingId, autoStt: true };
+  rec = { ...REC_IDLE, transcribing: true, meetingId, autoStt: true };
   updateBadge();
   broadcastRec({ error: null });
   try {
@@ -550,7 +550,7 @@ async function generateMom(id) {
         fresh.mom = mom;
         fresh.momBasedOn = momBasedOn;
         await chrome.storage.local.set({ [key]: fresh });
-        resolve();
+        resolve(null);
       } catch (e) {
         reject(e);
       }
@@ -868,7 +868,7 @@ const HANDLERS = {
     reply(regenerateTranscript(msg.id, msg.recId), sendResponse),
   'audio-progress': (msg) => {
     if (!rec.transcribing) {
-      rec = { recording: false, transcribing: true, meetingId: msg.meetingId ?? rec.meetingId, autoStt: true };
+      rec = { ...REC_IDLE, transcribing: true, meetingId: msg.meetingId ?? rec.meetingId, autoStt: true };
       updateBadge();
     }
     broadcastRec({ done: msg.done, total: msg.total });

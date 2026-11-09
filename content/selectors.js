@@ -62,10 +62,10 @@
   };
   function langOption(re) {
     const hits = [...document.querySelectorAll('[role="option"]')]
-      .map((o) => [o, o.textContent.trim()])
-      .filter(([, t]) => re.test(t));
-    hits.sort((a, b) => a[1].length - b[1].length);
-    return hits[0]?.[0] ?? null;
+      .map((o) => ({ o, text: o.textContent.trim() }))
+      .filter(({ text }) => re.test(text));
+    hits.sort((a, b) => a.text.length - b.text.length);
+    return hits[0]?.o ?? null;
   }
   function ccButton() {
     return q([

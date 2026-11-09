@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node scripts/start.js",
     "test": "node --test test/*.test.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.web.json",
     "fetch-engine": "node scripts/fetch-engine.js",
     "build-helper": "node scripts/build-helper.js",
     "dist": "node scripts/fetch-engine.js && node scripts/build-helper.js && electron-builder --win --publish never",
@@ -17,6 +17,7 @@
     "dist:mac": "node scripts/fetch-engine.js && electron-builder --mac --publish never"
   },
   "devDependencies": {
+    "@types/chrome": "0.3.7",
     "@types/node": "20.19.43",
     "electron": "45.2.3",
     "electron-builder": "26.18.0",

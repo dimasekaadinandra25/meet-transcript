@@ -187,7 +187,7 @@ addEventListener('pointerup', endClickHold);
 addEventListener('pointercancel', endClickHold);
 
 view.addEventListener('focusout', (e) => {
-  if (e.target.matches?.('[data-title-editor],[data-edit-key]')) flushRender();
+  if (e.target instanceof Element && e.target.matches('[data-title-editor],[data-edit-key]')) flushRender();
 });
 
 async function render() {

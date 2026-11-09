@@ -250,6 +250,14 @@ Proyek ini dibangun tanpa *build step* yang kompleks (tanpa `npm install`), meng
 node --test test/*.test.mjs
 ```
 
+**Pemeriksaan tipe:** kode tetap JavaScript biasa tanpa build step, dan TypeScript memeriksa semuanya, termasuk ekstensi, `lib/` bersama, dan aplikasi desktop. Jalankan dari `desktop/` setelah `npm ci`:
+
+```bash
+npm run typecheck
+```
+
+`desktop/tsconfig.json` mencakup sisi Node aplikasi desktop dan `desktop/tsconfig.web.json` mencakup kode sisi browser. API khusus Chrome dan global halaman dideklarasikan di `desktop/types/`.
+
 **Membuat Rilis (Khusus Maintainer):**
 
 1. Samakan `"version"` di `manifest.json`, `manifest.firefox.json`, dan `desktop/package.json`.

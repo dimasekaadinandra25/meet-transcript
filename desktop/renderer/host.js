@@ -262,7 +262,7 @@
 
   const MODEL_NAMES = { base: 'Standard (included)', small: 'Better', medium: 'Best, slower' };
   const megabytes = (bytes) => Math.round(bytes / 1000000);
-  let showModelProgress = () => {};
+  let showModelProgress = (progress) => {};
   desktop.engine.onModelProgress((progress) => showModelProgress(progress));
 
   function modelOption({ id, bytes, installed }) {
@@ -280,7 +280,7 @@
     const fill = async () => {
       const models = await desktop.engine.models();
       if (!models.some((model) => model.id === current && model.installed)) current = 'base';
-      select.replaceChildren(modelOption({ id: 'base', installed: true }), ...models.map(modelOption));
+      select.replaceChildren(modelOption({ id: 'base', bytes: 0, installed: true }), ...models.map(modelOption));
       select.value = current;
       return models;
     };

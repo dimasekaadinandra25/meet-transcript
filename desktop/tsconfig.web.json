@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "WebWorker.ImportScripts"],
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["types/storage-change.d.ts", "node_modules/@types/chrome/index.d.ts", "types/web.d.ts", "../lib/*.js", "../background/*.js", "../content/*.js", "../offscreen/*.js", "../panel/*.js", "../popup/*.js", "renderer/*.js"]
+}

@@ -252,6 +252,14 @@ This project has no complex *build step* (no `npm install`) and uses optimized v
 node --test test/*.test.mjs
 ```
 
+**Type checking:** the code stays plain JavaScript with no build step, and TypeScript checks all of it, including the extension, the shared `lib/`, and the desktop app. Run it from `desktop/` after `npm ci`:
+
+```bash
+npm run typecheck
+```
+
+`desktop/tsconfig.json` covers the desktop app's Node side and `desktop/tsconfig.web.json` covers browser-side code. Chrome-only APIs and page globals are declared in `desktop/types/`.
+
 **Creating a release (maintainers only):**
 
 1. Set the same `"version"` in `manifest.json`, `manifest.firefox.json`, and `desktop/package.json`.
