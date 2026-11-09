@@ -506,10 +506,13 @@ async function renderMeeting(id, live, epoch) {
   if (editing) {
     for (const s of meeting.segments) list.append(segmentEditor(meeting, s));
   } else {
+    const settling = (recState.recording || recState.transcribing) && meeting.id === status.id;
+    const fromAudio = (s) => String(s.id ?? '').startsWith('audio:');
+    if (settling && meeting.segments.some(fromAudio)) view.append(el('p', 'muted', 'Lines from the recording may still change. The final transcript replaces them when you stop.'));
     const lines = meeting.segments.map((s, i) => {
       const rec = recordingAt(s.t);
       const next = meeting.segments[i + 1];
-      return { t: s.t, node: segmentLine(s, rec && (() => playLine(meeting, s, next, rec))) };
+      return { t: s.t, node: segmentLine(s, rec && (() => playLine(meeting, s, next, rec)), settling && fromAudio(s)) };
     });
     const marks = (meeting.marks ?? []).map((t) => ({ t, node: markLine(t) }));
     for (const { node } of [...lines, ...marks].sort((a, b) => a.t - b.t)) list.append(node);
@@ -692,8 +695,8 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
   return { sync, remember };
 }
 
-function segmentLine(s, play) {
-  const seg = el('div', 'seg');
+function segmentLine(s, play, provisional) {
+  const seg = el('div', provisional ? 'seg provisional' : 'seg');
   if (s.id !== undefined) seg.dataset.segId = s.id;
   const head = el('div');
   head.append(el('span', 'who', s.speaker));

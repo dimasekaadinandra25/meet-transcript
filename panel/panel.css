@@ -176,6 +176,7 @@ button.item:hover { background: var(--surface-hover); }
 .action-row .action-item { flex: 1; }
 button.link { flex: none; min-height: 24px; margin-top: 4px; padding: 0 6px; border-color: transparent; background: none; box-shadow: none; backdrop-filter: none; color: var(--accent); font-size: 12px; text-decoration: underline; }
 button.link:hover { background: var(--glass-hover); }
+.seg.provisional { color: var(--muted); background: var(--glass); border-style: dashed; border-color: var(--edge); box-shadow: none; }
 .seg.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--info-tint), var(--lift); }
 .seg .play { float: right; min-height: 0; padding: 0 8px; line-height: 22px; font-size: 11px; }
 .mark { margin-bottom: var(--gap); color: var(--accent); font-weight: 600; font-size: 13px; }
