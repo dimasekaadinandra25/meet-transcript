@@ -591,3 +591,15 @@ test('failed parts are counted per recording', () => {
   assert.deepEqual(failedParts(meeting), [{ baseTime: 100, count: 2 }, { baseTime: 200, count: 1 }]);
   assert.deepEqual(failedParts({ segments: [{ id: 'audio:1:0', text: 'fine' }] }), []);
 });
+
+test('talk share counts each speaker\'s words, biggest first', () => {
+  const { speakerShares } = globalThis.MeetMerge;
+  const shares = speakerShares([
+    { speaker: 'Ani', text: 'satu dua tiga' },
+    { speaker: 'Budi', text: 'empat' },
+    { speaker: 'Ani', text: 'lima' },
+    { speaker: '', text: 'tanpa nama sama sekali' },
+  ]);
+  assert.deepEqual(shares, [{ speaker: 'Ani', words: 4, share: 80 }, { speaker: 'Budi', words: 1, share: 20 }]);
+  assert.deepEqual(speakerShares([{ speaker: 'Ani', text: 'sendiri saja' }]), []);
+});

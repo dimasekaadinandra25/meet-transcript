@@ -530,6 +530,8 @@ async function renderMeeting(id, live, epoch) {
     if (meeting.mom) view.append(el('p', 'muted', 'The existing MoM changes only when you regenerate it.'));
   }
   if (!editing && meeting.segments.length) view.append(askBox(meeting));
+  const shares = editing || live ? [] : M.speakerShares(meeting.segments);
+  if (shares.length) view.append(talkShare(shares));
   const list = raw(el('div'));
   const playable = running ? [] : recs.filter((r) => !r.legacy && (r.count > 0 || r.systemCount > 0 || r.micCount > 0));
   const recordingAt = (t) => playable.find((r) => M.coversLine(r, t));
@@ -737,6 +739,22 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
     cleared = false;
   };
   return { sync, remember };
+}
+
+function talkShare(shares) {
+  const box = el('div', 'talk');
+  box.setAttribute('role', 'list');
+  box.setAttribute('aria-label', t('Who spoke'));
+  box.append(el('div', 'talk-head muted', 'Who spoke, by share of words'));
+  for (const { speaker, share } of shares) {
+    const row = el('div', 'talk-row');
+    row.setAttribute('role', 'listitem');
+    const bar = el('div', 'talk-bar');
+    bar.style.setProperty('--share', `${share}%`);
+    row.append(raw(el('span', 'who', speaker)), bar, raw(el('span', 'muted', `${share}%`)));
+    box.append(row);
+  }
+  return box;
 }
 
 function segmentLine(s, play, provisional) {
