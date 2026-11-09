@@ -209,3 +209,17 @@ test('a backup cannot silently replace your Slack webhook', async () => {
   assert.equal(globalThis.MeetBackup.keepCurrentKeys(backup, { slackWebhook: 'https://hooks.slack.com/services/MINE' }).settings.slackWebhook, 'https://hooks.slack.com/services/MINE');
   assert.equal(globalThis.MeetBackup.keepCurrentKeys(backup, {}).settings.slackWebhook, 'https://hooks.slack.com/services/ATTACKER');
 });
+
+test('a backup cannot silently replace where Notion sends your MoM', async () => {
+  await import('../lib/backup.js');
+  const backup = { settings: { notionToken: 'ntn_ATTACKER', notionPage: 'https://www.notion.so/attacker-page' } };
+  const kept = globalThis.MeetBackup.keepCurrentKeys(backup, { notionToken: 'ntn_MINE', notionPage: 'https://www.notion.so/my-page' }).settings;
+  assert.equal(kept.notionToken, 'ntn_MINE');
+  assert.equal(kept.notionPage, 'https://www.notion.so/my-page');
+  const tokenOnly = globalThis.MeetBackup.keepCurrentKeys(backup, { notionToken: 'ntn_MINE' }).settings;
+  assert.equal(tokenOnly.notionToken, 'ntn_MINE');
+  assert.ok(!tokenOnly.notionPage, 'the backup page was paired with your token');
+  const fresh = globalThis.MeetBackup.keepCurrentKeys(backup, {}).settings;
+  assert.equal(fresh.notionToken, 'ntn_ATTACKER');
+  assert.equal(fresh.notionPage, 'https://www.notion.so/attacker-page');
+});
