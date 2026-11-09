@@ -2,11 +2,14 @@ const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
+const { setTimeout: sleep } = require('node:timers/promises');
 const { join } = require('node:path');
 
 const OUTPUT = process.argv[2] ?? join(__dirname, '..', 'engine');
 const SYSTEM_DIR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
 const WINDOWS_TAR = join(SYSTEM_DIR, 'tar.exe');
+const DOWNLOAD_TRIES = 5;
+const RETRY_WAIT_MS = 30000;
 const RUNTIME_FILES = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'vcomp140.dll'];
 const SOURCE = {
   repo: 'https://github.com/ggml-org/whisper.cpp.git',
@@ -48,10 +51,22 @@ const PROGRAM_FILES = [
 
 const digestOf = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-async function download({ url, sha256 }) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  const bytes = Buffer.from(await res.arrayBuffer());
+async function fetchBytes(url, tries, waitMs) {
+  for (let left = tries; ; left--) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { retry: res.status === 429 || res.status >= 500 });
+      return Buffer.from(await res.arrayBuffer());
+    } catch (e) {
+      if (left <= 1 || e.retry === false) throw new Error(`${url}: ${e.message}`);
+      console.log(`${url}: ${e.message}, trying again.`);
+      await sleep(waitMs);
+    }
+  }
+}
+
+async function download({ url, sha256 }, { tries = DOWNLOAD_TRIES, waitMs = RETRY_WAIT_MS } = {}) {
+  const bytes = await fetchBytes(url, tries, waitMs);
   const digest = digestOf(bytes);
   if (digest !== sha256) throw new Error(`${url}: expected SHA-256 ${sha256}, got ${digest}`);
   return bytes;
@@ -144,7 +159,11 @@ async function main() {
   console.log(`Speech engine ready in ${OUTPUT}`);
 }
 
-main().catch((e) => {
-  console.error(e.message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { download };
