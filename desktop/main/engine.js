@@ -11,23 +11,18 @@ const HOST = '127.0.0.1';
 const API_PATH = '/v1/audio/transcriptions';
 const READY_TIMEOUT_MS = 300000;
 const READY_POLL_MS = 250;
-const GUARD_POLL_MS = 2000;
-const GUARD_SCRIPT = `
-const [app, engine] = process.argv.slice(1).map(Number);
-const running = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+const GUARD_POLL_SECONDS = 2;
+
+function guardCommand(platform, app, engine, root = process.env.SystemRoot ?? 'C:\\Windows') {
+  const [a, e] = [Number(app), Number(engine)];
+  if (platform === 'win32') {
+    const alive = (pid) => `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue)`;
+    const script = `while (${alive(e)} -and ${alive(a)}) { Start-Sleep -Seconds ${GUARD_POLL_SECONDS} }; if (-not ${alive(a)}) { Stop-Process -Id ${e} -Force -ErrorAction SilentlyContinue }`;
+    return [join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', script]];
   }
-};
-setInterval(() => {
-  if (!running(engine)) process.exit();
-  if (running(app)) return;
-  process.kill(engine);
-  process.exit();
-}, ${GUARD_POLL_MS});`;
+  const alive = (pid) => `kill -0 ${pid} 2>/dev/null`;
+  return ['/bin/sh', ['-c', `while ${alive(e)} && ${alive(a)}; do sleep ${GUARD_POLL_SECONDS}; done; ${alive(a)} || kill ${e} 2>/dev/null`]];
+}
 
 const engineArgs = (model, port, threads) => [
   '-m', model, '--host', HOST, '--port', String(port), '--inference-path', API_PATH, '-t', String(threads), '-l', 'auto',
@@ -43,8 +38,8 @@ const freePort = () => new Promise((resolve, reject) => {
 });
 
 function guardEngine(enginePid) {
-  spawn(process.execPath, ['-e', GUARD_SCRIPT, String(process.pid), String(enginePid)], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+  const [file, args] = guardCommand(process.platform, process.pid, enginePid);
+  spawn(file, args, {
     stdio: 'ignore',
     windowsHide: true,
   }).on('error', (e) => console.error(e));
@@ -112,4 +107,4 @@ function createEngine({ dir, platform = process.platform, run = spawn, request =
   return { available, url, stop, useModel };
 }
 
-module.exports = { createEngine, engineArgs, GUARD_SCRIPT };
+module.exports = { createEngine, engineArgs, guardCommand };

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { createEngine, engineArgs, GUARD_SCRIPT } = require('../main/engine.js');
+const { createEngine, engineArgs, guardCommand } = require('../main/engine.js');
 
 const DIR = join('C:', 'engine');
 
@@ -148,11 +148,16 @@ const isRunning = (pid) => {
 };
 
 async function waitUntilStopped(pid) {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     if (!isRunning(pid)) return true;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return false;
+}
+
+function startGuard(app, engine) {
+  const [file, args] = guardCommand(process.platform, app, engine);
+  return spawn(file, args, { stdio: 'ignore', windowsHide: true });
 }
 
 function startProgram(program, ...args) {
@@ -162,7 +167,7 @@ function startProgram(program, ...args) {
 test('the guard ends the engine when the app dies without warning', async () => {
   const app = startProgram(IDLE_PROGRAM);
   const fakeEngine = startProgram(IDLE_PROGRAM);
-  const guard = startProgram(GUARD_SCRIPT, app.pid, fakeEngine.pid);
+  const guard = startGuard(app.pid, fakeEngine.pid);
   try {
     await new Promise((resolve) => setTimeout(resolve, 500));
     assert.equal(isRunning(fakeEngine.pid), true);
@@ -177,7 +182,7 @@ test('the guard ends the engine when the app dies without warning', async () => 
 test('the guard ends itself when the engine stops first', async () => {
   const app = startProgram(IDLE_PROGRAM);
   const fakeEngine = startProgram(IDLE_PROGRAM);
-  const guard = startProgram(GUARD_SCRIPT, app.pid, fakeEngine.pid);
+  const guard = startGuard(app.pid, fakeEngine.pid);
   try {
     await new Promise((resolve) => setTimeout(resolve, 500));
     fakeEngine.kill();

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const { resolveAsset, isAppUrl } = createRequire(import.meta.url)('../main/assets.js');
@@ -25,4 +26,18 @@ test('menolak traversal dan path lain', () => {
   for (const p of ['/lib/../manifest.json', '/lib/%2e%2e/LICENSE', '/main/main.js', '/test/x.js', '/lib/..%5cLICENSE', '/lib/%E0%A4%A', '/', '/lib']) {
     assert.equal(resolveAsset(p, roots), null, p);
   }
+});
+
+test('the built app cannot be reused to run other code', () => {
+  const { build } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.deepEqual(build.electronFuses, {
+    runAsNode: false,
+    enableCookieEncryption: true,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+    grantFileProtocolExtraPrivileges: false,
+    resetAdHocDarwinSignature: true,
+  });
 });
