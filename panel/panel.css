@@ -1,18 +1,22 @@
 :root {
   color-scheme: light dark;
-  --bg: #e6eafb;
-  --blob-1: rgba(99, 102, 241, .34);
-  --blob-2: rgba(34, 211, 238, .32);
-  --blob-3: rgba(236, 72, 153, .24);
-  --glass: rgba(255, 255, 255, .56);
-  --glass-hover: rgba(255, 255, 255, .78);
-  --glass-solid: rgba(250, 251, 255, .86);
-  --nav-glass: rgba(255, 255, 255, .56);
+  --bg: #eceff8;
+  --blob-1: rgba(99, 102, 241, .22);
+  --blob-2: rgba(34, 211, 238, .18);
+  --blob-3: rgba(236, 72, 153, .12);
+  --glass: rgba(255, 255, 255, .5);
+  --glass-hover: rgba(255, 255, 255, .74);
+  --glass-solid: rgba(250, 251, 255, .88);
+  --nav-glass: rgba(255, 255, 255, .48);
+  --surface: rgba(255, 255, 255, .82);
+  --surface-hover: rgba(255, 255, 255, .94);
   --field-border: rgba(30, 41, 90, .55);
-  --border: rgba(255, 255, 255, .8);
+  --border: rgba(255, 255, 255, .72);
+  --hairline: rgba(30, 41, 90, .08);
   --edge: rgba(30, 41, 90, .16);
-  --shadow: 0 6px 20px rgba(30, 41, 90, .12);
-  --highlight: inset 0 1px 0 rgba(255, 255, 255, .7);
+  --shadow: 0 10px 30px rgba(30, 41, 90, .12), 0 1px 3px rgba(30, 41, 90, .08);
+  --lift: 0 1px 2px rgba(30, 41, 90, .06), 0 2px 8px rgba(30, 41, 90, .05);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -1px 0 rgba(30, 41, 90, .05);
   --text: #141a33;
   --muted: #3d4461;
   --accent: #4338ca;
@@ -22,9 +26,12 @@
   --danger-tint: rgba(255, 233, 230, .8);
   --record: #d93025;
   --info-tint: rgba(67, 56, 202, .1);
-  --blur: blur(18px) saturate(160%);
-  --radius: 12px;
-  --radius-small: 8px;
+  --blur: blur(22px) saturate(180%);
+  --radius: 16px;
+  --radius-small: 10px;
+  --pill: 999px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --spring: cubic-bezier(.34, 1.3, .64, 1);
   --edge-gap: 12px;
   --gap: 12px;
   --button-gap: 10px;
@@ -35,19 +42,23 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b1020;
-    --blob-1: rgba(99, 102, 241, .46);
-    --blob-2: rgba(34, 211, 238, .22);
-    --blob-3: rgba(236, 72, 153, .22);
-    --glass: rgba(255, 255, 255, .08);
-    --glass-hover: rgba(255, 255, 255, .15);
-    --glass-solid: rgba(26, 31, 58, .86);
-    --nav-glass: rgba(11, 16, 32, .62);
+    --bg: #0a0e1c;
+    --blob-1: rgba(99, 102, 241, .32);
+    --blob-2: rgba(34, 211, 238, .14);
+    --blob-3: rgba(236, 72, 153, .14);
+    --glass: rgba(255, 255, 255, .07);
+    --glass-hover: rgba(255, 255, 255, .14);
+    --glass-solid: rgba(24, 29, 54, .9);
+    --nav-glass: rgba(14, 19, 38, .58);
+    --surface: rgba(22, 27, 50, .74);
+    --surface-hover: rgba(30, 36, 64, .84);
     --field-border: rgba(255, 255, 255, .38);
-    --border: rgba(255, 255, 255, .16);
+    --border: rgba(255, 255, 255, .14);
+    --hairline: rgba(255, 255, 255, .07);
     --edge: rgba(0, 0, 0, .3);
-    --shadow: 0 6px 20px rgba(0, 0, 0, .35);
-    --highlight: inset 0 1px 0 rgba(255, 255, 255, .1);
+    --shadow: 0 10px 30px rgba(0, 0, 0, .4), 0 1px 3px rgba(0, 0, 0, .3);
+    --lift: 0 1px 2px rgba(0, 0, 0, .3), 0 2px 8px rgba(0, 0, 0, .2);
+    --highlight: inset 0 1px 0 rgba(255, 255, 255, .12), inset 0 -1px 0 rgba(0, 0, 0, .2);
     --text: #eef1ff;
     --muted: #b6bed8;
     --accent: #aeb8ff;
@@ -66,6 +77,8 @@
     --glass-hover: var(--bg);
     --glass-solid: var(--bg);
     --nav-glass: var(--bg);
+    --surface: var(--bg);
+    --surface-hover: var(--bg);
     --blur: none;
   }
 }
@@ -92,17 +105,31 @@ nav {
   right: var(--edge-gap);
   z-index: 20;
   display: flex;
-  gap: 6px;
-  padding: 5px;
+  gap: 4px;
+  padding: 4px;
   background: var(--nav-glass);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--pill);
   box-shadow: var(--shadow), var(--highlight);
   backdrop-filter: var(--blur);
 }
-nav button { flex: 1; padding: 7px 8px; border-color: transparent; background: none; box-shadow: none; color: var(--muted); }
-nav button:hover { background: var(--glass-hover); }
-nav button.active { font-weight: 600; color: var(--accent); background: var(--glass-hover); border-color: var(--border); box-shadow: var(--highlight); }
+nav::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 16px) / 3);
+  border-radius: var(--pill);
+  background: var(--glass-hover);
+  box-shadow: var(--highlight), var(--lift);
+  transition: translate .4s var(--spring);
+}
+nav:has([data-tab="history"].active)::before { translate: calc(100% + 4px) 0; }
+nav:has([data-tab="settings"].active)::before { translate: calc(200% + 8px) 0; }
+nav button { position: relative; z-index: 1; flex: 1; padding: 7px 8px; border-color: transparent; background: none; box-shadow: none; color: var(--muted); }
+nav button:hover { background: none; color: var(--text); }
+nav button.active { font-weight: 600; color: var(--accent); }
 main {
   padding: 76px var(--edge-gap) 20px;
   overflow-y: auto;
@@ -127,12 +154,14 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .recording::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--record); }
 
 .seg, .item, .mom {
-  background: var(--glass);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius);
-  box-shadow: var(--highlight);
+  box-shadow: var(--lift);
   padding: var(--card-padding);
 }
+button.item { border-radius: var(--radius); justify-content: flex-start; white-space: normal; }
+button.item:hover { background: var(--surface-hover); }
 .seg { margin-bottom: var(--gap); }
 .seg .who { font-weight: 600; color: var(--accent); }
 .seg .time { color: var(--muted); font-size: 12px; margin-left: 8px; }
@@ -158,7 +187,7 @@ h3.group { margin: var(--gap) 0 6px; font-size: 13px; color: var(--muted); }
 #history-search { margin: 0 0 var(--gap); }
 .mom { white-space: pre-wrap; }
 
-.info, .error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--gap); padding: 12px 14px; border-radius: var(--radius-small); margin: var(--gap) 0; }
+.info, .error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--gap); padding: 12px 14px; border-radius: var(--radius); margin: var(--gap) 0; }
 .info { background: var(--info-tint); border: 1px solid var(--accent); }
 .error { background: var(--danger-tint); border: 1px solid var(--danger); }
 #crash { position: fixed; top: 68px; left: var(--edge-gap); right: var(--edge-gap); z-index: 30; display: block; background: var(--glass-solid); white-space: pre-wrap; word-break: break-word; user-select: text; font-size: 12px; max-height: 40vh; overflow: auto; margin: 0; }
@@ -176,19 +205,22 @@ button, details.menu > summary {
   white-space: nowrap;
   box-sizing: border-box;
   min-height: var(--control-height);
-  padding: 7px 12px;
+  padding: 7px 14px;
   color: var(--text);
   background: var(--glass);
   border: 1px solid var(--border);
-  border-radius: var(--radius-small);
-  box-shadow: var(--highlight);
+  border-radius: var(--pill);
+  box-shadow: var(--highlight), var(--lift);
+  backdrop-filter: var(--blur);
   cursor: pointer;
   font: inherit;
-  transition: background-color .15s ease-out, border-color .15s ease-out;
+  transition: background-color .2s var(--ease), border-color .2s var(--ease), scale .25s var(--spring);
 }
+nav button, button.item, .rows > button, .rows > .menu > summary { backdrop-filter: none; }
 button:hover, details.menu > summary:hover, details.menu[open] > summary { background: var(--glass-hover); }
+button:active:not(:disabled), details.menu > summary:active { scale: .97; }
 button:disabled { opacity: .5; cursor: default; }
-button.primary { font-weight: 600; color: var(--on-accent); background: var(--accent); border-color: transparent; }
+button.primary { font-weight: 600; color: var(--on-accent); background: var(--accent); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), var(--lift); }
 button.primary:hover { background: var(--accent); opacity: .88; }
 button.danger { color: var(--danger); background: var(--danger-tint); border-color: var(--danger); }
 button.danger:hover { background: var(--danger-tint); opacity: .8; }
@@ -197,6 +229,8 @@ button.danger:hover { background: var(--danger-tint); opacity: .8; }
 .level { display: contents; }
 .level[hidden] > * { display: none; }
 meter { width: 100%; height: 8px; }
+meter::-webkit-meter-bar { height: 8px; background: var(--edge); border: 0; border-radius: var(--pill); }
+meter::-webkit-meter-optimum-value, meter::-webkit-meter-suboptimum-value, meter::-webkit-meter-even-less-good-value { border-radius: var(--pill); background: var(--ok); transition: inline-size .2s var(--ease); }
 
 details.menu { position: relative; }
 details.menu > summary { list-style: none; }
@@ -227,7 +261,7 @@ details.menu > .menu-list {
   box-shadow: var(--shadow), var(--highlight);
   backdrop-filter: var(--blur);
 }
-details.menu > .menu-list > button { justify-content: flex-start; white-space: normal; border-color: transparent; background: none; box-shadow: none; text-align: left; }
+details.menu > .menu-list > button { justify-content: flex-start; white-space: normal; border-color: transparent; border-radius: var(--radius-small); background: none; box-shadow: none; backdrop-filter: none; text-align: left; }
 details.menu > .menu-list > button:hover { background: var(--glass-hover); }
 details.menu > .menu-list > .muted { font-size: 12px; padding: 0 6px 2px; }
 
@@ -240,11 +274,13 @@ textarea, input, select {
   min-height: var(--control-height);
   padding: 7px 11px;
   color: var(--text);
-  background: var(--glass);
+  background: var(--surface);
   border: 1px solid var(--field-border);
   border-radius: var(--radius-small);
   font: inherit;
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
 }
+textarea:focus, input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--info-tint); }
 select option { color: var(--text); background: var(--bg); }
 textarea { min-height: 160px; }
 input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; accent-color: var(--accent); }
@@ -287,5 +323,6 @@ input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; acce
 }
 
 @media (prefers-reduced-motion: reduce) {
-  button, details.menu > summary { transition: none; }
+  button, details.menu > summary, nav::before, textarea, input, select { transition: none; }
+  button:active:not(:disabled), details.menu > summary:active { scale: none; }
 }
