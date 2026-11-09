@@ -565,3 +565,16 @@ test('numbered speakers do not carry over to the next session either', () => {
   const { carriedNames } = globalThis.MeetMerge;
   assert.deepEqual(carriedNames({ 'Speaker 1': 'Budi', 'Speaker A': 'Cici', Ani: 'Ani S.' }), { Ani: 'Ani S.' });
 });
+
+test('an action item points to the transcript line it came from', () => {
+  const { sourceLine } = globalThis.MeetMerge;
+  const meeting = { segments: [
+    { id: 'a', speaker: 'Ani', text: 'Selamat pagi semua, kita mulai rapat.' },
+    { id: 'b', speaker: 'Budi', text: 'Saya akan kirim laporan anggaran sebelum hari Jumat.' },
+    { id: 'c', speaker: 'Ani', text: 'Laporan desain sudah selesai minggu lalu.' },
+  ] };
+  assert.equal(sourceLine(meeting, 'Budi: kirim laporan anggaran sebelum Jumat'), 'b');
+  assert.equal(sourceLine(meeting, 'Book the venue for the offsite'), null);
+  assert.equal(sourceLine(meeting, 'Laporan'), null);
+  assert.equal(sourceLine({ segments: [] }, 'kirim laporan anggaran'), null);
+});

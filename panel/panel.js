@@ -2,6 +2,7 @@ const M = globalThis.MeetMerge;
 const view = document.getElementById('view');
 let tab = 'live';
 let viewingId = null;
+let focusLine = null;
 let status = { id: null, inCall: false, captionsOn: false, lastSegmentAt: 0, captionsOnAt: 0 };
 let recState = { recording: false, transcribing: false, saving: false, done: 0, total: 0, error: null };
 
@@ -522,6 +523,12 @@ async function renderMeeting(id, live, epoch) {
   }
   if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();
   view.scrollTop = stickToBottom ? view.scrollHeight : prevTop;
+  if (focusLine !== null) {
+    const line = view.querySelector(`[data-seg-id="${CSS.escape(String(focusLine))}"]`);
+    focusLine = null;
+    line?.classList.add('focus');
+    line?.scrollIntoView({ block: 'center' });
+  }
 }
 
 const PLAY_MIN_SECONDS = 3;
@@ -687,6 +694,7 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
 
 function segmentLine(s, play) {
   const seg = el('div', 'seg');
+  if (s.id !== undefined) seg.dataset.segId = s.id;
   const head = el('div');
   head.append(el('span', 'who', s.speaker));
   if (M.isGuessedSpeaker(s.speaker)) {
@@ -880,7 +888,20 @@ function actionItemsView(items) {
       });
       const label = el('label', done ? 'action-item done' : 'action-item');
       label.append(check, raw(el('span', null, text)));
-      box.append(label);
+      const lineId = M.sourceLine(meeting, text);
+      if (lineId === null) {
+        box.append(label);
+        continue;
+      }
+      const row = el('div', 'action-row');
+      const show = mkBtn('Show in transcript', () => {
+        viewingId = meeting.id;
+        focusLine = lineId;
+        render();
+      }, row);
+      show.classList.add('link');
+      row.prepend(label);
+      box.append(row);
     }
   }
   return box;
