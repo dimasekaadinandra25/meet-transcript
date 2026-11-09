@@ -223,3 +223,13 @@ test('a backup cannot silently replace where Notion sends your MoM', async () =>
   assert.equal(fresh.notionToken, 'ntn_ATTACKER');
   assert.equal(fresh.notionPage, 'https://www.notion.so/attacker-page');
 });
+
+test('asking across meetings sends the meetings about the question first', () => {
+  const meetings = [
+    { title: 'Anggaran Q3', startedAt: 1, mom: 'Keputusan anggaran pemasaran naik', segments: [] },
+    ...Array.from({ length: 30 }, (_, i) => ({ title: `Lain ${i}`, startedAt: 100 + i, mom: 'y'.repeat(5000), segments: [] })),
+  ];
+  const { prompt } = askAllPrompt(meetings, 'Berapa anggaran pemasaran?');
+  assert.match(prompt, /Anggaran Q3/);
+  assert.ok(prompt.indexOf('Anggaran Q3') < prompt.indexOf('Lain 29'));
+});
