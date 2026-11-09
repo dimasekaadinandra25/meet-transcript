@@ -660,6 +660,15 @@ test('the icon warning follows a settings change', async () => {
   assert.equal(sw.badge(), '!');
 });
 
+test('a settings change during startup is not undone by the first read', async () => {
+  const sw = loadSw({ offscreen: null, withMenus: true, store: { settings: { transcriptSource: 'caption' } } });
+  sw.settingsChanged({ transcriptSource: 'both' });
+  await wait();
+  await inCall(sw, true);
+  assert.equal(sw.badge(), '!');
+  assert.match(sw.badgeTitle(), /Not recording/);
+});
+
 test('a moment can be marked during a call', async () => {
   const sw = loadSw({ offscreen: null, store: editStore() });
   const port = sw.connect(1);

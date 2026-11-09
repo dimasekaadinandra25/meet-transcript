@@ -63,12 +63,14 @@ function updateBadge() {
   chrome.action?.setTitle?.({ title: problem ? `Transcripables: ${t(problem)}` : 'Transcripables' });
 }
 
+let sourceChanged = false;
 chrome.storage.local.get('settings').then(({ settings }) => {
-  transcriptSource = settings?.transcriptSource ?? 'caption';
+  if (!sourceChanged) transcriptSource = settings?.transcriptSource ?? 'caption';
   updateBadge();
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.settings) return;
+  sourceChanged = true;
   transcriptSource = changes.settings.newValue?.transcriptSource ?? 'caption';
   updateBadge();
 });
