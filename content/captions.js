@@ -2,18 +2,22 @@
   const S = globalThis.MeetSelectors;
   const SESS = globalThis.MeetSession;
   let sourceMode = 'caption';
-  SESS.watchSettings((s) => { sourceMode = s.transcriptSource ?? 'caption'; });
+  SESS.watchSettings((settings) => { sourceMode = settings.transcriptSource ?? 'caption'; });
   let port = null;
   let statusTimer = null;
   let flushTimer = null;
   let recordPrompt = null;
   let recordPromptKind = null;
   const closedPrompts = new Set();
+
+  // Removes the "start recording" banner from the page.
   function hideRecordPrompt() {
     recordPrompt?.remove();
     recordPrompt = null;
     recordPromptKind = null;
   }
+
+  // Shows the first banner the user has not closed yet, or hides the banner when none is left.
   function showRecordPrompt(prompts) {
     const next = prompts.find((prompt) => !closedPrompts.has(prompt.kind));
     if (!next) return hideRecordPrompt();
@@ -36,18 +40,28 @@
     recordPrompt.append(message, close);
     document.body.append(recordPrompt);
   }
+
+  // Opens the 'captions' port to the service worker.
   function connect() {
-    const p = chrome.runtime.connect({ name: 'captions' });
-    p.onDisconnect.addListener(() => { if (port === p) port = null; });
-    p.onMessage.addListener((msg) => { if (msg.type === 'record-prompt') showRecordPrompt(msg.prompts); });
-    port = p;
+    const newPort = chrome.runtime.connect({ name: 'captions' });
+    newPort.onDisconnect.addListener(() => {
+      if (port === newPort) port = null;
+    });
+    newPort.onMessage.addListener((msg) => {
+      if (msg.type === 'record-prompt') showRecordPrompt(msg.prompts);
+    });
+    port = newPort;
   }
+
+  // Stops all timers and the caption observer once the extension is gone.
   function stopAll() {
     clearInterval(statusTimer);
     clearInterval(flushTimer);
     observer?.disconnect();
     observer = null;
   }
+
+  // Sends a message to the service worker and returns whether it went out.
   function post(msg) {
     if (!chrome.runtime?.id) {
       stopAll();
@@ -62,6 +76,7 @@
       return false;
     }
   }
+
   let blockIds = new WeakMap();
   const firstSeen = new Map();
   const sessionTag = crypto.randomUUID().slice(0, 8);
@@ -71,6 +86,8 @@
   let observedRegion = null;
   let ccAttempts = 0;
   let sess = { ...SESS.INITIAL };
+
+  // Clears per-meeting state when a new meeting starts.
   function openSession() {
     closedPrompts.clear();
     ccAttempts = 0;
@@ -81,6 +98,8 @@
     observer = null;
     observedRegion = null;
   }
+
+  // Sends any unsent lines, tells the service worker the meeting ended, and closes the port.
   function closeSession(endedId, hadJoined) {
     hideRecordPrompt();
     if (dirty.size && endedId) {
@@ -94,19 +113,29 @@
     port?.disconnect();
     port = null;
   }
+
+  // Reads every caption block in the region and queues new or changed lines to send.
   function scan(region) {
     for (const block of S.captionBlocks(region)) {
       if (!block) continue;
       let id = blockIds.get(block);
-      if (!id) { id = `${sessionTag}:${nextId++}`; blockIds.set(block, id); }
+      if (!id) {
+        id = `${sessionTag}:${nextId++}`;
+        blockIds.set(block, id);
+      }
       const text = S.blockText(block);
       if (!text) continue;
       if (!firstSeen.has(id)) firstSeen.set(id, Date.now());
       dirty.set(id, { id, speaker: S.blockSpeaker(block), text, t: firstSeen.get(id) });
     }
   }
+
+  // Checks the call state, watches the captions area, turns captions on, and reports status.
   function tick() {
-    if (!chrome.runtime?.id) { stopAll(); return; }
+    if (!chrome.runtime?.id) {
+      stopAll();
+      return;
+    }
     const inCall = S.inCall();
     const prevId = sess.curId;
     const prevJoined = sess.sawInCall;
@@ -126,15 +155,20 @@
       observer = null;
       observedRegion = null;
     }
-    if (sourceMode !== 'audio' && !region && inCall && !S.ccEnabled() && ccAttempts < 3) {
+    const shouldTurnOnCaptions = sourceMode !== 'audio' && !region && inCall
+      && !S.ccEnabled() && ccAttempts < 3;
+    if (shouldTurnOnCaptions) {
       S.ccButton()?.click();
       ccAttempts++;
     }
     post({ type: 'status', meetingId: sess.curId, inCall, captionsOn: !!region });
   }
+
+  // Every half second, sends the caption lines that changed since the last send.
   flushTimer = setInterval(() => {
     if (!sess.report || !dirty.size) return;
-    const sent = post({ type: 'segments', meetingId: sess.curId, title: S.meetingTitle(), segs: [...dirty.values()] });
+    const segs = [...dirty.values()];
+    const sent = post({ type: 'segments', meetingId: sess.curId, title: S.meetingTitle(), segs });
     if (sent) dirty.clear();
   }, 500);
   statusTimer = setInterval(tick, 2000);

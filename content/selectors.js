@@ -1,51 +1,66 @@
 (() => {
-  const q = (sels, root = document) => {
-    for (const s of sels) {
+  // Returns the first element matching any of the selectors, skipping selectors the browser rejects.
+  const firstMatch = (selectors, root = document) => {
+    for (const selector of selectors) {
       try {
-        const el = root.querySelector(s);
-        if (el) return el;
+        const element = root.querySelector(selector);
+        if (element) return element;
       } catch {}
     }
     return null;
   };
+
   const CAPTION_REGION = [
     'div[jsname="dsyhDe"]',
     'div[aria-label="Captions"]',
     'div[aria-label="Teks"]',
     '.a4cQT',
   ];
+
+  // Finds the area of the Meet page that shows live captions.
   function captionsRegion() {
-    return q(CAPTION_REGION);
+    return firstMatch(CAPTION_REGION);
   }
+
+  // Lists the caption blocks (one per speaker turn) inside the captions area.
   function captionBlocks(region) {
     const blocks = region.querySelectorAll('div.nMcdL');
     if (blocks.length) return [...blocks];
     const texts = region.querySelectorAll('div[jsname="tgaKEf"]');
-    if (texts.length) return [...texts].map((t) => t.parentElement);
-    return [...region.children].filter((c) => c.querySelector('img'));
+    if (texts.length) return [...texts].map((text) => text.parentElement);
+    return [...region.children].filter((child) => child.querySelector('img'));
   }
+
+  // Reads the speaker name of a caption block, or 'Unknown' when none is shown.
   function blockSpeaker(block) {
-    const el = q(['.NWpY1d', '.KcIKyf', '.zs7s8d'], block);
-    if (el) return el.textContent.trim();
-    const img = block.querySelector('img');
-    const sib = img && img.nextElementSibling;
-    return (sib && sib.textContent.trim()) || 'Unknown';
+    const nameElement = firstMatch(['.NWpY1d', '.KcIKyf', '.zs7s8d'], block);
+    if (nameElement) return nameElement.textContent.trim();
+    const avatar = block.querySelector('img');
+    const besideAvatar = avatar && avatar.nextElementSibling;
+    return (besideAvatar && besideAvatar.textContent.trim()) || 'Unknown';
   }
+
+  // Reads the spoken text of a caption block without the speaker name.
   function blockText(block) {
-    const el = q(['.ygicle', 'div[jsname="tgaKEf"]'], block);
-    if (el) return el.textContent.trim();
+    const textElement = firstMatch(['.ygicle', 'div[jsname="tgaKEf"]'], block);
+    if (textElement) return textElement.textContent.trim();
     const clone = block.cloneNode(true);
-    clone.querySelectorAll('img, button, i').forEach((n) => n.remove());
+    clone.querySelectorAll('img, button, i').forEach((node) => node.remove());
     return clone.textContent.replace(blockSpeaker(block), '').trim();
   }
+
+  // Finds the caption language dropdown in Meet's settings.
   function langCombobox() {
-    return q([
+    return firstMatch([
       'div[jsname="oYxtQd"][role="combobox"]',
       '[role="combobox"][aria-label*="language" i]',
       '[role="combobox"][aria-label*="bahasa" i]',
     ]);
   }
+
+  // Builds a case-insensitive pattern matching text that starts with any of the names.
   const named = (...names) => new RegExp(`^(${names.join('|')})`, 'i');
+
   const LANG_PATTERN = {
     id: /^(bahasa\s+)?indonesian?\b/i,
     en: /^(english|inggris)\b/i,
@@ -60,38 +75,49 @@
     de: named('german', 'jerman', 'deutsch'),
     pt: named('portuguese', 'portugis', 'português'),
   };
-  function langOption(re) {
+
+  // Picks the shortest open dropdown option whose text matches the language pattern.
+  function langOption(pattern) {
     const hits = [...document.querySelectorAll('[role="option"]')]
-      .map((o) => ({ o, text: o.textContent.trim() }))
-      .filter(({ text }) => re.test(text));
+      .map((option) => ({ option, text: option.textContent.trim() }))
+      .filter(({ text }) => pattern.test(text));
     hits.sort((a, b) => a.text.length - b.text.length);
-    return hits[0]?.o ?? null;
+    return hits[0]?.option ?? null;
   }
+
+  // Finds the button that turns Meet captions on or off.
   function ccButton() {
-    return q([
+    return firstMatch([
       'button[jsname="r8qRAd"]',
       'button[aria-label*="caption" i]',
       'button[aria-label*="teks" i]',
     ]);
   }
+
+  // Tells whether Meet captions are switched on.
   function ccEnabled() {
-    const b = ccButton();
-    return !!b && b.getAttribute('aria-pressed') === 'true';
+    const button = ccButton();
+    return !!button && button.getAttribute('aria-pressed') === 'true';
   }
+
+  // Tells whether the user is in a call, by looking for the leave-call button.
   function inCall() {
-    return !!q([
+    return !!firstMatch([
       'button[jsname="CQylAd"]',
       'button[aria-label*="leave call" i]',
       'button[aria-label*="keluar dari panggilan" i]',
     ]);
   }
+
+  // Returns the meeting name from the tab title, or '' when Meet shows no name.
   function meetingTitle() {
-    const t = document.title
+    const title = document.title
       .replace(/^Meet\s*[-–—]\s*/, '')
       .replace(/\s*[-–—]\s*Google Meet\s*$/, '')
       .trim();
-    return t && t !== 'Meet' ? t : '';
+    return title && title !== 'Meet' ? title : '';
   }
+
   globalThis.MeetSelectors = {
     captionsRegion, captionBlocks, blockSpeaker, blockText,
     ccButton, ccEnabled, inCall, meetingTitle, CAPTION_REGION,

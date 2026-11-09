@@ -4,6 +4,8 @@
   style.textContent = S.CAPTION_REGION.join(', ') + ' { display: none !important; }';
   let on = true;
   let goneTicks = 0;
+
+  // Hides Meet's caption overlay while in a call, and shows it again once the call is over.
   const sync = (tick = false) => {
     if (on && S.inCall()) {
       goneTicks = 0;
@@ -12,12 +14,20 @@
       style.remove();
     }
   };
-  globalThis.MeetSession.watchSettings((s) => {
-    on = s.hideCaptions !== false;
+
+  // Follows the "hide captions" setting.
+  globalThis.MeetSession.watchSettings((settings) => {
+    on = settings.hideCaptions !== false;
     sync();
   });
+
+  // Rechecks every two seconds, and stops once the extension is reloaded or removed.
   const timer = setInterval(() => {
-    if (!chrome.runtime?.id) { clearInterval(timer); style.remove(); return; }
+    if (!chrome.runtime?.id) {
+      clearInterval(timer);
+      style.remove();
+      return;
+    }
     sync(true);
   }, 2000);
 })();
