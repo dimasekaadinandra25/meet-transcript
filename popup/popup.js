@@ -20,7 +20,7 @@ function icon(paths, cls) {
   return svg;
 }
 
-let captionLang = 'id';
+let captionLang = 'en';
 
 let micOn = false;
 
@@ -143,7 +143,7 @@ chrome.tabs.query({ active: true, currentWindow: true })
   .then(([t]) => { tabId = t?.id ?? null; })
   .catch(() => {});
 chrome.storage.local.get('settings').then((d) => {
-  captionLang = d.settings?.captionLang ?? 'id';
+  captionLang = d.settings?.captionLang ?? 'en';
   micOn = !!d.settings?.mic;
   render();
 }).catch(() => {});

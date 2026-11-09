@@ -1,6 +1,6 @@
 (() => {
   const S = globalThis.MeetSelectors;
-  let want = 'id';
+  let want = 'en';
   let applied = false;
   let attempts = 0;
   let busy = false;
@@ -8,7 +8,7 @@
   let goneTicks = 0;
   function reset() { applied = false; attempts = 0; }
   globalThis.MeetSession.watchSettings((s, isChange) => {
-    want = s.captionLang ?? 'id';
+    want = s.captionLang ?? 'en';
     if (isChange) reset();
   });
   function apply() {

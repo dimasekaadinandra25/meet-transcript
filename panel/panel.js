@@ -1020,7 +1020,7 @@ async function renderSettings(epoch) {
   view.append(hideRow);
   const captionLang = field('Meet caption language', document.createElement('select'));
   addOptions(captionLang, CAPTION_LANGUAGES);
-  captionLang.value = settings.captionLang ?? 'id';
+  captionLang.value = settings.captionLang ?? 'en';
   show(captionLang, !Host);
   captionLang.addEventListener('change', () => patchSettings({ captionLang: captionLang.value }));
   const micWrap = el('div');

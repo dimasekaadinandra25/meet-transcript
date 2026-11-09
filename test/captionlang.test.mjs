@@ -31,3 +31,27 @@ test('label versi UI Indonesia ikut cocok', () => {
 test('tanpa opsi yang cocok mengembalikan null, bukan opsi sembarang', () => {
   assert.equal(langOption(/^klingon\b/i), null);
 });
+
+test('with no saved choice, Meet captions are switched to English', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = await import('node:vm');
+  const ticks = [];
+  const clicked = [];
+  const ctx = vm.createContext({
+    chrome: { runtime: { id: 'x' } },
+    setInterval: (fn) => ticks.push(fn),
+    setTimeout: (fn) => fn(),
+    KeyboardEvent: class {},
+    MeetSession: { watchSettings: (apply) => apply({}, false) },
+    MeetSelectors: {
+      LANG_PATTERN,
+      inCall: () => true,
+      langCombobox: () => ({ textContent: 'Indonesian (Indonesia)', click() {} }),
+      langOption: (re) => ({ click: () => clicked.push(String(re)) }),
+    },
+  });
+  vm.runInContext('globalThis.MeetSession = MeetSession; globalThis.MeetSelectors = MeetSelectors;', ctx);
+  vm.runInContext(readFileSync(new URL('../content/captionlang.js', import.meta.url), 'utf8'), ctx);
+  ticks[0]();
+  assert.deepEqual(clicked, [String(LANG_PATTERN.en)]);
+});
