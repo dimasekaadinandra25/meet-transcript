@@ -123,3 +123,19 @@ test('a meeting with only marks still exports them', async () => {
 test('marks stay out of the AI prompt transcript', () => {
   assert.ok(!askPrompt(marked(), 'Apa?').includes('★'));
 });
+
+test('markdown keeps meeting text from turning into formatting', () => {
+  const md = formatMarkdown(meeting({
+    title: '# Plan *final*',
+    mom: '## Decisions',
+    segments: [{ id: 1, speaker: 'A_[x]', text: '<img src=x onerror=alert(1)> **bold** [link](javascript:x)\n# heading', t: 1 }],
+  }));
+  const lines = md.split('\n');
+  assert.equal(lines[0], '# \\# Plan \\*final\\*');
+  assert.ok(md.includes('\\<img'));
+  assert.ok(md.includes('\\*\\*bold\\*\\*'));
+  assert.ok(md.includes('\\[link\\](javascript'));
+  assert.ok(!lines.includes('# heading'));
+  assert.ok(md.includes('**A\\_\\[x\\]**'));
+  assert.ok(lines.includes('## Decisions'));
+});
