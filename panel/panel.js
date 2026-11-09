@@ -551,7 +551,21 @@ async function renderMeeting(id, live, epoch) {
   view.append(list);
   if (meeting.mom) {
     view.append(el('h3', null, 'MoM'));
-    view.append(raw(el('div', 'mom', meeting.mom)));
+    const momBox = raw(el('div', 'mom'));
+    for (const text of meeting.mom.split(/\r?\n/)) {
+      const row = el('div', 'mom-line', text);
+      const lineId = /^\s*#/.test(text) ? null : M.sourceLine(meeting, text);
+      if (lineId !== null) {
+        const source = mkBtn(t('Source'), () => {
+          focusLine = lineId;
+          render();
+        }, row);
+        source.classList.add('link');
+        source.setAttribute('aria-label', t('Show the transcript line behind this'));
+      }
+      momBox.append(row);
+    }
+    view.append(momBox);
     if (M.changedSince(meeting, meeting.momBasedOn)) view.append(el('p', 'muted stale', 'The transcript changed after this MoM was made. Regenerate it to update.'));
   }
   if (focusKey) view.querySelector(`[data-edit-key="${CSS.escape(focusKey)}"]`)?.focus();

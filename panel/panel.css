@@ -192,6 +192,8 @@ h3.group { margin: var(--gap) 0 6px; font-size: 13px; color: var(--muted); }
 .item .snippet { margin-top: 4px; color: var(--muted); font-style: italic; }
 #history-search { margin: 0 0 var(--gap); }
 .mom { white-space: pre-wrap; }
+.mom-line:empty { min-height: 1.55em; }
+.mom-line button.link { margin: 0 0 0 6px; min-height: 20px; vertical-align: baseline; }
 
 .info, .error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--gap); padding: 12px 14px; border-radius: var(--radius); margin: var(--gap) 0; }
 .info { background: var(--info-tint); border: 1px solid var(--accent); }
@@ -334,7 +336,7 @@ button.palette-row .muted { flex: none; font-size: 12px; }
   html, body { background: #fff; }
   body::before, nav, .actions, main > button, #history-search, #crash { display: none !important; }
   main { height: auto; overflow: visible; padding: 0; mask-image: none; }
-  .play, .ask, .ask-row, .stale { display: none !important; }
+  .play, .ask, .ask-row, .stale, button.link { display: none !important; }
   .seg, .mom, main > input { background: none; border: 0; box-shadow: none; padding: 2px 0; break-inside: avoid; }
 }
 
