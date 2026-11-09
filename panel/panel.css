@@ -136,6 +136,7 @@ h3 { font-size: 13px; margin: var(--section-gap) 0 8px; }
 .seg { margin-bottom: var(--gap); }
 .seg .who { font-weight: 600; color: var(--accent); }
 .seg .time { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.seg .guess { color: var(--muted); font-size: 12px; margin-left: 6px; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
 .seg > div:first-child { margin-bottom: 4px; }
 .seg textarea { min-height: 0; resize: vertical; }
 .seg .corrected { margin-top: 4px; color: var(--muted); font-size: 12px; }

@@ -554,3 +554,14 @@ test('audio put into a meeting uses its speaker names', () => {
   replaceMeetingAudio(meeting, [{ t: 1, speaker: 'Others', text: 'a' }], { baseTime: 7 });
   assert.equal(meeting.segments[0].speaker, 'Budi');
 });
+
+test('only labels made by speaker detection count as guesses', () => {
+  const { isGuessedSpeaker } = globalThis.MeetMerge;
+  assert.deepEqual(['Speaker 1', 'Speaker 12', 'Speaker A', 'Speaker Z3'].map(isGuessedSpeaker), [true, true, true, true]);
+  assert.deepEqual(['You', 'Others', 'Ani', 'Speaker', 'Speaker Ani', '', undefined].map(isGuessedSpeaker), [false, false, false, false, false, false, false]);
+});
+
+test('numbered speakers do not carry over to the next session either', () => {
+  const { carriedNames } = globalThis.MeetMerge;
+  assert.deepEqual(carriedNames({ 'Speaker 1': 'Budi', 'Speaker A': 'Cici', Ani: 'Ani S.' }), { Ani: 'Ani S.' });
+});

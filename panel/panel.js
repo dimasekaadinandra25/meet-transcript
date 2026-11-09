@@ -688,7 +688,13 @@ function keepKeyWithAddress(addressOf, fields, key, paused = () => false) {
 function segmentLine(s, play) {
   const seg = el('div', 'seg');
   const head = el('div');
-  head.append(el('span', 'who', s.speaker), el('span', 'time', new Date(s.t).toLocaleTimeString()));
+  head.append(el('span', 'who', s.speaker));
+  if (M.isGuessedSpeaker(s.speaker)) {
+    const guess = el('span', 'guess', globalThis.MeetI18n.t('guessed'));
+    guess.title = globalThis.MeetI18n.t('Told apart by voice, so it can be wrong. Rename it in Edit transcript.');
+    head.append(guess);
+  }
+  head.append(el('span', 'time', new Date(s.t).toLocaleTimeString()));
   if (play) {
     const isPlaying = playing?.segmentId === s.id;
     const button = el('button', isPlaying ? 'play playing' : 'play', isPlaying ? '■' : '▶');
