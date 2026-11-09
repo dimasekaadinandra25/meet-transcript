@@ -156,7 +156,7 @@ async function waitUntilStopped(pid) {
 }
 
 function startGuard(app, engine) {
-  const [file, args] = guardCommand(process.platform, app, engine);
+  const { file, args } = guardCommand(process.platform, app, engine);
   return spawn(file, args, { stdio: 'ignore', windowsHide: true });
 }
 

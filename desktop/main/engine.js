@@ -18,10 +18,10 @@ function guardCommand(platform, app, engine, root = process.env.SystemRoot ?? 'C
   if (platform === 'win32') {
     const alive = (pid) => `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue)`;
     const script = `while (${alive(e)} -and ${alive(a)}) { Start-Sleep -Seconds ${GUARD_POLL_SECONDS} }; if (-not ${alive(a)}) { Stop-Process -Id ${e} -Force -ErrorAction SilentlyContinue }`;
-    return [join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', script]];
+    return { file: join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), args: ['-NoProfile', '-NonInteractive', '-Command', script] };
   }
   const alive = (pid) => `kill -0 ${pid} 2>/dev/null`;
-  return ['/bin/sh', ['-c', `while ${alive(e)} && ${alive(a)}; do sleep ${GUARD_POLL_SECONDS}; done; ${alive(a)} || kill ${e} 2>/dev/null`]];
+  return { file: '/bin/sh', args: ['-c', `while ${alive(e)} && ${alive(a)}; do sleep ${GUARD_POLL_SECONDS}; done; ${alive(a)} || kill ${e} 2>/dev/null`] };
 }
 
 const engineArgs = (model, port, threads) => [
@@ -38,7 +38,7 @@ const freePort = () => new Promise((resolve, reject) => {
 });
 
 function guardEngine(enginePid) {
-  const [file, args] = guardCommand(process.platform, process.pid, enginePid);
+  const { file, args } = guardCommand(process.platform, process.pid, enginePid);
   spawn(file, args, {
     stdio: 'ignore',
     windowsHide: true,
