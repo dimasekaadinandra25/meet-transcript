@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Transcripables",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Transcribe Google Meet from captions, record Teams, Webex, Slack, Discord, and Zoom web meetings, and turn them into Minutes of Meeting.",
   "browser_specific_settings": {
     "gecko": {
