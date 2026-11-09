@@ -1,11 +1,16 @@
 (() => {
   const UPDATE_TEXT = {
+    // Says which newer version is out.
     available: ({ latest }) => `Version ${latest} is available.`,
+    // Says the app is up to date.
     current: () => 'You have the latest version.',
+    // Says nothing has been released yet.
     none: () => 'No releases have been published yet.',
+    // Says the update check failed and why.
     failed: ({ error }) => `Could not check for updates (${error}).`,
   };
 
+  // Builds the settings row with a "Check for updates" button and its result.
   function createUpdateRow({ el, mkBtn, check, open }) {
     const box = el('div', 'actions');
     const note = el('span', 'muted');

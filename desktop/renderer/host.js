@@ -15,6 +15,7 @@
     ended?.();
   });
 
+  // Starts capturing one app's sound and returns an audio node that plays it, plus a way to close it.
   async function openAppAudio(pid, ctx, onEnded) {
     const source = globalThis.MeetAppAudio.createPcmSource(ctx);
     appSound = { source, onEnded };
@@ -43,8 +44,11 @@
     onLevels: (levels) => showLevels(levels),
     onChunkSaved: () => controller.chunkSaved(),
     chosenApp: () => chosenApp?.pid ?? null,
+    // Fails if the window chosen for video has been closed since it was picked.
     checkVideoSource: async () => {
-      if (!chosenSource || (await desktop.capture.sources()).some((source) => source.id === chosenSource)) return;
+      if (!chosenSource) return;
+      const sources = await desktop.capture.sources();
+      if (sources.some((source) => source.id === chosenSource)) return;
       throw new Error('The window chosen for video is closed. Choose another one, then record again.');
     },
     openAppAudio,
@@ -71,6 +75,7 @@
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     speakers: {
       available: () => desktop.speakers.available(),
+      // Tells speakers apart in the recording, with saved voice samples joined in front.
       find: async (blobs, voices = []) => {
         const { wav, starts, references } = await globalThis.MeetWav.joinedWithVoices(voices, blobs);
         const answer = await desktop.speakers.find(await wav.arrayBuffer());
@@ -83,13 +88,16 @@
   desktop.capture.use('');
   controller.recover().catch((e) => console.error(e));
 
+  // Switches a fresh install to the built-in speech engine when it is available.
   async function useEngineByDefault() {
     const stored = await shim.storage.local.get(['settings', 'meetings']);
-    if (!globalThis.MeetStt.neverConfigured(stored) || !await desktop.engine.available()) return;
+    if (!globalThis.MeetStt.neverConfigured(stored)) return;
+    if (!await desktop.engine.available()) return;
     await globalThis.MeetUi.patchSettings({ sttMode: 'builtin' });
   }
   useEngineByDefault().catch((e) => console.error(e));
 
+  // Tells the main process which language the app is shown in.
   const tellLanguage = (settings) => desktop.setLanguage(settings?.uiLang);
   shim.storage.local.get('settings').then(({ settings }) => {
     tellLanguage(settings);
@@ -99,11 +107,13 @@
     if (changes.settings) tellLanguage(changes.settings.newValue);
   });
 
+  // Sends a message to the controller, like chrome.runtime.sendMessage in the extension.
   const send = (msg) => shim.runtime.sendMessage(msg);
   let chosenSource = '';
   let chosenName = '';
   let consentShown = true;
 
+  // Makes the panel redraw its live view.
   async function redrawLive() {
     const { rec, ...status } = await send({ type: 'get-active' });
     shim.runtime.emit({ type: 'status', ...status });
@@ -116,6 +126,7 @@
   });
   desktop.onWarn((message) => controller.warn(message));
 
+  // Builds the one-time notice asking the user to get everyone's consent before recording.
   function consentNotice() {
     const box = el('div', 'info');
     box.append(el('div', null, 'Before recording, make sure everyone in the meeting agrees. Getting their permission is your responsibility.'));
@@ -128,15 +139,20 @@
     return box;
   }
 
+  // Builds the dropdown that picks which screen or window to record as video.
   function sourcePicker() {
     const select = el('select');
     select.setAttribute('aria-label', 'Screen or window for video');
-    const current = Object.assign(document.createElement('option'), { value: chosenSource, textContent: chosenName || 'Main screen' });
+    const current = Object.assign(document.createElement('option'), {
+      value: chosenSource,
+      textContent: chosenName || 'Main screen',
+    });
     select.append(chosenName ? raw(current) : current);
     select.addEventListener('focus', async () => {
       const sources = await desktop.capture.sources();
-      select.replaceChildren(...sources.map(({ id, name }) =>
-        raw(Object.assign(document.createElement('option'), { value: id, textContent: name }))));
+      const options = sources.map(({ id, name }) =>
+        raw(Object.assign(document.createElement('option'), { value: id, textContent: name })));
+      select.replaceChildren(...options);
       select.value = chosenSource || sources.find((s) => s.id.startsWith('screen:'))?.id;
     }, { once: true });
     select.addEventListener('change', () => {
@@ -149,6 +165,7 @@
 
   const meters = { system: null, mic: null };
 
+  // Drops the ".exe" ending from an app's process name.
   const appName = (name) => name.replace(/\.exe$/i, '');
   let canPickApp = false;
   desktop.appAudio.available().then((ready) => {
@@ -156,10 +173,13 @@
     if (ready) redrawLive();
   });
 
+  // Builds the dropdown that picks all computer sound or one app's sound.
   function appPicker() {
     const select = el('select');
     select.setAttribute('aria-label', 'Sound to record');
+    // Makes one dropdown option.
     const option = (value, textContent) => Object.assign(document.createElement('option'), { value, textContent });
+    // Makes the option for one app, showing its name untranslated.
     const app = (entry) => raw(option(String(entry.pid), appName(entry.name)));
     select.append(option('', 'All computer sound'));
     if (chosenApp) select.append(app(chosenApp));
@@ -178,6 +198,7 @@
     return select;
   }
 
+  // Builds one labelled sound-level meter and remembers it for live updates.
   function levelRow(name, label) {
     const row = el('div', 'level');
     const meter = Object.assign(document.createElement('meter'), { min: 0, max: 1, value: 0 });
@@ -187,12 +208,14 @@
     return row;
   }
 
+  // Builds the computer and microphone level meters.
   function levelBars() {
     const box = el('div', 'levels');
     box.append(levelRow('system', 'Computer'), levelRow('mic', 'Microphone'));
     return box;
   }
 
+  // Updates the level meters, hiding the ones for tracks that are not recording.
   function showLevels(levels) {
     for (const [name, meter] of Object.entries(meters)) {
       if (!meter) continue;
@@ -201,6 +224,7 @@
     }
   }
 
+  // Builds the record, pause, mute and import controls for the panel's live view.
   function recordControls(rec, busyText) {
     const box = el('div', 'actions');
     if (rec.transcribing) {
@@ -208,10 +232,15 @@
       if (rec.importing) mkBtn('Cancel import', () => send({ type: 'cancel-import' }), box);
     } else if (rec.recording) {
       mkBtn('Stop recording', () => send({ type: 'stop-recording' }), box).classList.add('danger');
-      mkBtn(rec.paused ? 'Resume recording' : 'Pause recording', () => send({ type: 'set-paused', on: !rec.paused }), box);
-      mkBtn(rec.muted ? 'Unmute microphone' : 'Mute microphone', () => send({ type: 'set-muted', on: !rec.muted }), box);
+      const pauseLabel = rec.paused ? 'Resume recording' : 'Pause recording';
+      mkBtn(pauseLabel, () => send({ type: 'set-paused', on: !rec.paused }), box);
+      const muteLabel = rec.muted ? 'Unmute microphone' : 'Mute microphone';
+      mkBtn(muteLabel, () => send({ type: 'set-muted', on: !rec.muted }), box);
       mkBtn('Mark moment', () => send({ type: 'mark-moment' }), box);
-      box.append(el('span', 'recording', rec.paused ? 'paused, nothing is being recorded' : rec.muted ? 'recording, microphone muted' : 'recording'));
+      let status = 'recording';
+      if (rec.paused) status = 'paused, nothing is being recorded';
+      else if (rec.muted) status = 'recording, microphone muted';
+      box.append(el('span', 'recording', status));
       box.append(levelBars());
       box.append(el('div', 'muted', 'Muting in the meeting app does not stop the microphone recording. Use the Mute button here.'));
     } else {
@@ -226,25 +255,38 @@
     return box;
   }
 
+  // Builds the saved-voices setting: the on/off toggle and a list with a Forget button per voice.
   function voicesRow(settings) {
     const box = el('div');
     box.hidden = true;
     const list = el('div', 'voice-list');
+    // Builds the row for one saved voice.
+    const voiceRow = (voice) => {
+      const row = el('div', 'actions');
+      row.append(raw(el('span', null, voice.name)));
+      const forget = mkBtn('Forget', async () => {
+        const { voices: stored = [] } = await chrome.storage.local.get('voices');
+        await chrome.storage.local.set({ voices: stored.filter((v) => v.name !== voice.name) });
+        await fill();
+      }, row);
+      forget.setAttribute('aria-label', `${globalThis.MeetI18n.t('Forget')} ${voice.name}`);
+      return row;
+    };
+    // Redraws the list of saved voices.
     const fill = async () => {
       const { voices = [] } = await chrome.storage.local.get('voices');
-      list.replaceChildren(...(voices.length ? voices.map((voice) => {
-        const row = el('div', 'actions');
-        row.append(raw(el('span', null, voice.name)));
-        const forget = mkBtn('Forget', async () => {
-          const { voices: now = [] } = await chrome.storage.local.get('voices');
-          await chrome.storage.local.set({ voices: now.filter((v) => v.name !== voice.name) });
-          await fill();
-        }, row);
-        forget.setAttribute('aria-label', `${globalThis.MeetI18n.t('Forget')} ${voice.name}`);
-        return row;
-      }) : [el('p', 'muted', 'No saved voices yet. Rename a guessed speaker, such as Speaker 1, to save a short sample of their voice.')]));
+      if (!voices.length) {
+        list.replaceChildren(el('p', 'muted', 'No saved voices yet. Rename a guessed speaker, such as Speaker 1, to save a short sample of their voice.'));
+        return;
+      }
+      list.replaceChildren(...voices.map((voice) => voiceRow(voice)));
     };
-    box.append(settingToggle('rememberVoices', 'Remember the voices you name, so later meetings name those speakers on their own', settings.rememberVoices !== false), list);
+    const toggle = settingToggle(
+      'rememberVoices',
+      'Remember the voices you name, so later meetings name those speakers on their own',
+      settings.rememberVoices !== false,
+    );
+    box.append(toggle, list);
     desktop.speakers.available().then((on) => {
       box.hidden = !on;
       if (on) fill();
@@ -252,6 +294,7 @@
     return box;
   }
 
+  // Builds a checkbox row that saves its state to the setting `key`.
   function settingToggle(key, label, on) {
     const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on });
     box.addEventListener('change', () => globalThis.MeetUi.patchSettings({ [key]: box.checked }));
@@ -261,15 +304,20 @@
   }
 
   const MODEL_NAMES = { base: 'Standard (included)', small: 'Better', medium: 'Best, slower' };
+  // Converts bytes to whole megabytes.
   const megabytes = (bytes) => Math.round(bytes / 1000000);
+  // Shows model download progress; replaced while a download is running.
   let showModelProgress = (progress) => {};
   desktop.engine.onModelProgress((progress) => showModelProgress(progress));
 
+  // Builds the dropdown option for one speech model, noting the download size if not installed.
   function modelOption({ id, bytes, installed }) {
     const name = MODEL_NAMES[id];
-    return Object.assign(document.createElement('option'), { value: id, textContent: installed ? name : `${name} (${megabytes(bytes)} MB download)` });
+    const textContent = installed ? name : `${name} (${megabytes(bytes)} MB download)`;
+    return Object.assign(document.createElement('option'), { value: id, textContent });
   }
 
+  // Builds the setting that picks the built-in engine's model, downloading it when needed.
   function engineModelRow(settings) {
     const row = el('div');
     row.hidden = true;
@@ -277,6 +325,7 @@
     const note = el('span', 'muted');
     row.append(el('label', null, 'Built-in engine accuracy'), select, note);
     let current = settings.engineModel ?? 'base';
+    // Lists the models, falling back to the included one if the current model is not installed.
     const fill = async () => {
       const models = await desktop.engine.models();
       if (!models.some((model) => model.id === current && model.installed)) current = 'base';
@@ -292,6 +341,7 @@
     select.addEventListener('change', async () => {
       const { t } = globalThis.MeetI18n;
       const id = select.value;
+      // Tells whether a recording or transcript is running right now.
       const busy = async () => {
         const { rec } = await send({ type: 'get-active' });
         return rec.recording || rec.transcribing;
@@ -303,7 +353,8 @@
       }
       const missing = (await desktop.engine.models()).find((model) => model.id === id && !model.installed);
       if (missing) {
-        if (!confirm(t('Download about {} MB now? It stays on this computer.').replace('{}', megabytes(missing.bytes)))) {
+        const question = t('Download about {} MB now? It stays on this computer.').replace('{}', megabytes(missing.bytes));
+        if (!confirm(question)) {
           select.value = current;
           return;
         }
@@ -332,6 +383,7 @@
     return row;
   }
 
+  // Builds the desktop-only rows of the Settings tab.
   function settingsRows(settings) {
     const open = el('div', 'actions');
     mkBtn('Open recordings folder', () => desktop.recordings.open(), open);
@@ -343,19 +395,35 @@
       loginBox.checked = on;
     }).catch(() => {});
     loginBox.addEventListener('change', () => desktop.setLoginItem(loginBox.checked));
-    const speakersRow = settingToggle('localSpeakers', 'Tell other speakers apart on this computer after each recording (long meetings take a few extra minutes)', settings.localSpeakers !== false);
+    const speakersRow = settingToggle(
+      'localSpeakers',
+      'Tell other speakers apart on this computer after each recording (long meetings take a few extra minutes)',
+      settings.localSpeakers !== false,
+    );
     speakersRow.hidden = true;
     desktop.speakers.available().then((on) => { speakersRow.hidden = !on; }).catch(() => {});
     return [
       engineModelRow(settings),
       el('h3', null, 'Window'),
-      settingToggle('keepInTray', 'Keep running in the tray when you close the window, so shortcuts keep working', settings.keepInTray !== false),
+      settingToggle(
+        'keepInTray',
+        'Keep running in the tray when you close the window, so shortcuts keep working',
+        settings.keepInTray !== false,
+      ),
       loginRow,
       el('h3', null, 'Recordings'),
       settingToggle('autoSave', 'Save each recording to Documents/Transcripables', settings.autoSave !== false),
       open,
-      ...(canPickApp ? [settingToggle('askToRecord', 'Ask to record when another app starts using the microphone', settings.askToRecord !== false)] : []),
-      settingToggle('liveTranscript', 'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)', settings.liveTranscript !== false),
+      ...(canPickApp ? [settingToggle(
+        'askToRecord',
+        'Ask to record when another app starts using the microphone',
+        settings.askToRecord !== false,
+      )] : []),
+      settingToggle(
+        'liveTranscript',
+        'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)',
+        settings.liveTranscript !== false,
+      ),
       speakersRow,
       voicesRow(settings),
       el('h3', null, 'Updates'),
@@ -364,24 +432,32 @@
   }
 
   const COMMANDS = {
+    // Starts an audio recording.
     'rec-start': () => send({ type: 'start-recording', video: false }),
+    // Starts an audio and video recording.
     'rec-start-video': () => send({ type: 'start-recording', video: true }),
+    // Stops the recording.
     'rec-stop': () => send({ type: 'stop-recording' }),
+    // Pauses or resumes the recording.
     'pause-toggle': async () => {
       const { rec } = await send({ type: 'get-active' });
       await send({ type: 'set-paused', on: !rec.paused });
     },
+    // Mutes or unmutes the microphone.
     'mute-toggle': async () => {
       const { rec } = await send({ type: 'get-active' });
       await send({ type: 'set-muted', on: !rec.muted });
     },
+    // Marks a moment in the running meeting.
     mark: () => send({ type: 'mark-moment' }),
+    // Stops the recording without transcribing, then quits the app.
     'quit-after-stop': async () => {
       await send({ type: 'stop-recording', transcribe: false });
       await desktop.quitNow();
     },
   };
 
+  // Runs a command sent from the tray, a shortcut or the main process.
   async function runCommand(command) {
     await COMMANDS[command]();
   }
@@ -389,12 +465,18 @@
   globalThis.PanelHost = {
     runCommand,
     recordControls,
+    // Saves the current view as a PDF.
     makePdf: () => desktop.makePdf(),
+    // Tells whether the built-in speech engine is installed.
     hasEngine: () => desktop.engine.available(),
     settingsRows,
+    // Fetches a URL through the main process.
     fetch: (url, init) => globalThis.bridgeFetch(url, init),
+    // Shares the minutes of meeting through the main process.
     shareMom: (kind, settings, meeting) => globalThis.shareMom(kind, settings, meeting),
+    // Opens a mailto link in the mail app.
     openMail: (url) => desktop.openExternal(url),
+    // Returns the label of the button that copies the prompt and opens an AI site.
     aiLabel: (name) => `Copy & open ${name}`,
     emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
     emptySegmentsText: 'The transcript appears about every 2 minutes, and finishes when you stop.',

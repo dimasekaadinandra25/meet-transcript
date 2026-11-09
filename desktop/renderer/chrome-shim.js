@@ -1,4 +1,5 @@
 (() => {
+  // Builds a fake `chrome` object so the extension's panel code runs inside the desktop app.
   function createChromeShim({ store, handle }) {
     const messageListeners = [];
     const changeListeners = [];
