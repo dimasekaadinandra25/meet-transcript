@@ -2,7 +2,7 @@
   "name": "transcripables-desktop",
   "productName": "Transcripables",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Record computer audio and microphone from any meeting app, then make a transcript and MoM.",
   "license": "MIT",
   "main": "main/main.js",
