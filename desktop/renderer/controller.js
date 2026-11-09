@@ -545,6 +545,9 @@
         const clean = String(title ?? '').trim();
         if (clean) await updateMeeting(id, (meeting) => { meeting.title = clean; });
       },
+      'tag-meeting': async ({ id, tags }) => {
+        await updateMeeting(id, (meeting) => { meeting.tags = merge.cleanTags(tags); });
+      },
     };
 
     async function handle(msg) {

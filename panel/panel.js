@@ -295,6 +295,7 @@ async function renderMeeting(id, live, epoch) {
   view.append(titleEditor(meeting));
   const startedText = new Date(meeting.startedAt).toLocaleString();
   if (meeting.title !== startedText) view.append(el('p', 'muted', startedText));
+  view.append(tagsEditor(meeting));
   const issues = el('div');
   view.append(issues);
   if (momErrors.has(meeting.id)) issues.append(el('div', 'error', momErrors.get(meeting.id)));
@@ -655,6 +656,19 @@ function titleEditor(meeting) {
   return input;
 }
 
+function tagsEditor(meeting) {
+  const text = (meeting.tags ?? []).join(', ');
+  const input = mkEl('input', { className: 'tags-input', value: text, defaultValue: text, placeholder: t('Tags, separated by commas') });
+  input.dataset.editKey = 'tags';
+  input.setAttribute('aria-label', t('Tags'));
+  input.addEventListener('change', () => {
+    const tags = M.cleanTags(input.value);
+    input.value = input.defaultValue = tags.join(', ');
+    chrome.runtime.sendMessage({ type: 'tag-meeting', id: meeting.id, tags }).catch(() => {});
+  });
+  return input;
+}
+
 async function fillModels(list, base, key) {
   const res = await (Host?.fetch ?? fetch)(`${base}/models`, {
     ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
@@ -821,6 +835,24 @@ function segmentEditor(meeting, s) {
 }
 
 let historyQuery = '';
+let historyTag = null;
+const hasTag = (m, tag) => !tag || (m.tags ?? []).some((x) => x.toLowerCase() === tag.toLowerCase());
+
+function tagChips(tags) {
+  const row = el('div', 'tag-chips');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', t('Filter by tag'));
+  for (const tag of [null, ...tags]) {
+    const chip = raw(mkEl('button', { className: 'chip', textContent: tag ?? t('All') }));
+    chip.setAttribute('aria-pressed', String(historyTag === tag));
+    chip.addEventListener('click', () => {
+      historyTag = tag;
+      render();
+    });
+    row.append(chip);
+  }
+  return row;
+}
 const IMPORT_PART_MS = 120000;
 let importNote = null;
 
@@ -866,7 +898,7 @@ function historyActions() {
 }
 
 function historyList(items) {
-  const found = items.filter((m) => M.matchesSearch(m, historyQuery)).sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+  const found = items.filter((m) => hasTag(m, historyTag) && M.matchesSearch(m, historyQuery)).sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   if (!found.length) return [el('p', 'muted', 'No meetings match.')];
   const now = Date.now();
   let group = null;
@@ -880,6 +912,7 @@ function historyList(items) {
       el('div', 'muted',
         `${new Date(m.startedAt).toLocaleString()} — ${m.segments.length} ${m.segments.length === 1 ? 'segment' : 'segments'}${m.mom ? ' — MoM ✓' : ''}`)
     );
+    if (m.tags?.length) item.append(raw(el('div', 'tags muted', m.tags.map((tag) => `#${tag}`).join(' '))));
     const snippet = M.searchSnippet(m, historyQuery);
     if (snippet) item.append(raw(el('div', 'snippet', snippet)));
     item.addEventListener('click', () => { viewingId = m.id; render(); });
@@ -1001,6 +1034,9 @@ async function renderHistory(epoch) {
     return;
   }
   view.append(askAllBox());
+  const tags = M.allTags(items);
+  if (historyTag && !tags.some((tag) => tag.toLowerCase() === historyTag.toLowerCase())) historyTag = null;
+  if (tags.length) view.append(tagChips(tags));
   const search = mkEl('input', { type: 'search', id: 'history-search', value: historyQuery, placeholder: 'Search titles, transcripts, and MoM' });
   search.setAttribute('aria-label', 'Search meetings');
   const list = el('div');

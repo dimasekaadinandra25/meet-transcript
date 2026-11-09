@@ -603,3 +603,13 @@ test('talk share counts each speaker\'s words, biggest first', () => {
   assert.deepEqual(shares, [{ speaker: 'Ani', words: 4, share: 80 }, { speaker: 'Budi', words: 1, share: 20 }]);
   assert.deepEqual(speakerShares([{ speaker: 'Ani', text: 'sendiri saja' }]), []);
 });
+
+test('tags are tidied, kept unique, and searchable', () => {
+  const { cleanTags, allTags, matchesSearch } = globalThis.MeetMerge;
+  assert.deepEqual(cleanTags(' Sales,  client  A ,sales,, '), ['Sales', 'client A']);
+  assert.deepEqual(cleanTags(['x'.repeat(50)]), ['x'.repeat(30)]);
+  assert.equal(cleanTags(Array.from({ length: 20 }, (_, i) => `t${i}`).join(',')).length, 10);
+  assert.deepEqual(cleanTags(null), []);
+  assert.deepEqual(allTags([{ tags: ['sales', 'Q3'] }, { tags: ['Sales', 'hiring'] }, {}]), ['hiring', 'Q3', 'sales']);
+  assert.ok(matchesSearch({ title: 'x', segments: [], tags: ['Client A'] }, 'client'));
+});

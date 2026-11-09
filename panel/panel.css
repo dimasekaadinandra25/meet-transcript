@@ -351,3 +351,8 @@ button.palette-row .muted { flex: none; font-size: 12px; }
 .talk-row .muted { text-align: end; font-variant-numeric: tabular-nums; }
 .talk-bar { height: 6px; border-radius: var(--pill); background: var(--hairline); overflow: hidden; }
 .talk-bar::before { content: ''; display: block; height: 100%; width: var(--share); background: var(--accent); border-radius: inherit; transition: width .4s var(--ease); }
+.tags-input { margin: 6px 0 2px; font-size: 12px; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+button.chip { min-height: 28px; padding: 3px 12px; font-size: 12px; backdrop-filter: none; }
+button.chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.item .tags { font-size: 11px; margin-top: 2px; }

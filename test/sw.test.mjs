@@ -943,3 +943,12 @@ test('a web page cannot use the messages meant for extension pages', async () =>
   assert.ok((await sw.ask({ type: 'get-active' })).rec, 'the panel lost access');
   assert.ok((await sw.ask({ type: 'get-active' }, { id: 'ext', url: 'chrome-extension://ext/panel/mic.html', tab: { id: 9 } })).rec, 'the extension page in a tab lost access');
 });
+
+test('a meeting keeps the tags you give it', async () => {
+  const sw = loadSw({ offscreen: null, store: editStore() });
+  const res = await sw.ask({ type: 'tag-meeting', id: 'a', tags: 'sales, Q3, sales' });
+  assert.equal(res.ok, true);
+  assert.deepEqual(sw.store['meeting:a'].tags, ['sales', 'Q3']);
+  await sw.ask({ type: 'tag-meeting', id: 'a', tags: '' });
+  assert.deepEqual(sw.store['meeting:a'].tags, []);
+});

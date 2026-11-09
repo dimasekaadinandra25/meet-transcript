@@ -683,6 +683,15 @@ async function saveTitle(id, title) {
 
 const renameMeeting = (id, title) => whenWritten(() => saveTitle(id, title));
 
+const tagMeeting = (id, tags) => whenWritten(async () => {
+  const key = meetingKey(id);
+  const { [key]: meeting } = await chrome.storage.local.get(key);
+  if (!meeting) throw new Error('Meeting not found.');
+  meeting.tags = globalThis.MeetMerge.cleanTags(tags);
+  await chrome.storage.local.set({ [key]: meeting });
+  notifyPanel({ type: 'meeting-updated', id });
+});
+
 const addImportedMeeting = ({ title, startedAt, endedAt }) => whenWritten(async () => {
   await recRestored;
   if (recBusy()) throw new Error('Stop the recording before importing a file.');
@@ -841,6 +850,7 @@ const HANDLERS = {
   'delete-meeting': (msg, sender, sendResponse) => reply(deleteMeeting(msg.id), sendResponse),
   'edit-transcript': (msg, sender, sendResponse) => reply(editTranscript(msg.id, msg.change), sendResponse),
   'rename-meeting': (msg, sender, sendResponse) => reply(renameMeeting(msg.id, msg.title), sendResponse),
+  'tag-meeting': (msg, sender, sendResponse) => reply(tagMeeting(msg.id, msg.tags), sendResponse),
   'add-imported-meeting': (msg, sender, sendResponse) => reply(addImportedMeeting(msg), sendResponse),
   'mark-moment': (msg, sender, sendResponse) => reply(markMoment(), sendResponse),
   'ask-meeting': (msg, sender, sendResponse) => reply(askMeeting(msg.id, msg.question), sendResponse),

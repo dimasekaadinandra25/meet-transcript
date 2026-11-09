@@ -1031,3 +1031,9 @@ test('a failed live pass keeps the live transcript and says nothing', async () =
   assert.deepEqual(speakerOf().map(([, who]) => who), ['Others', 'You', 'Others']);
   assert.ok(!recStates().some((m) => m.error), 'a live speaker failure was shown');
 });
+
+test('a desktop meeting keeps the tags you give it', async () => {
+  await ctl.handle(START);
+  await ctl.handle({ type: 'tag-meeting', id, tags: 'klien, klien,  Q3 ' });
+  assert.deepEqual(meeting().tags, ['klien', 'Q3']);
+});
