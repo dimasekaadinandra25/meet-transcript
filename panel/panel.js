@@ -529,6 +529,7 @@ async function renderMeeting(id, live, epoch) {
   if (editing) {
     view.append(el('p', 'muted', 'Changes save when you leave a field. A new speaker name applies to every line with the old name. Empty a line to delete it.'));
     if (meeting.mom) view.append(el('p', 'muted', 'The existing MoM changes only when you regenerate it.'));
+    if (Host?.editHint) view.append(el('p', 'muted', Host.editHint));
   }
   if (!editing && meeting.segments.length) view.append(askBox(meeting));
   const shares = editing || live ? [] : M.speakerShares(meeting.segments);
@@ -776,9 +777,9 @@ function segmentLine(s, play, provisional) {
   if (s.id !== undefined) seg.dataset.segId = s.id;
   const head = el('div');
   head.append(el('span', 'who', s.speaker));
-  if (M.isGuessedSpeaker(s.speaker)) {
+  if (M.isGuessedSpeaker(s.speaker) || s.matched) {
     const guess = el('span', 'guess', globalThis.MeetI18n.t('guessed'));
-    guess.title = globalThis.MeetI18n.t('Told apart by voice, so it can be wrong. Rename it in Edit transcript.');
+    guess.title = globalThis.MeetI18n.t(s.matched ? 'Matched to a saved voice, so it can be wrong. Rename it in Edit transcript.' : 'Told apart by voice, so it can be wrong. Rename it in Edit transcript.');
     head.append(guess);
   }
   head.append(el('span', 'time', new Date(s.t).toLocaleTimeString()));

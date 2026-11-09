@@ -177,8 +177,8 @@
       if (blobs.some((b) => !b)) return;
       session.diarizing = true;
       try {
-        const found = await speakers.find(blobs);
-        session.found = { starts: new Map(track.indices.map((index, i) => [index, found.starts[i]])), turns: found.turns };
+        const found = await speakers.find(blobs, await savedVoices());
+        session.found = { starts: new Map(track.indices.map((index, i) => [index, found.starts[i]])), turns: found.turns, references: found.references };
         if (!session.stopped) await saveLive(session, loaded);
       } catch (e) {
         console.error(e);
@@ -189,7 +189,7 @@
 
     async function saveLive(session, source) {
       const done = finishedTrack(session.done.system);
-      const system = session.found ? tracks.labelSpeakers(done, { starts: done.indices.map((index) => session.found.starts.get(index)), turns: session.found.turns }) : done;
+      const system = session.found ? tracks.labelSpeakers(done, { starts: done.indices.map((index) => session.found.starts.get(index)), turns: session.found.turns, references: session.found.references }) : done;
       const segments = tracks.mergeTracks({ system, mic: finishedTrack(session.done.mic),
         chunkMs: source.chunkMs, baseTime: source.baseTime });
       await updateMeeting(session.meetingId, (meeting) => {
@@ -205,11 +205,34 @@
 
     const unlabeledTrack = (track) => track.results.some((r) => r?.segments?.length) && !track.results.some((r) => r?.segments?.some((s) => s.speaker));
 
+    const MAX_VOICES = 8;
+    async function savedVoices() {
+      if ((await readSettings()).rememberVoices === false) return [];
+      return (await storage.get('voices')).voices ?? [];
+    }
+
+    async function rememberVoice(meetingId, name) {
+      if (!speakers || (await readSettings()).rememberVoices === false || !await speakers.available()) return;
+      const sample = tracks.voicePieces((await readMeeting(meetingId))?.segments ?? [], name);
+      const system = sample && await audioStore.loadSystem(sample.baseTime);
+      if (!system) return;
+      const clips = [];
+      for (const { t, until } of sample.pieces) {
+        const index = Math.floor((t - sample.baseTime) / system.chunkMs);
+        const blob = system.blobs[system.indices.indexOf(index)];
+        const start = sample.baseTime + index * system.chunkMs;
+        if (blob) clips.push(await clipAudio(blob, (t - start) / 1000, Math.min(until - start, system.chunkMs) / 1000));
+      }
+      if (!clips.length) return;
+      const { voices = [] } = await storage.get('voices');
+      await storage.set({ voices: [...voices.filter((voice) => voice.name !== name), { name, clips, savedAt: now() }].slice(-MAX_VOICES) });
+    }
+
     async function nameSpeakers(blobs, track) {
       if (!speakers || !blobs?.length || !unlabeledTrack(track) || (await readSettings()).localSpeakers === false || !await speakers.available()) return { track };
       broadcast({ speakers: true });
       try {
-        return { track: tracks.labelSpeakers(track, await speakers.find(blobs)) };
+        return { track: tracks.labelSpeakers(track, await speakers.find(blobs, await savedVoices())) };
       } catch (e) {
         return { track, error: `Speakers could not be told apart (${e.message}).` };
       }
@@ -389,7 +412,12 @@
     async function editTranscript({ id, change }) {
       if (change.deleteAnswer === undefined && change.toggleItem === undefined && rec.meetingId === id) return { ok: false, error: 'This meeting is still running. Stop it before editing.' };
       try {
+        const wasMatched = change.segmentId === undefined && !!(await readMeeting(id))?.segments.some((s) => s.speaker === change.from && s.matched);
         await updateMeeting(id, (meeting) => merge.editMeeting(meeting, change));
+        const to = String(change.to ?? '').trim();
+        if (change.segmentId === undefined && (wasMatched || merge.isGuessedSpeaker(change.from)) && to && !merge.isGuessedSpeaker(to)) {
+          await rememberVoice(id, to).catch((e) => console.error(e));
+        }
         return { ok: true };
       } catch (e) {
         return { ok: false, error: e.message };

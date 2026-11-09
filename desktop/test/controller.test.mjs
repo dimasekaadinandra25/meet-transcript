@@ -27,6 +27,7 @@ let probeAnswer;
 let saved;
 let failWrites;
 let speakers;
+let clipCalls;
 let ctl;
 
 const START = { type: 'start-recording', video: false };
@@ -49,7 +50,8 @@ beforeEach(() => {
   probeAnswer = { ok: true, value: { ok: true, status: 200 } };
   saved = [];
   failWrites = false;
-  speakers = { found: null, fail: null, calls: [] };
+  speakers = { found: null, fail: null, calls: [], voices: [] };
+  clipCalls = [];
   fakeRecorder = {
     starts: 0,
     stops: 0,
@@ -128,7 +130,7 @@ beforeEach(() => {
     onWarning: () => { warned++; },
     probeStt: async (url, key) => { probes.push({ url, key }); return probeAnswer; },
     startEngine: async () => engineAnswer,
-    clipAudio: async () => 'data:audio/wav;base64,AAAA',
+    clipAudio: async (...args) => { clipCalls.push(args); return 'data:audio/wav;base64,AAAA'; },
     splitAudio: async (file) => {
       if (file.broken) throw new Error('This file could not be read as audio.');
       return { durationMs: 200000, parts: (file.parts ?? ['one', 'two']).map(blob) };
@@ -139,8 +141,9 @@ beforeEach(() => {
     },
     speakers: {
       available: async () => !!speakers.found,
-      find: async (blobs) => {
+      find: async (blobs, voices) => {
         speakers.calls.push(blobs);
+        speakers.voices.push(voices);
         if (speakers.fail) throw new Error(speakers.fail);
         return speakers.found;
       },
@@ -1036,4 +1039,48 @@ test('a desktop meeting keeps the tags you give it', async () => {
   await ctl.handle(START);
   await ctl.handle({ type: 'tag-meeting', id, tags: 'klien, klien,  Q3 ' });
   assert.deepEqual(meeting().tags, ['klien', 'Q3']);
+});
+
+test('naming a guessed speaker saves a short sample of their voice', async () => {
+  twoVoices();
+  await runRecording();
+  const res = await ctl.handle({ type: 'edit-transcript', id, change: { from: 'Speaker 1', to: 'Budi' } });
+  assert.equal(res.ok, true);
+  assert.deepEqual(clipCalls, [[blob('system'), 0, 5]]);
+  assert.deepEqual(data.voices, [{ name: 'Budi', clips: ['data:audio/wav;base64,AAAA'], savedAt: NOW }]);
+  await ctl.handle({ type: 'edit-transcript', id, change: { from: 'Speaker 2', to: 'Citra' } });
+  assert.deepEqual(data.voices.map((v) => v.name), ['Budi', 'Citra']);
+});
+
+test('saved voices go with each speaker pass and name the speaker they match', async () => {
+  twoVoices();
+  data.voices = [{ name: 'Budi', clips: ['data:audio/wav;base64,AAAA'], savedAt: 1 }];
+  speakers.found = { ...speakers.found, references: [{ name: 'Budi', start: 0, end: 1 }] };
+  await runRecording();
+  assert.deepEqual(speakers.voices, [data.voices]);
+  assert.deepEqual(speakerOf(), [['satu', 'Budi'], ['saya', 'You'], ['dua', 'Speaker 1']]);
+  assert.equal(meeting().segments[0].matched, true);
+});
+
+test('voices are not saved or used when remembering voices is off, or for your own voice', async () => {
+  twoVoices();
+  data.settings.rememberVoices = false;
+  data.voices = [{ name: 'Budi', clips: ['x'], savedAt: 1 }];
+  await runRecording();
+  assert.deepEqual(speakers.voices, [[]]);
+  await ctl.handle({ type: 'edit-transcript', id, change: { from: 'Speaker 1', to: 'Ani' } });
+  assert.deepEqual(data.voices.map((v) => v.name), ['Budi']);
+  data.settings.rememberVoices = true;
+  await ctl.handle({ type: 'edit-transcript', id, change: { from: 'You', to: 'Saya' } });
+  assert.equal(clipCalls.length, 0);
+});
+
+test('correcting a name matched to a saved voice saves the corrected voice', async () => {
+  twoVoices();
+  data.voices = [{ name: 'Budi', clips: ['x'], savedAt: 1 }];
+  speakers.found = { ...speakers.found, references: [{ name: 'Budi', start: 0, end: 1 }] };
+  await runRecording();
+  await ctl.handle({ type: 'edit-transcript', id, change: { from: 'Budi', to: 'Citra' } });
+  assert.deepEqual(data.voices.map((v) => v.name), ['Budi', 'Citra']);
+  assert.equal(meeting().segments[0].matched, undefined);
 });

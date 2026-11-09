@@ -71,11 +71,11 @@
     saveFile: async (name, blob, first) => desktop.recordings.write(name, await blob.arrayBuffer(), first),
     speakers: {
       available: () => desktop.speakers.available(),
-      find: async (blobs) => {
-        const { wav, starts } = await globalThis.MeetWav.joinedWav(blobs);
+      find: async (blobs, voices = []) => {
+        const { wav, starts, references } = await globalThis.MeetWav.joinedWithVoices(voices, blobs);
         const answer = await desktop.speakers.find(await wav.arrayBuffer());
         if (!answer.ok) throw new Error(answer.error);
-        return { starts, turns: answer.value };
+        return { starts, turns: answer.value, references };
       },
     },
     now: () => Date.now(),
@@ -226,6 +226,32 @@
     return box;
   }
 
+  function voicesRow(settings) {
+    const box = el('div');
+    box.hidden = true;
+    const list = el('div', 'voice-list');
+    const fill = async () => {
+      const { voices = [] } = await chrome.storage.local.get('voices');
+      list.replaceChildren(...(voices.length ? voices.map((voice) => {
+        const row = el('div', 'actions');
+        row.append(raw(el('span', null, voice.name)));
+        const forget = mkBtn('Forget', async () => {
+          const { voices: now = [] } = await chrome.storage.local.get('voices');
+          await chrome.storage.local.set({ voices: now.filter((v) => v.name !== voice.name) });
+          await fill();
+        }, row);
+        forget.setAttribute('aria-label', `${globalThis.MeetI18n.t('Forget')} ${voice.name}`);
+        return row;
+      }) : [el('p', 'muted', 'No saved voices yet. Rename a guessed speaker, such as Speaker 1, to save a short sample of their voice.')]));
+    };
+    box.append(settingToggle('rememberVoices', 'Remember the voices you name, so later meetings name those speakers on their own', settings.rememberVoices !== false), list);
+    desktop.speakers.available().then((on) => {
+      box.hidden = !on;
+      if (on) fill();
+    }).catch(() => {});
+    return box;
+  }
+
   function settingToggle(key, label, on) {
     const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on });
     box.addEventListener('change', () => globalThis.MeetUi.patchSettings({ [key]: box.checked }));
@@ -331,6 +357,7 @@
       ...(canPickApp ? [settingToggle('askToRecord', 'Ask to record when another app starts using the microphone', settings.askToRecord !== false)] : []),
       settingToggle('liveTranscript', 'Show the transcript during the meeting (sends audio to speech-to-text every 2 minutes)', settings.liveTranscript !== false),
       speakersRow,
+      voicesRow(settings),
       el('h3', null, 'Updates'),
       globalThis.createUpdateRow({ el, mkBtn, check: () => desktop.checkForUpdate(), open: () => desktop.openUpdate() }),
     ];
@@ -372,5 +399,6 @@
     emptyLiveText: 'No recording yet. Press Record audio when the meeting starts.',
     emptySegmentsText: 'The transcript appears about every 2 minutes, and finishes when you stop.',
     deleteNote: ' Copies in your Documents/Transcripables folder stay.',
+    editHint: 'Renaming a guessed speaker also saves a short sample of their voice on this computer, so later meetings name them on their own. Manage saved voices in Settings.',
   };
 })();

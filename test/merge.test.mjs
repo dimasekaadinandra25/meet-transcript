@@ -613,3 +613,8 @@ test('tags are tidied, kept unique, and searchable', () => {
   assert.deepEqual(allTags([{ tags: ['sales', 'Q3'] }, { tags: ['Sales', 'hiring'] }, {}]), ['hiring', 'Q3', 'sales']);
   assert.ok(matchesSearch({ title: 'x', segments: [], tags: ['Client A'] }, 'client'));
 });
+
+test('renaming a speaker matched to a saved voice clears the guess mark', () => {
+  const out = globalThis.MeetMerge.applyTranscriptEdit([{ id: 1, speaker: 'Budi', matched: true, text: 'a' }], { from: 'Budi', to: 'Citra' });
+  assert.deepEqual(out, [{ id: 1, speaker: 'Citra', text: 'a' }]);
+});

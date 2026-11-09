@@ -109,3 +109,44 @@ test('parts the last speaker pass did not cover stay unlabeled', () => {
   const named = labelSpeakers(twoChunks(), { starts: [0, undefined], turns: [{ start: 0, end: 2.5, speaker: 0 }, { start: 2.8, end: 6, speaker: 1 }] });
   assert.deepEqual(named.results.flatMap((r) => r.segments.map((s) => s.speaker)), ['1', '2', undefined]);
 });
+
+test('a saved voice names the speaker whose voice matches it', () => {
+  const track = twoChunks();
+  const named = labelSpeakers(track, {
+    starts: [10, 130],
+    turns: [{ start: 0, end: 6, speaker: 5 }, { start: 6.2, end: 9, speaker: 7 }, { start: 10, end: 12.5, speaker: 5 }, { start: 12.8, end: 16, speaker: 2 }, { start: 130.5, end: 132, speaker: 5 }],
+    references: [{ name: 'Budi', start: 0, end: 6 }, { name: 'Citra', start: 6, end: 10 }],
+  });
+  const segs = mergeTracks({ chunkMs: 120000, baseTime: 0, system: named, mic: { results: [], indices: [] } });
+  assert.deepEqual(segs.map((s) => s.speaker), ['Budi', 'Speaker 1', 'Budi']);
+  assert.deepEqual(segs.map((s) => !!s.matched), [true, false, true]);
+});
+
+test('one speaker who matches a saved voice still gets the name', () => {
+  const named = labelSpeakers(twoChunks(), { starts: [10, 130], turns: [{ start: 0, end: 5, speaker: 1 }, { start: 10, end: 200, speaker: 1 }],
+    references: [{ name: 'Budi', start: 0, end: 5 }] });
+  assert.deepEqual(named.results.flatMap((r) => r.segments.map((s) => s.speaker)), ['Budi', 'Budi', 'Budi']);
+});
+
+test('two saved voices on one speaker give it the closer one', () => {
+  const named = labelSpeakers(twoChunks(), { starts: [10, 130], turns: [{ start: 0, end: 7, speaker: 1 }, { start: 10, end: 200, speaker: 1 }],
+    references: [{ name: 'Budi', start: 0, end: 5 }, { name: 'Budi kembar', start: 5, end: 7.5 }] });
+  assert.deepEqual([...new Set(named.results.flatMap((r) => r.segments.map((s) => s.speaker)))], ['Budi']);
+});
+
+test('a voice sample comes from the longest lines of that speaker in one recording', () => {
+  const { voicePieces } = globalThis.MeetTracks;
+  const at = (s) => 1000 + s * 1000;
+  const segments = [
+    { id: 'audio:1000:1', speaker: 'Budi', t: at(0), text: 'a' },
+    { id: 'audio:1000:2', speaker: 'You', t: at(1), text: 'mic' },
+    { id: 'audio:1000:3', speaker: 'Speaker 2', t: at(9), text: 'b' },
+    { id: 'audio:1000:4', speaker: 'Budi', t: at(10), text: 'c' },
+    { id: 'audio:1000:5', speaker: 'Speaker 2', t: at(11), text: 'd' },
+    { id: 'audio:1000:6', speaker: 'Budi', t: at(20), text: 'e' },
+    { id: 'audio:1000:7', speaker: 'Speaker 2', t: at(24), text: 'f' },
+    { id: 'cap1', speaker: 'Budi', t: at(30), text: 'caption' },
+  ];
+  assert.deepEqual(voicePieces(segments, 'Budi'), { baseTime: 1000, pieces: [{ t: at(0), until: at(6) }, { t: at(20), until: at(24) }] });
+  assert.equal(voicePieces(segments, 'Nobody'), null);
+});
