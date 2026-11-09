@@ -1354,3 +1354,73 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (a?.panelMeetingId) viewingId = a.panelMeetingId;
   render();
 })();
+
+function paletteEntries(meetings) {
+  const tabs = [['live', 'Live'], ['history', 'History'], ['settings', 'Settings']]
+    .map(([name, label]) => ({ kind: 'Tab', label: t(`Go to ${label}`), run: () => { selectTab(name); render(); } }));
+  const buttons = [...view.querySelectorAll('button')].filter((b) => !b.disabled && !b.matches('.play, .item') && b.textContent.trim())
+    .map((b) => ({ kind: 'Action', label: b.textContent.trim(), run: () => b.click() }));
+  const opened = meetings.map((m) => ({ kind: 'Meeting', label: m.title, run: () => { selectTab('history'); viewingId = m.id; render(); } }));
+  return [...tabs, ...buttons, ...opened];
+}
+
+async function openPalette() {
+  if (document.querySelector('dialog.palette[open]')) return;
+  document.querySelectorAll('dialog.palette').forEach((closed) => closed.remove());
+  const { meetings: ids = [] } = await chrome.storage.local.get('meetings');
+  const stored = ids.length ? await chrome.storage.local.get(ids.map(meetingKey)) : {};
+  const entries = paletteEntries(ids.map((id) => stored[meetingKey(id)]).filter(Boolean));
+  const palette = el('dialog', 'palette');
+  const input = mkEl('input', { type: 'search', placeholder: t('Search actions and meetings') });
+  input.setAttribute('aria-label', t('Search actions and meetings'));
+  const list = el('div', 'palette-list');
+  list.setAttribute('role', 'listbox');
+  let shown = [];
+  let at = 0;
+  const choose = (entry) => {
+    palette.close();
+    entry.run();
+  };
+  const draw = () => {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = entries.filter((entry) => words.every((word) => entry.label.toLowerCase().includes(word))).slice(0, 50);
+    at = Math.min(at, Math.max(0, shown.length - 1));
+    list.replaceChildren(...shown.map((entry, i) => {
+      const row = el('button', i === at ? 'palette-row active' : 'palette-row');
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', String(i === at));
+      row.append(raw(el('span', null, entry.label)), el('span', 'muted', entry.kind));
+      row.addEventListener('click', () => choose(entry));
+      return row;
+    }));
+    if (!shown.length) list.append(el('div', 'muted', 'No matches'));
+    list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+  };
+  input.addEventListener('input', () => { at = 0; draw(); });
+  input.addEventListener('keydown', (ev) => {
+    if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && shown.length) {
+      ev.preventDefault();
+      at = (at + (ev.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length;
+      draw();
+    } else if (ev.key === 'Enter' && shown[at]) {
+      ev.preventDefault();
+      choose(shown[at]);
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      palette.close();
+    }
+  });
+  palette.addEventListener('close', () => palette.remove());
+  palette.append(input, list);
+  document.body.append(palette);
+  draw();
+  palette.showModal();
+  input.focus();
+}
+
+addEventListener('keydown', (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && ev.key.toLowerCase() === 'k') {
+    ev.preventDefault();
+    openPalette().catch((e) => console.error(e));
+  }
+});

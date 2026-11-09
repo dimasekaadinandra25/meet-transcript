@@ -311,6 +311,16 @@ input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; acce
 }
 .show-keys .menu-list > [data-shortcut]::before { top: 50%; right: 6px; transform: translateY(-50%); }
 
+dialog.palette { position: fixed; top: 64px; margin: 0 auto; width: min(calc(100vw - 24px), 380px); max-height: 70vh; box-sizing: border-box; padding: 8px; flex-direction: column; gap: 6px; color: var(--text); background: var(--glass-solid); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow), var(--highlight); backdrop-filter: var(--blur); }
+dialog.palette[open] { display: flex; }
+dialog.palette::backdrop { background: rgba(10, 14, 28, .28); }
+dialog.palette input { margin: 0; }
+.palette-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.palette-list > .muted { padding: 8px 10px; }
+button.palette-row { justify-content: space-between; width: 100%; border-color: transparent; border-radius: var(--radius-small); background: none; box-shadow: none; backdrop-filter: none; white-space: normal; text-align: left; }
+button.palette-row.active, button.palette-row:hover { background: var(--glass-hover); }
+button.palette-row .muted { flex: none; font-size: 12px; }
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 @media print {
