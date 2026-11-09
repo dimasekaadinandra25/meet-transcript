@@ -27,6 +27,8 @@ jobs:
       - run: node --test desktop/test/*.test.mjs
       - run: npm run typecheck
         working-directory: desktop
+      - name: Pack the extension
+        run: bash scripts/pack.sh
       - name: Check the tag matches every version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |

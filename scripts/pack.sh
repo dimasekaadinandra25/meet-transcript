@@ -11,7 +11,7 @@ case "${1:-}" in
   *) echo "pack: argumen tak dikenal: $1" >&2; exit 1 ;;
 esac
 
-ITEMS=(manifest.json README.md README.en.md LICENSE background panel popup content offscreen lib icons)
+ITEMS=(manifest.json README.md README.id.md LICENSE background panel popup content offscreen lib icons)
 
 for it in "${ITEMS[@]}" manifest.firefox.json; do
   [ -e "$it" ] || { echo "pack: '$it' tidak ada — perbaiki ITEMS di pack.sh" >&2; exit 1; }
